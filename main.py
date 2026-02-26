@@ -47,8 +47,24 @@ def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optio
     return lines
 
 
-def list_org_repos(org: str) -> List[Dict[str, Any]]:
-    return gh_api(f"/orgs/{org}/repos?per_page=100", paginate=True)
+def list_org_repos(org: str, limit: int = 400) -> List[Dict[str, Any]]:
+    repos: List[Dict[str, Any]] = []
+    page = 1
+    per_page = 100
+
+    while len(repos) < limit:
+        batch = gh_api(
+            f"/orgs/{org}/repos?per_page={per_page}&page={page}&sort=pushed&direction=desc"
+        )
+        if not batch:
+            break
+        if isinstance(batch, list):
+            repos.extend(batch)
+        else:
+            break
+        page += 1
+
+    return repos[:limit]
 
 
 def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
