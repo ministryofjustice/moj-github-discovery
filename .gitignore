@@ -1,0 +1,13 @@
+# Database files created by audit scripts
+repo_audit.db
+*.db
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# VS Code workspace
+.vscode/
+
+# other temp files
+*.log
