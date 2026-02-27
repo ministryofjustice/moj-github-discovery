@@ -34,7 +34,7 @@ pip install -r requirements-dashboard.txt
 
 ### 1. `list_repos.py` - List and Audit Organization Repositories
 
-Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database. Output defaults depend on options provided.
+Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
 
 **Usage:**
 ```bash
@@ -46,11 +46,12 @@ python list_repos.py <org> [options]
 > `--audit-db` (or specifying a limit) changes this behaviour as described below.
 
 **Options:**
-- `--excel <path>` - Export results to Excel file (full list unless `--limit` set)
+- `--excel <path>` - Export results to Excel file (full list unless `--limit` set). Requires the `openpyxl` package.
 - `--limit <N>` - Maximum number of repos to fetch (default: 400; when no other options provided output is limited to 10)
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
 - `--repo-file <file>` - Audit repos listed in a file (one per line, format: `owner/repo`)
 - `--audit-db [path]` - Write audit rows to SQLite database (default: `repo_audit.db` in current directory; optional custom path). Writes full list unless `--limit` set.
+- `--no-alerts` - Skip security alert queries (dependabot/code-scanning/secret-scanning). Useful when your token lacks access or to speed up runs.
 
 **Examples:**
 
@@ -143,6 +144,16 @@ python dashboard.py --db /tmp/audit.db
 **Features:**
 - Search and filter repositories by name
 - Filter by flagged status
+
+> Both the dashboard and command‑line tools now reuse a persistent GitHub
+> API session and perform work in parallel where possible, delivering
+> noticeably faster results on large orgs. Each script also reports the
+> elapsed time after completion (and the timers will print even if you
+> interrupt or error out).
+
+> Both the dashboard and command‑line tools now reuse a persistent GitHub
+> API session and perform work in parallel where possible, delivering
+> noticeably faster results on large orgs.
 - Click any row to view detailed audit information
 - Run audits on-demand from the dashboard
 - View security metrics, alerts, and compliance status

@@ -4,82 +4,115 @@ import json
 import os
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+# module‑level globals used to cache the GitHub token and HTTP session
+_TOKEN: Optional[str] = None
+_SESSION: Optional[requests.Session] = None
+
 
 def _get_github_token() -> str:
-    """Get GitHub token from environment or gh CLI config."""
-    # First try GITHUB_TOKEN env var
-    token = os.getenv("GITHUB_TOKEN")
+    """Return a GitHub token, caching the result.
+
+    Tokens are first looked up in the environment variable
+    ``GITHUB_TOKEN`` (or ``GH_TOKEN``); if absent we fall back to the
+    GitHub CLI configuration file.  The value is cached in a module-level
+    variable so repeated calls are cheap.
+    """
+    global _TOKEN
+    if _TOKEN:
+        return _TOKEN
+
+    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
     if token:
+        _TOKEN = token
         return token
-    
-    # Try to read from gh CLI config
+
+    # gh CLI config fallback
     try:
         gh_config_path = os.path.expanduser("~/.config/gh/hosts.yml")
         if os.path.exists(gh_config_path):
             import yaml
+
             with open(gh_config_path) as f:
                 config = yaml.safe_load(f)
                 if config and "github.com" in config:
                     oauth_token = config["github.com"].get("oauth_token")
                     if oauth_token:
+                        _TOKEN = oauth_token
                         return oauth_token
     except Exception:
         pass
-    
+
     raise RuntimeError(
-        "No GitHub token found. Set GITHUB_TOKEN env var or configure gh CLI."
+        "No GitHub token found. Set GITHUB_TOKEN or GH_TOKEN env var or configure gh CLI."
     )
 
 
+def _get_session() -> requests.Session:
+    """Return a cached ``requests.Session`` configured with auth headers.
+
+    Creating a session once and reusing it avoids repeated TCP handshakes and
+    speeds up multiple API calls in a row.
+    """
+    global _SESSION
+    if _SESSION is None:
+        token = _get_github_token()
+        sess = requests.Session()
+        sess.headers.update(
+            {
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+            }
+        )
+        _SESSION = sess
+    return _SESSION
+
+
 def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optional[List[str]] = None) -> Any:
-    """Call GitHub API via requests and parse JSON."""
-    token = _get_github_token()
+    """Invoke the GitHub API and return parsed JSON.
+
+    ``path`` should be the request path (e.g. ``/repos/owner/name``).
+    If ``paginate`` is True, the function will follow ``per_page``/``page``
+    links until all items are retrieved and return a concatenated list.
+    """
+    sess = _get_session()
     base_url = "https://api.github.com"
-    
-    # Ensure path starts with /
+
     if not path.startswith("/"):
         path = "/" + path
-    
     url = base_url + path
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    
-    # Handle pagination
+
+    # append extra query params if provided
+    if params:
+        sep = "&" if "?" in url else "?"
+        url = url + sep + "&".join(params)
+
     if paginate:
-        all_results = []
+        results: List[Any] = []
         page = 1
         per_page = 100
-        
         while True:
-            # Add pagination params to URL
-            separator = "&" if "?" in url else "?"
-            paginated_url = f"{url}{separator}per_page={per_page}&page={page}"
-            
-            response = requests.request(method, paginated_url, headers=headers)
-            response.raise_for_status()
-            
-            data = response.json()
+            sep = "&" if "?" in url else "?"
+            paged = f"{url}{sep}per_page={per_page}&page={page}"
+            resp = sess.request(method, paged)
+            resp.raise_for_status()
+            data = resp.json()
             if isinstance(data, list):
                 if not data:
                     break
-                all_results.extend(data)
+                results.extend(data)
             else:
-                all_results.append(data)
+                results.append(data)
                 break
-            
             page += 1
-        
-        return all_results
+        return results
     else:
-        response = requests.request(method, url, headers=headers)
-        response.raise_for_status()
-        
-        data = response.json()
+        resp = sess.request(method, url)
+        resp.raise_for_status()
+        data = resp.json()
         return data if data else None
 
 
@@ -100,23 +133,14 @@ def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
 def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
     """Count security alerts.
 
-    The previous implementation fetched only the first page of results
-    (`per_page=100`) which meant repos with more than 100 alerts returned
-    an incorrect count.  In addition we now filter to *open* alerts since
-    closed/fixed alerts are less interesting for most audits.
-
-    The function calls the three relevant endpoints and uses the
-    ``paginate`` flag of ``gh_api`` to transparently follow GitHub's
-    pagination links until all items have been collected.  We also capture
-    HTTP errors so that callers can distinguish a lack of permissions
-    against other failures.
+    Three endpoints are queried in parallel; each fetches *open* alerts with
+    pagination.  Results are stored in ``<name>_access``/``<name>_alerts``
+    keys.  Errors are classified to distinguish forbidden vs not found.
     """
     result: Dict[str, Any] = {}
 
-    def fetch(name: str, endpoint: str):
-        """Helper that populates access/alerts keys for a given endpoint."""
+    def _fetch(name: str, endpoint: str) -> None:
         try:
-            # include state=open to count only active alerts
             items = gh_api(f"/repos/{owner}/{repo}/{endpoint}?state=open", paginate=True)
             count = len(items) if isinstance(items, list) else 0
             result[f"{name}_access"] = "ok"
@@ -127,7 +151,6 @@ def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
                 result[f"{name}_access"] = "forbidden"
                 result[f"{name}_alerts"] = None
             elif status == 404:
-                # endpoint missing (e.g. Dependabot disabled)
                 result[f"{name}_access"] = "not_found"
                 result[f"{name}_alerts"] = 0
             else:
@@ -137,12 +160,13 @@ def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
             result[f"{name}_access"] = "error"
             result[f"{name}_alerts"] = None
 
-    # dependabot alerts
-    fetch("dependabot", "dependabot/alerts")
-    # code scanning alerts
-    fetch("code_scanning", "code-scanning/alerts")
-    # secret scanning alerts
-    fetch("secret_scanning", "secret-scanning/alerts")
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = []
+        futures.append(executor.submit(_fetch, "dependabot", "dependabot/alerts"))
+        futures.append(executor.submit(_fetch, "code_scanning", "code-scanning/alerts"))
+        futures.append(executor.submit(_fetch, "secret_scanning", "secret-scanning/alerts"))
+        for fut in as_completed(futures):
+            pass
 
     return result
 

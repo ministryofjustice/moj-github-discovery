@@ -38,15 +38,26 @@ from a loop or integrate it into other tooling.  See ``main.py`` in this
 workspace for an example of how to audit an entire organization.
 """
 
+import atexit
 import json
 import os
-import sqlite3
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import requests
+# global start timestamp
+__start_time: Optional[float] = None
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db
+def _report_elapsed() -> None:
+    if __start_time is not None:
+        elapsed = time.monotonic() - __start_time
+        print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
+
+atexit.register(_report_elapsed)
+
+
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -125,44 +136,49 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
             "note": "could not access .github/workflows directory",
         }
 
-    for file_info in workflow_files:
+    # we'll fetch workflow files concurrently since network I/O is the
+    # slowest part.
+    session = _get_session()
+    def fetch_and_scan(file_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not isinstance(file_info, dict):
-            continue
+            return None
         name = file_info.get("name", "")
         download_url = file_info.get("download_url")
-
         if not download_url or not (name.endswith(".yml") or name.endswith(".yaml")):
-            continue
-
-        # Fetch the workflow file content
+            return None
         try:
-            response = requests.get(download_url, timeout=10)
-            response.raise_for_status()
-            content = response.text
+            resp = session.get(download_url, timeout=10)
+            resp.raise_for_status()
+            content = resp.text
         except Exception:
-            # If we can't fetch, skip this file
-            continue
-
-        workflows_analyzed += 1
-        detected = []
-
-        # Search for test keywords (case-insensitive)
-        content_lower = content.lower()
+            return None
+        detected: List[str] = []
+        lower = content.lower()
         for keyword in test_keywords:
-            if keyword.lower() in content_lower:
+            if keyword.lower() in lower:
                 detected.append(f"test:{keyword}")
-                has_tests = True
-                break  # Only count once per file
-
-        # Search for lint keywords
+                return {"name": name, "detected": detected, "has_tests": True}
         for keyword in lint_keywords:
-            if keyword.lower() in content_lower:
+            if keyword.lower() in lower:
                 detected.append(f"lint:{keyword}")
-                has_linting = True
-                break  # Only count once per file
+                return {"name": name, "detected": detected, "has_linting": True}
+        return None
 
-        if detected:
-            findings[name] = detected
+    futures = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for fi in workflow_files:
+            futures.append(executor.submit(fetch_and_scan, fi))
+        for fut in as_completed(futures):
+            res = fut.result()
+            if not res:
+                continue
+            workflows_analyzed += 1
+            name = res["name"]
+            findings[name] = res.get("detected", [])
+            if res.get("has_tests"):
+                has_tests = True
+            if res.get("has_linting"):
+                has_linting = True
 
     return {
         "has_tests": has_tests,
@@ -172,10 +188,10 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
     }
 
 
-def assess(owner: str, repo: str) -> Dict[str, Any]:
+def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     info = repo_info(owner, repo)
     default_branch = info.get("default_branch")
-    alerts = count_alerts(owner, repo)
+    alerts = {} if no_alerts else count_alerts(owner, repo)
     prot = branch_protection(owner, repo, default_branch) if default_branch else {}
     community = community_profile(owner, repo)
     workflows = list_workflows(owner, repo)
@@ -231,10 +247,15 @@ def assess(owner: str, repo: str) -> Dict[str, Any]:
 
 
 def main() -> None:
+    global __start_time
+    __start_time = time.monotonic()
+    # parse options after the repo spec
+    no_alerts = False
     if len(sys.argv) < 2:
-        print("Usage: python audit_repo.py owner/repo [--db database.db]")
+        print("Usage: python audit_repo.py owner/repo [--db database.db] [--no-alerts]")
         print("  owner/repo: the repository to audit (e.g., github/cli)")
         print("  --db database.db: optional override of default local DB")
+        print("  --no-alerts: skip security alert lookups")
         sys.exit(2)
 
     spec = sys.argv[1]
@@ -242,9 +263,17 @@ def main() -> None:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     db_path = os.path.join(script_dir, "repo_audit.db")
 
-    # allow override via --db
-    if len(sys.argv) > 2 and sys.argv[2] == "--db" and len(sys.argv) > 3:
-        db_path = sys.argv[3]
+    # allow override via --db and parse --no-alerts
+    j = 2
+    while j < len(sys.argv):
+        if sys.argv[j] == "--db" and j + 1 < len(sys.argv):
+            db_path = sys.argv[j + 1]
+            j += 2
+        elif sys.argv[j] == "--no-alerts":
+            no_alerts = True
+            j += 1
+        else:
+            break
 
     if "/" not in spec:
         print("Error: repository must be specified as owner/repo")
@@ -252,7 +281,7 @@ def main() -> None:
 
     owner, repo = spec.split("/", 1)
     full_name = f"{owner}/{repo}"
-    result = assess(owner, repo)
+    result = assess(owner, repo, no_alerts=no_alerts)
 
     # always save to database
     init_db(db_path, table_name="audits")
@@ -260,6 +289,9 @@ def main() -> None:
     print(f"Saved audit for {full_name} to {db_path}", file=sys.stderr)
     # Always print JSON to stdout
     print(json.dumps(result, indent=2))
+
+    elapsed = time.monotonic() - __start_time
+    print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
 
 
 if __name__ == "__main__":
