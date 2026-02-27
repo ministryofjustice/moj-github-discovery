@@ -4,7 +4,7 @@
 Usage:
     python audit_repo.py owner/repo
 
-The script will call the GitHub CLI (gh) to gather information about the
+The script will call the GitHub API to gather information about the
 repository, count any security alerts (Dependabot, code scanning, secret
 scanning), check default branch protection and community documentation, list
 GitHub Actions workflows and apply a few heuristic risk flags.  These
@@ -41,10 +41,10 @@ workspace for an example of how to audit an entire organization.
 import json
 import os
 import sqlite3
-import subprocess
 import sys
-import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
+
+import requests
 
 from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db
 
@@ -136,9 +136,9 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
 
         # Fetch the workflow file content
         try:
-            import urllib.request
-            response = urllib.request.urlopen(download_url)
-            content = response.read().decode("utf-8")
+            response = requests.get(download_url, timeout=10)
+            response.raise_for_status()
+            content = response.text
         except Exception:
             # If we can't fetch, skip this file
             continue
