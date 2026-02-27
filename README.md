@@ -34,38 +34,48 @@ pip install -r requirements-dashboard.txt
 
 ### 1. `list_repos.py` - List and Audit Organization Repositories
 
-Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.
+Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
 
 **Usage:**
 ```bash
 python list_repos.py <org> [options]
 ```
 
+> Running the command with **no options** will print the 10 most recently updated
+> repositories for the organisation to stdout as JSON. Using `--excel` or
+> `--audit-db` (or specifying a limit) changes this behaviour as described below.
+
 **Options:**
-- `--db <path>` - Custom database path (default: `repo_audit.db`)
-- `--excel <path>` - Export results to Excel file
-- `--limit <N>` - Maximum number of repos to fetch (default: 400)
-- `--repos <repo1,repo2>` - Audit specific repos (format: `owner/repo`)
+- `--excel <path>` - Export results to Excel file (full list unless `--limit` set). Requires the `openpyxl` package.
+- `--limit <N>` - Maximum number of repos to fetch (default: 400; when no other options provided output is limited to 10)
+- `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
 - `--repo-file <file>` - Audit repos listed in a file (one per line, format: `owner/repo`)
+- `--audit-db [path]` - Write audit rows to SQLite database (default: `repo_audit.db` in current directory; optional custom path). Writes full list unless `--limit` set.
+- `--no-alerts` - Skip security alert queries (dependabot/code-scanning/secret-scanning). Useful when your token lacks access or to speed up runs.
 
 **Examples:**
 
 ```bash
-# Audit all repos in 'github' organization
-export GITHUB_TOKEN=ghp_xxxx
+# Default behaviour: show 10 most recent repos on stdout
 python list_repos.py github
 
-# Audit with limit and export to Excel
+# Full export to Excel (ignores the default 10 limit unless --limit set)
+python list_repos.py github --excel report.xlsx
+
+# Full audit database write (400‑repo default, override with --limit)
+python list_repos.py github --audit-db
+
+# Limit results to 50 and also write to Excel
 python list_repos.py github --limit 50 --excel report.xlsx
 
-# Audit specific repos
-python list_repos.py github --repos github/cli,github/copilot-docs
+# Audit repos from a file, still respect any --limit value
+python list_repos.py github --repo-file repos.txt --limit 20
 
-# Audit repos from file
-python list_repos.py github --repo-file repos.txt
+# Write audit entries to a custom database path
+python list_repos.py github --audit-db /tmp/audit.db
 
-# Custom database location
-python list_repos.py github --db /tmp/audit.db
+# Sort by stars ascending and (with no other options) output ten most recent
+python list_repos.py github --sort +stargazers
 ```
 
 ### 2. `audit_repo.py` - Audit Single Repository
@@ -134,6 +144,16 @@ python dashboard.py --db /tmp/audit.db
 **Features:**
 - Search and filter repositories by name
 - Filter by flagged status
+
+> Both the dashboard and command‑line tools now reuse a persistent GitHub
+> API session and perform work in parallel where possible, delivering
+> noticeably faster results on large orgs. Each script also reports the
+> elapsed time after completion (and the timers will print even if you
+> interrupt or error out).
+
+> Both the dashboard and command‑line tools now reuse a persistent GitHub
+> API session and perform work in parallel where possible, delivering
+> noticeably faster results on large orgs.
 - Click any row to view detailed audit information
 - Run audits on-demand from the dashboard
 - View security metrics, alerts, and compliance status
@@ -223,7 +243,7 @@ python dashboard.py
 # 3. Click on repos to view details or run deeper audits
 ```
 
-### Batch Audit Specific Repos
+### Batch Audit Using File
 
 ```bash
 # Create repos.txt
@@ -235,21 +255,21 @@ EOF
 
 # Audit them
 export GITHUB_TOKEN=ghp_xxxx
-python list_repos.py owner --repo-file repos.txt --db batch_audit.db
+python list_repos.py owner --repo-file repos.txt --audit-db
 
 # View in dashboard
-python dashboard.py --db batch_audit.db
+python dashboard.py
 ```
 
 ### Continuous Monitoring
 
 ```bash
-# Re-run audit with `--db` to update existing database
+# Re-run audit with `--audit-db` to update the dashboard database
 export GITHUB_TOKEN=ghp_xxxx
-python list_repos.py myorg --db myorg_audit.db
+python list_repos.py myorg --audit-db
 
 # Dashboard automatically shows updated data
-python dashboard.py --db myorg_audit.db
+python dashboard.py
 ```
 
 ## Troubleshooting
@@ -292,8 +312,8 @@ python audit_repo.py github/copilot-docs > copilot_audit.json
 ### Use dashboard to identify high-risk repos
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-python list_repos.py myorg --db myorg.db
-python dashboard.py --db myorg.db
+python list_repos.py myorg --audit-db
+python dashboard.py
 # Filter by "Show only repos with flags"
 ```
 

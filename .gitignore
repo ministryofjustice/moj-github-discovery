@@ -11,3 +11,12 @@ __pycache__/
 
 # other temp files
 *.log
+# Generated exports
+*.xlsx
+*.xls
+report-*.xlsx
+audit-*.xlsx
+# DB exports
+*.db
+*.sqlite
+repo_audit.db
