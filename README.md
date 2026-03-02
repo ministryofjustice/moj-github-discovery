@@ -32,7 +32,40 @@ pip install -r requirements-dashboard.txt
 
 ## Scripts
 
-### 1. `list_repos.py` - List and Audit Organization Repositories
+### 1. `fetch_repos.py` - Fetch Full Repository Metadata
+
+Fetches all fields returned by the GitHub API for every repository in an
+organization and optionally saves the raw JSON into a lightweight SQLite
+"full-repos" database.  This is useful if you need the unfiltered data for
+later analysis or want a snapshot without any audit augmentation.
+
+**Usage:**
+```bash
+python fetch_repos.py <org> [options]
+```
+
+**Options:**
+- `--limit <N>` - stop after N repositories (default: 5000, i.e. effectively
+  no limit for most orgs).
+- `--db <path>` - path to a SQLite database.  When provided a table named
+  `full_repos` will be created (columns `full_name` and `repo_json`) and each
+  repository's JSON blob will be inserted.  Omit this option to write the
+  raw list to stdout.
+
+**Examples:**
+```bash
+# write all repo metadata to a file
+python fetch_repos.py github > repos.json
+
+# store results in a database for later querying
+python fetch_repos.py github --db /tmp/full-repos.db
+
+# only fetch the first 50 repos and dump to stdout
+python fetch_repos.py github --limit 50
+```
+
+
+### 2. `list_repos.py` - List and Audit Organization Repositories
 
 Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
 

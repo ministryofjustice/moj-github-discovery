@@ -27,7 +27,7 @@ atexit.register(_report_elapsed)
 # Filtering, sorting and specific repo selection are also supported.
 
 
-def list_org_repos(org: str, limit: int = 400) -> List[Dict[str, Any]]:
+def list_org_repos(org: str, limit: int = 5000) -> List[Dict[str, Any]]:
     """Retrieve repositories for an organization, sorted by last push.
 
     This helper simply delegates to ``gh_api`` with ``paginate=True`` and
