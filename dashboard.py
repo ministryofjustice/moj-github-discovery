@@ -42,36 +42,89 @@ print(f"Loading data from {db_path}")
 
 
 def load_data():
-    """Load repo audit data from SQLite."""
-    conn = sqlite3.connect(db_path)
-    query = "SELECT full_name, audit_json FROM repo_rows"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
+    """Load repository data from SQLite.
 
-    # Parse JSON - repo_rows has flat structure (not nested)
+    Prefer a raw `full_repos` table (created by `fetch_repos.py`) which stores
+    the complete GitHub API object in `repo_json`.  If that table isn't
+    present, fall back to the summarized `repo_rows` table used by the audit
+    scripts.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # detect which table to use
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_repos','repo_rows')")
+    tables = {r[0] for r in cursor.fetchall()}
+
     rows = []
-    for _, row in df.iterrows():
-        try:
-            data = json.loads(row["audit_json"])
-            
-            rows.append({
-                "repo": data.get("full_name", row["full_name"]),
-                "private": data.get("private"),
-                "archived": data.get("archived"),
-                "fork": data.get("fork"),
-                "language": data.get("language"),
-                "stars": data.get("stargazers", 0),
-                "open_issues": data.get("open_issues", 0),
-                "dependabot_alerts": data.get("dependabot_alerts"),
-                "secret_alerts": data.get("secret_scanning_alerts"),
-                "code_scanning_alerts": data.get("code_scanning_alerts"),
-                "branch_protected": data.get("default_branch_protected"),
-                "flags": data.get("flags", ""),
-                "pushed_at": data.get("pushed_at", ""),
-            })
-        except Exception as e:
-            print(f"Error parsing {row['full_name']}: {e}")
-            continue
+    try:
+        if 'full_repos' in tables:
+            df = pd.read_sql_query("SELECT full_name, repo_json FROM full_repos", conn)
+            for _, row in df.iterrows():
+                try:
+                    raw = json.loads(row['repo_json'])
+                except Exception:
+                    # if parsing fails, skip
+                    continue
+                # new fetch_repos wraps repo under 'repo' key
+                data = raw.get('repo', raw) if isinstance(raw, dict) else raw
+                workflows = data.get('workflows') or []
+                analysis = data.get('workflow_analysis') or {}
+                codecfg = data.get('code_security_configuration') or {}
+                # determine signature requirement from full protection payload
+                req_sigs = False
+                full_prot = data.get('full_branch_protection') or {}
+                if isinstance(full_prot, dict) and full_prot.get('ok') and isinstance(full_prot.get('protection'), dict):
+                    req_sigs = bool(full_prot['protection'].get('required_signatures'))
+
+                rows.append({
+                    'repo': data.get('full_name', row.get('full_name')),
+                    'private': data.get('private'),
+                    'archived': data.get('archived'),
+                    'fork': data.get('fork'),
+                    'language': data.get('language'),
+                    'stars': data.get('stargazers_count', data.get('stargazers', 0)),
+                    'open_issues': data.get('open_issues_count', data.get('open_issues', 0)),
+                    'dependabot_alerts': None,
+                    'secret_alerts': None,
+                    'code_scanning_alerts': None,
+                    'branch_protected': (data.get('branch_protection') or {}).get('default_branch_protected'),
+                    'requires_signatures': req_sigs,
+                    'flags': '',
+                    'pushed_at': data.get('pushed_at', ''),
+                    'workflows_count': len(workflows),
+                    'has_tests': analysis.get('has_tests'),
+                    'has_linting': analysis.get('has_linting'),
+                    'code_security_endpoint': codecfg.get('endpoint'),
+                })
+        elif 'repo_rows' in tables:
+            df = pd.read_sql_query("SELECT full_name, audit_json FROM repo_rows", conn)
+            for _, row in df.iterrows():
+                try:
+                    data = json.loads(row['audit_json'])
+                except Exception as e:
+                    print(f"Error parsing {row['full_name']}: {e}")
+                    continue
+                rows.append({
+                    'repo': data.get('full_name', row.get('full_name')),
+                    'private': data.get('private'),
+                    'archived': data.get('archived'),
+                    'fork': data.get('fork'),
+                    'language': data.get('language'),
+                    'stars': data.get('stargazers', 0),
+                    'open_issues': data.get('open_issues', 0),
+                    'dependabot_alerts': data.get('dependabot_alerts'),
+                    'secret_alerts': data.get('secret_scanning_alerts'),
+                    'code_scanning_alerts': data.get('code_scanning_alerts'),
+                    'branch_protected': data.get('default_branch_protected'),
+                    'requires_signatures': False,
+                    'flags': data.get('flags', ''),
+                    'pushed_at': data.get('pushed_at', ''),
+                })
+        else:
+            print("Error: no supported tables (full_repos or repo_rows) found in database", file=sys.stderr)
+    finally:
+        conn.close()
 
     return pd.DataFrame(rows)
 
@@ -140,6 +193,11 @@ app.layout = html.Div([
     dcc.Store(id="data-store", data=df.to_json(orient="records", date_format="iso")),
     dcc.Store(id="selected-repo-store", data=None),
     dcc.Store(id="audit-data-store", data=None),
+    dcc.Store(id="page-store", data=0),  # pagination index, zero-based
+    # placeholders for buttons used by callbacks; hidden by default
+    html.Button(id="prev-btn", n_clicks=0, style={"display": "none"}),
+    html.Button(id="next-btn", n_clicks=0, style={"display": "none"}),
+    html.Button(id="close-detail-btn", n_clicks=0, style={"display": "none"}),
     
     html.Div([
         html.H1("Repository Audit Dashboard", style={"marginBottom": "20px"}),
@@ -163,6 +221,30 @@ app.layout = html.Div([
                 }
             ),
         ], style={"marginBottom": "15px"}),
+        html.Div([
+            html.Label("Sort by:", style={"fontWeight": "bold"}),
+            dcc.Dropdown(
+                id="sort-key",
+                options=[
+                    {"label": "Repository", "value": "repo"},
+                    {"label": "Open Issues", "value": "open_issues"},
+                    {"label": "Last Push", "value": "pushed_at"},
+                    {"label": "Workflows", "value": "workflows_count"},
+                    {"label": "Has Tests", "value": "has_tests"},
+                    {"label": "Has Linting", "value": "has_linting"},
+                    {"label": "Required Signatures", "value": "requires_signatures"},
+                ],
+                value="pushed_at",
+                clearable=False,
+                style={"width": "100%", "marginTop": "5px"}
+            ),
+            dcc.Checklist(
+                id="sort-desc",
+                options=[{"label": "Descending", "value": "desc"}],
+                value=["desc"],
+                style={"marginTop": "5px"}
+            ),
+        ], style={"marginBottom": "15px"}),
 
         html.Div([
             html.Label("Show only repos with flags:", style={"fontWeight": "bold"}),
@@ -184,6 +266,8 @@ app.layout = html.Div([
                 children=html.Div(id="table-container")
             )
         ], style={"flex": "1", "marginRight": "20px", "overflowX": "auto"}),
+        # pagination controls
+        html.Div(id="pagination-controls", style={"marginTop": "10px", "textAlign": "center"}),
         
         # Side panel for details
         html.Div(id="detail-panel", style={
@@ -208,11 +292,15 @@ app.layout = html.Div([
 
 @callback(
     Output("table-container", "children"),
+    Output("pagination-controls", "children"),
     Input("repo-filter", "value"),
     Input("flag-filter", "value"),
+    Input("sort-key", "value"),
+    Input("sort-desc", "value"),
+    Input("page-store", "data"),
     Input("data-store", "data")
 )
-def update_table(search, flag_filter, data):
+def update_table(search, flag_filter, sort_key, sort_desc, page, data):
     # Parse the JSON string from the store
     if isinstance(data, str):
         records = json.loads(data)
@@ -227,42 +315,78 @@ def update_table(search, flag_filter, data):
     if "flagged" in flag_filter:
         ddf = ddf[ddf["flags"].notna() & (ddf["flags"] != "")]
 
+    # Apply sorting if requested
+    if sort_key and sort_key in ddf.columns:
+        desc_flag = isinstance(sort_desc, list) and "desc" in sort_desc
+        ddf = ddf.sort_values(by=sort_key, ascending=not desc_flag, na_position='last')
+
+    # pagination: compute visible slice
+    per_page = 50
+    total = len(ddf)
+    if page is None or page < 0:
+        page = 0
+    # ensure page isn't past the end after filtering/sorting
+    pages = (total + per_page - 1) // per_page
+    if pages > 0 and page >= pages:
+        page = pages - 1
+    start = page * per_page
+    end = start + per_page
+    visible = ddf.iloc[start:end]
+
+    # build pagination controls
+    pages = (total + per_page - 1) // per_page
+    controls = []
+    if page > 0:
+        controls.append(html.Button("< Prev", id="prev-btn", n_clicks=0, style={"marginRight": "10px"}))
+    controls.append(html.Span(f"Page {page+1} of {pages}"))
+    if page < pages - 1:
+        controls.append(html.Button("Next >", id="next-btn", n_clicks=0, style={"marginLeft": "10px"}))
+
+    # now iterate over visible instead of full ddf
+
     # Create table rows with click handlers
     table_rows = [
         html.Tr([
+            html.Th("#", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
             html.Th("Repository", style={"padding": "10px", "textAlign": "left", "backgroundColor": "#f8f9fa"}),
             html.Th("Status", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
+            html.Th("Req Sigs", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
             html.Th("Language", style={"padding": "10px", "textAlign": "left", "backgroundColor": "#f8f9fa"}),
-            html.Th("Stars", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
             html.Th("Open Issues", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
-            html.Th("Dependabot", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
             html.Th("Branch Protected", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
+            html.Th("Workflows", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
+            html.Th("Tests", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
+            html.Th("Lint", style={"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}),
             html.Th("Flags", style={"padding": "10px", "textAlign": "left", "backgroundColor": "#f8f9fa", "maxWidth": "300px"}),
         ], style={"borderBottom": "2px solid #ddd"})
     ]
 
-    for _, row in ddf.iterrows():
+    # row index offset for numbering
+    for idx, row in visible.reset_index(drop=True).iterrows():
         flags_display = row["flags"] if row["flags"] else "✓ OK"
         flag_color = get_flag_color(row["flags"])
+        number = start + idx + 1
 
         table_rows.append(
             html.Tr([
+                html.Td(str(number), style={"padding": "10px", "textAlign": "center"}),
                 html.Td(row["repo"], style={"padding": "10px", "fontWeight": "bold"}),
                 html.Td(
                     "Private" if row["private"] else "Public",
                     style={"padding": "10px", "textAlign": "center", "color": "#666"}
                 ),
-                html.Td(row["language"] or "—", style={"padding": "10px"}),
-                html.Td(str(row["stars"]), style={"padding": "10px", "textAlign": "center"}),
-                html.Td(str(row["open_issues"]), style={"padding": "10px", "textAlign": "center"}),
                 html.Td(
-                    str(row["dependabot_alerts"]) if pd.notna(row["dependabot_alerts"]) else "—",
+                    "✓" if (pd.notna(row.get("requires_signatures")) and row.get("requires_signatures")) else (
+                        "—" if pd.isna(row.get("requires_signatures")) else "✗"
+                    ),
                     style={
                         "padding": "10px",
                         "textAlign": "center",
-                        "color": "red" if (pd.notna(row["dependabot_alerts"]) and row["dependabot_alerts"] > 0) else "green"
+                        "color": "green" if row.get("requires_signatures") else ("red" if pd.notna(row.get("requires_signatures")) else "#666")
                     }
                 ),
+                html.Td(row["language"] or "—", style={"padding": "10px"}),
+                html.Td(str(row["open_issues"]), style={"padding": "10px", "textAlign": "center"}),
                 html.Td(
                     "✓" if row["branch_protected"] else "✗",
                     style={
@@ -272,6 +396,9 @@ def update_table(search, flag_filter, data):
                         "fontWeight": "bold"
                     }
                 ),
+                html.Td(str(int(row.get("workflows_count", 0) or 0)), style={"padding": "10px", "textAlign": "center"}),
+                html.Td("✓" if row.get("has_tests") else "✗", style={"padding": "10px", "textAlign": "center"}),
+                html.Td("✓" if row.get("has_linting") else "✗", style={"padding": "10px", "textAlign": "center"}),
                 html.Td(
                     html.Span(
                         flags_display,
@@ -297,6 +424,7 @@ def update_table(search, flag_filter, data):
             )
         )
 
+    # return both the table itself and the pagination controls
     return html.Table(
         table_rows,
         style={
@@ -306,7 +434,7 @@ def update_table(search, flag_filter, data):
             "borderRadius": "4px",
             "overflow": "hidden"
         }
-    )
+    ), controls
 
 
 def format_audit_detail(audit_data: dict) -> html.Div:
@@ -326,7 +454,18 @@ def format_audit_detail(audit_data: dict) -> html.Div:
     
     community_files = community.get("files", {})
     
+    # close button at top
     sections = [
+        html.Button("Close", id="close-detail-btn", n_clicks=0, style={
+            "float": "right",
+            "backgroundColor": "#dc3545",
+            "color": "white",
+            "border": "none",
+            "padding": "5px 10px",
+            "borderRadius": "3px",
+            "cursor": "pointer",
+            "fontSize": "12px"
+        }),
         html.H3(repo.get("name", "Unknown"), style={"marginBottom": "15px", "borderBottom": "2px solid #ddd", "paddingBottom": "10px"}),
     ]
     
@@ -338,6 +477,7 @@ def format_audit_detail(audit_data: dict) -> html.Div:
             html.P(f"URL: {repo.get('html_url', 'N/A')}", style={"margin": "5px 0"}),
             html.P(f"Private: {'Yes' if repo.get('private') else 'No'}", style={"margin": "5px 0"}),
             html.P(f"Fork: {'Yes' if repo.get('fork') else 'No'}", style={"margin": "5px 0"}),
+            html.P(f"Requires signatures: {'Yes' if repo.get('requires_signatures') else 'No'}", style={"margin": "5px 0"}),
             html.P(f"License: {repo.get('license') or 'None'}", style={"margin": "5px 0"}),
         ], style={"fontSize": "13px", "color": "#666"})
     ]))
@@ -371,6 +511,21 @@ def format_audit_detail(audit_data: dict) -> html.Div:
                 html.P(f"Has Tests: {'✓' if workflow_analysis.get('has_tests') else '✗'}", style={"margin": "5px 0", "color": "green" if workflow_analysis.get('has_tests') else "red"}),
                 html.P(f"Has Linting: {'✓' if workflow_analysis.get('has_linting') else '✗'}", style={"margin": "5px 0", "color": "green" if workflow_analysis.get('has_linting') else "red"}),
             ], style={"fontSize": "13px", "color": "#666"})
+        ]))
+    # Full branch protection details if available
+    full_prot = repo.get("full_branch_protection")
+    if full_prot:
+        sections.append(html.Div([
+            html.H4("Branch Protection (full)", style={"marginTop": "15px", "marginBottom": "10px", "color": "#333"}),
+            html.Pre(json.dumps(full_prot, indent=2), style={"fontSize": "12px", "whiteSpace": "pre-wrap"})
+        ]))
+    # Code/security configuration endpoint if present
+    codecfg = repo.get("code_security_configuration")
+    if codecfg:
+        sections.append(html.Div([
+            html.H4("Code/Security Configuration", style={"marginTop": "15px", "marginBottom": "10px", "color": "#333"}),
+            html.P(f"Endpoint: {codecfg.get('endpoint', 'N/A')}", style={"margin": "5px 0"}),
+            html.Pre(json.dumps(codecfg.get('data', codecfg), indent=2), style={"fontSize": "12px", "whiteSpace": "pre-wrap"})
         ]))
     
     # Flags
@@ -458,26 +613,33 @@ def update_detail_panel(selected_repo, audit_data):
 @callback(
     Output("selected-repo-store", "data"),
     Input({"type": "repo-row", "index": ALL}, "n_clicks"),
+    Input("close-detail-btn", "n_clicks"),
     State("selected-repo-store", "data"),
     prevent_initial_call=True
 )
-def on_row_click(n_clicks, current_selected):
-    if not n_clicks or not any(n_clicks):
-        return current_selected
-    
-    # Find which row was clicked (the one with the highest n_clicks that's new)
+def change_selection(row_clicks, close_clicks, current_selected):
+    """Select a repository when its row is clicked or clear selection on close.
+
+    The callback examines which input triggered the update via
+    ``dash.callback_context``. If the close button fired, return ``None`` to
+    hide the detail panel. Otherwise, decode the clicked row id to set the
+    new selection.
+    """
     ctx = callback_context
     if not ctx.triggered:
         return current_selected
-    
-    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    if triggered_id:
+    triggered = ctx.triggered[0]
+    trg_id = triggered.get("prop_id", "").split(".")[0]
+
+    if trg_id == "close-detail-btn":
+        return None
+    # otherwise assume a repo row was clicked
+    try:
         import json as json_lib
-        trigger_dict = json_lib.loads(triggered_id)
-        selected = trigger_dict.get("index")
-        return selected
-    
-    return current_selected
+        trigger_dict = json_lib.loads(trg_id)
+        return trigger_dict.get("index")
+    except Exception:
+        return current_selected
 
 
 @callback(
@@ -505,6 +667,46 @@ def on_audit_click(n_clicks, repo_name):
     return audit_result, html.Div([
         html.P("✓ Audit completed successfully!", style={"color": "green"})
     ])
+
+
+# pagination callbacks ------------------------------------------------------
+@callback(
+    Output("page-store", "data"),
+    Input("prev-btn", "n_clicks"),
+    Input("next-btn", "n_clicks"),
+    Input("repo-filter", "value"),
+    Input("flag-filter", "value"),
+    Input("sort-key", "value"),
+    Input("sort-desc", "value"),
+    State("page-store", "data"),
+    prevent_initial_call=True
+)
+def update_page(prev_clicks, next_clicks, repo_filter, flag_filter, sort_key, sort_desc, current_page):
+    """Manage the pagination index based on navigation or changes to filters/sorting.
+
+    - If any of the filter/sort inputs triggered the callback, reset to page 0.
+    - Otherwise, adjust up/down when Prev/Next buttons are clicked.
+    """
+    if current_page is None:
+        current_page = 0
+
+    ctx = callback_context
+    if not ctx.triggered:
+        return current_page
+
+    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    # if a filter or sort field changed, reset
+    if triggered_id in ("repo-filter", "flag-filter", "sort-key", "sort-desc"):
+        return 0
+
+    # navigation
+    if triggered_id == "prev-btn":
+        return max(current_page - 1, 0)
+    elif triggered_id == "next-btn":
+        return current_page + 1
+
+    return current_page
 
 
 if __name__ == "__main__":

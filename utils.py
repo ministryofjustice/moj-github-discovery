@@ -226,6 +226,146 @@ def branch_protection(owner: str, repo: str, default_branch: str) -> Dict[str, A
     return {"default_branch_protected": None, "branch_protection_access": err}
 
 
+def get_full_branch_protection(owner: str, repo: str, branch: str) -> Dict[str, Any]:
+    """Call the protected-branch `/protection` endpoint and return all fields.
+
+    This endpoint requires elevated permissions for some fields and may
+    return HTTP 403 for read-only tokens. The function returns a dict with
+    the raw protection data when successful, or a structured error value.
+    """
+    try:
+        data = gh_api(f"/repos/{owner}/{repo}/branches/{branch}/protection")
+        # return raw payload under a consistent key
+        return {"ok": True, "protection": data}
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if getattr(e, 'response', None) is not None else None
+        if status == 403:
+            return {"ok": False, "error": "forbidden", "status": 403}
+        if status == 404:
+            return {"ok": False, "error": "not_found", "status": 404}
+        return {"ok": False, "error": "http_error", "status": status}
+    except Exception as e:
+        return {"ok": False, "error": "error", "reason": str(e)}
+
+
+def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
+    """Return the list of GitHub Actions workflows for a repository.
+
+    Uses the public Actions API and returns an empty list on error or when
+    workflows cannot be accessed.
+    """
+    out, err = try_get(f"/repos/{owner}/{repo}/actions/workflows")
+    if err or not isinstance(out, dict):
+        return []
+    return out.get("workflows", [])
+
+
+def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
+    """Fetch and perform a lightweight analysis of workflow files.
+
+    This function attempts to list files under `.github/workflows` and then
+    fetches each YAML file to detect common test or lint keywords.  It
+    returns a dictionary containing boolean indicators and per-workflow
+    findings.  Any access errors are surfaced in a `note` field.
+    """
+    test_keywords = [
+        "test", "pytest", "jest", "mocha", "unittest", "rspec", "cargo test",
+        "vitest", "tap", "ava", "jasmine", "nightwatch", "cypress",
+    ]
+    lint_keywords = [
+        "lint", "eslint", "pylint", "flake8", "black", "prettier", "clippy",
+        "rustfmt", "golangci-lint", "shellcheck", "shfmt", "hadolint", "yamllint",
+    ]
+
+    workflow_files, err = try_get(f"/repos/{owner}/{repo}/contents/.github/workflows")
+    if err or not isinstance(workflow_files, list):
+        return {
+            "has_tests": False,
+            "has_linting": False,
+            "workflows_analyzed": 0,
+            "findings": {},
+            "note": "could not access .github/workflows directory",
+        }
+
+    session = _get_session()
+
+    findings: Dict[str, List[str]] = {}
+    has_tests = False
+    has_linting = False
+    workflows_analyzed = 0
+
+    def fetch_and_scan(file_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(file_info, dict):
+            return None
+        name = file_info.get("name", "")
+        download_url = file_info.get("download_url")
+        if not download_url or not (name.endswith(".yml") or name.endswith(".yaml")):
+            return None
+        try:
+            resp = session.get(download_url, timeout=10)
+            resp.raise_for_status()
+            content = resp.text
+        except Exception:
+            return None
+        detected: List[str] = []
+        lower = content.lower()
+        for keyword in test_keywords:
+            if keyword.lower() in lower:
+                detected.append(f"test:{keyword}")
+                return {"name": name, "detected": detected, "has_tests": True}
+        for keyword in lint_keywords:
+            if keyword.lower() in lower:
+                detected.append(f"lint:{keyword}")
+                return {"name": name, "detected": detected, "has_linting": True}
+        return None
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for fi in workflow_files:
+            futures.append(executor.submit(fetch_and_scan, fi))
+        for fut in as_completed(futures):
+            res = fut.result()
+            if not res:
+                continue
+            workflows_analyzed += 1
+            name = res["name"]
+            findings[name] = res.get("detected", [])
+            if res.get("has_tests"):
+                has_tests = True
+            if res.get("has_linting"):
+                has_linting = True
+
+    return {
+        "has_tests": has_tests,
+        "has_linting": has_linting,
+        "workflows_analyzed": workflows_analyzed,
+        "findings": findings,
+    }
+
+
+def get_code_security_configuration(owner: str, repo: str) -> Dict[str, Any]:
+    """Attempt to fetch repository code/security configuration.
+
+    Tries a few likely endpoints and returns the first successful response
+    or an error note. This is intentionally tolerant because API surface
+    varies between GitHub versions and enterprise installs.
+    """
+    candidates = [
+        f"/repos/{owner}/{repo}/code-scanning/configuration",
+        f"/repos/{owner}/{repo}/security-analysis",
+        f"/repos/{owner}/{repo}/security-and-analysis",
+    ]
+    last_err = None
+    for ep in candidates:
+        out, err = try_get(ep)
+        if err is None:
+            return {"endpoint": ep, "data": out}
+        last_err = err
+    return {"error": True, "reason": last_err}
+
+
 def init_db(db_path: str, table_name: str = "audits") -> None:
     """Initialize SQLite database with a table."""
     conn = sqlite3.connect(db_path)

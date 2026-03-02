@@ -8,7 +8,7 @@ Usage:
 Examples:
   python dashboard.py                              # Display all repos
   python dashboard.py --filter private:False      # Show only public repos
-  python dashboard.py --sort stars --html out.html # Export to HTML sorted by stars
+  python dashboard.py --sort requires_signatures --html out.html # Export HTML with repos requiring signatures first
 """
 
 import json
@@ -42,6 +42,7 @@ def load_data(db_path: str) -> pd.DataFrame:
                 "secrets": data.get("secret_scanning_alerts"),
                 "code_scan": data.get("code_scanning_alerts"),
                 "branch_protected": data.get("default_branch_protected"),
+                "requires_signatures": data.get("requires_signatures", False),
                 "flags": data.get("flags", ""),
                 "pushed_at": data.get("pushed_at", ""),
             })
@@ -149,7 +150,7 @@ def main():
     # Format display columns
     display_df = df[[
         "repo", "private", "language", "stars", "open_issues", 
-        "dependabot", "secrets", "code_scan", "branch_protected", "flags"
+        "dependabot", "secrets", "code_scan", "branch_protected", "requires_signatures", "flags"
     ]].copy()
     
     # Replace NaN with dash

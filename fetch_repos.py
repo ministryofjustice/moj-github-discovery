@@ -34,7 +34,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-from utils import gh_api
+from utils import gh_api, branch_protection, list_workflows, analyze_workflows, get_code_security_configuration, get_full_branch_protection
 import sqlite3
 
 # track start time for an elapsed-report convenience
@@ -109,7 +109,9 @@ def main() -> None:
     # when a database is requested, create a simple table and write the
     # raw JSON for each repository.  we avoid the generic helpers here so the
     # column is named appropriately (`repo_json`) instead of the generic
-    # `audit_json` used elsewhere.
+    # `audit_json` used elsewhere.  Also populate `branch_protection` using
+    # the shared helper in `utils` so downstream tools can rely on a
+    # consistent structure.
     if db_path:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -122,11 +124,57 @@ def main() -> None:
             """
         )
         for r in repos:
+            # enrich with additional metadata using various helpers
+            owner = r.get("owner", {}).get("login")
+            name = r.get("name")
+            default_branch = r.get("default_branch")
+
+            # branch protection via the lightweight/public endpoint
+            if owner and name and default_branch:
+                try:
+                    r["branch_protection"] = branch_protection(owner, name, default_branch)
+                except Exception:
+                    r["branch_protection"] = None
+                # also attempt the full /protection call, may be forbidden
+                try:
+                    r["full_branch_protection"] = get_full_branch_protection(owner, name, default_branch)
+                except Exception:
+                    r["full_branch_protection"] = None
+            else:
+                r["branch_protection"] = None
+                r["full_branch_protection"] = None
+
+            # workflow metadata
+            if owner and name:
+                try:
+                    r["workflows"] = list_workflows(owner, name)
+                except Exception:
+                    r["workflows"] = []
+                try:
+                    r["workflow_analysis"] = analyze_workflows(owner, name)
+                except Exception:
+                    r["workflow_analysis"] = {}
+            else:
+                r["workflows"] = []
+                r["workflow_analysis"] = {}
+
+            # code/security configuration
+            if owner and name:
+                try:
+                    r["code_security_configuration"] = get_code_security_configuration(owner, name)
+                except Exception:
+                    r["code_security_configuration"] = {"error": "failed"}
+            else:
+                r["code_security_configuration"] = None
+
+            # build a container object to store; include repo under "repo" key
+            master_obj = {"repo": r}
+
             full = r.get("full_name")
             if full:
                 cursor.execute(
                     "INSERT OR REPLACE INTO full_repos (full_name, repo_json) VALUES (?, ?)",
-                    (full, json.dumps(r)),
+                    (full, json.dumps(master_obj)),
                 )
         conn.commit()
         conn.close()

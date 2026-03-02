@@ -64,6 +64,12 @@ python fetch_repos.py github --db /tmp/full-repos.db
 python fetch_repos.py github --limit 50
 ```
 
+The database rows now include a small amount of derived metadata to make
+subsequent analysis easier; each JSON blob may contain keys such as
+`branch_protection`, `full_branch_protection`, `workflows`, `workflow_analysis`,
+and `code_security_configuration`.  Those values are surfaced automatically in
+the dashboard when you point it at a database created by this script.
+
 
 ### 2. `list_repos.py` - List and Audit Organization Repositories
 
@@ -107,7 +113,7 @@ python list_repos.py github --repo-file repos.txt --limit 20
 # Write audit entries to a custom database path
 python list_repos.py github --audit-db /tmp/audit.db
 
-# Sort by stars ascending and (with no other options) output ten most recent
+# Sort by other fields (stars were previously supported but have been removed from the dashboard list)
 python list_repos.py github --sort +stargazers
 ```
 
@@ -177,6 +183,14 @@ python dashboard.py --db /tmp/audit.db
 **Features:**
 - Search and filter repositories by name
 - Filter by flagged status
+- Sort the table by various fields (issues, push date, workflows, tests/lint, required signatures, etc.) using the controls above the list
+- **Numbered rows and pagination** – results are shown 50 per page with Prev/Next controls and current page indicator
+- Summary view hides Dependabot/secret/code-scanning alert counts (they remain visible in the detail panel)
+- **Stars column removed** from the list (information still available in the raw JSON).
+- New **Required signatures** indicator – derived from branch protection’s `required_signatures` setting (when available) and sortable
+- Close button added to the detail panel so you can easily dismiss it and return to the table
+- Additional columns (workflows count, tests/lint indicators, security config endpoint, branch protection status) when using a `full_repos` database
+- Detail panel now shows full branch protection JSON and code/security configuration when available
 
 > Both the dashboard and command‑line tools now reuse a persistent GitHub
 > API session and perform work in parallel where possible, delivering
