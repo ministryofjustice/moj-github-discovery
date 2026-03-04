@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -146,11 +147,12 @@ def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
         "template_source": None,
     }
     
-    # Check if this is a fork
-    if repo_data.get("fork") and repo_data.get("parent"):
-        info["is_fork"] = True
-        parent = repo_data.get("parent", {})
-        info["fork_source"] = parent.get("full_name")
+    # Check if this is a fork based on the boolean flag.
+    is_fork = bool(repo_data.get("fork"))
+    info["is_fork"] = is_fork
+    if is_fork:
+        parent = repo_data.get("parent") or {}
+        info["fork_source"] = parent.get("full_name") or parent.get("name")
     
     # Check if generated from a template
     if repo_data.get("template_repository"):
@@ -162,31 +164,67 @@ def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 
-def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[int, Optional[str]]:
+def _extract_link_rel(link_header: str, rel_name: str) -> Optional[str]:
+    """Return URL for a given relation name from a GitHub Link header."""
+    if not link_header:
+        return None
+    for link_part in link_header.split(','):
+        part = link_part.strip()
+        if f'rel="{rel_name}"' not in part:
+            continue
+        if "<" in part and ">" in part:
+            try:
+                return part.split("<", 1)[1].split(">", 1)[0]
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def _count_alerts_by_iteration(sess: requests.Session, initial_url: str, per_page: int = 100) -> int:
+    """Count alerts by iterating pages when last-page parsing is unavailable."""
+    sep = "&" if "?" in initial_url else "?"
+    base_url = f"{initial_url}{sep}per_page={per_page}"
+    page = 1
+    total = 0
+    while True:
+        resp = sess.get(f"{base_url}&page={page}")
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list) or not data:
+            break
+        total += len(data)
+        if len(data) < per_page:
+            break
+        page += 1
+    return total
+
+
+def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[Optional[int], Optional[str]]:
     """Count alerts efficiently using Link header pagination without fetching all results.
     
     Returns (count, error_kind) where error_kind is None on success, or one of
-    {'403', '404', 'other'} on error. Makes only 1 API call instead of many.
+    {'403', '404', 'other'} on error. Makes one API call in the common case.
     """
     sess = _get_session()
     base_url = "https://api.github.com"
-    url = f"{base_url}/repos/{owner}/{repo}/{endpoint}?state=open&per_page=1"
+    list_url = f"{base_url}/repos/{owner}/{repo}/{endpoint}?state=open"
+    url = f"{list_url}&per_page=1"
     
     try:
         resp = sess.get(url)
         resp.raise_for_status()
         
-        # Check Link header for pagination info
+        # Check Link header for pagination info.
         link_header = resp.headers.get('link', '')
-        if 'rel="last"' in link_header:
-            # Extract page number from last link: <url?page=N>; rel="last"
-            for link_part in link_header.split(','):
-                if 'rel="last"' in link_part:
-                    try:
-                        page_num = int(link_part.split('page=')[-1].split('>')[0])
-                        return page_num, None
-                    except (ValueError, IndexError):
-                        pass
+        last_url = _extract_link_rel(link_header, "last")
+        if last_url:
+            try:
+                page_values = parse_qs(urlparse(last_url).query).get("page")
+                if page_values:
+                    return int(page_values[0]), None
+            except (ValueError, TypeError):
+                # Fall back to iterative counting for correctness.
+                return _count_alerts_by_iteration(sess, list_url), None
         
         # No "last" link means only 1 page or fewer results
         data = resp.json()
@@ -200,12 +238,12 @@ def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[int, 
         elif status == 404:
             return 0, "404"
         else:
-            return None, str(status)
+            return None, "other"
     except Exception:
         return None, "other"
 
 
-def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[int, Optional[str]]:
+def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[Optional[int], Optional[str]]:
     """Count Dependabot alerts using cursor-based pagination.
     
     Dependabot uses cursor-based pagination (rel="next") instead of page-based.
@@ -228,17 +266,8 @@ def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[int, Optional[str]]
             if isinstance(data, list):
                 count += len(data)
             
-            # Check for next page in Link header
-            url = None
-            link_header = resp.headers.get('link', '')
-            if 'rel="next"' in link_header:
-                for link_part in link_header.split(','):
-                    if 'rel="next"' in link_part:
-                        try:
-                            url = link_part.split('<')[1].split('>')[0]
-                        except (IndexError, ValueError):
-                            pass
-                        break
+            # Check for next page in Link header.
+            url = _extract_link_rel(resp.headers.get("link", ""), "next")
         
         return count, None
         
@@ -249,7 +278,7 @@ def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[int, Optional[str]]
         elif status == 404:
             return 0, "404"
         else:
-            return None, str(status)
+            return None, "other"
     except Exception:
         return None, "other"
 
