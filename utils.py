@@ -130,41 +130,146 @@ def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
         return None, "other"
 
 
-def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
-    """Count security alerts.
+def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[int, Optional[str]]:
+    """Count alerts efficiently using Link header pagination without fetching all results.
+    
+    Returns (count, error_kind) where error_kind is None on success, or one of
+    {'403', '404', 'other'} on error. Makes only 1 API call instead of many.
+    """
+    sess = _get_session()
+    base_url = "https://api.github.com"
+    url = f"{base_url}/repos/{owner}/{repo}/{endpoint}?state=open&per_page=1"
+    
+    try:
+        resp = sess.get(url)
+        resp.raise_for_status()
+        
+        # Check Link header for pagination info
+        link_header = resp.headers.get('link', '')
+        if 'rel="last"' in link_header:
+            # Extract page number from last link: <url?page=N>; rel="last"
+            for link_part in link_header.split(','):
+                if 'rel="last"' in link_part:
+                    try:
+                        page_num = int(link_part.split('page=')[-1].split('>')[0])
+                        return page_num, None
+                    except (ValueError, IndexError):
+                        pass
+        
+        # No "last" link means only 1 page or fewer results
+        data = resp.json()
+        count = len(data) if isinstance(data, list) else 0
+        return count, None
+        
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code
+        if status == 403:
+            return None, "403"
+        elif status == 404:
+            return 0, "404"
+        else:
+            return None, str(status)
+    except Exception:
+        return None, "other"
 
-    Three endpoints are queried in parallel; each fetches *open* alerts with
-    pagination.  Results are stored in ``<name>_access``/``<name>_alerts``
-    keys.  Errors are classified to distinguish forbidden vs not found.
+
+def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[int, Optional[str]]:
+    """Count Dependabot alerts using cursor-based pagination.
+    
+    Dependabot uses cursor-based pagination (rel="next") instead of page-based.
+    Fetch with per_page=100 and follow cursor links to get accurate count.
+    
+    Returns (count, error_kind) where error_kind is None on success, or one of
+    {'403', '404', 'other'} on error.
+    """
+    sess = _get_session()
+    base_url = "https://api.github.com"
+    url = f"{base_url}/repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100"
+    
+    try:
+        count = 0
+        while url:
+            resp = sess.get(url)
+            resp.raise_for_status()
+            
+            data = resp.json()
+            if isinstance(data, list):
+                count += len(data)
+            
+            # Check for next page in Link header
+            url = None
+            link_header = resp.headers.get('link', '')
+            if 'rel="next"' in link_header:
+                for link_part in link_header.split(','):
+                    if 'rel="next"' in link_part:
+                        try:
+                            url = link_part.split('<')[1].split('>')[0]
+                        except (IndexError, ValueError):
+                            pass
+                        break
+        
+        return count, None
+        
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code
+        if status == 403:
+            return None, "403"
+        elif status == 404:
+            return 0, "404"
+        else:
+            return None, str(status)
+    except Exception:
+        return None, "other"
+
+
+
+def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
+    """Count security alerts using appropriate pagination methods.
+
+    - Dependabot: Uses cursor-based pagination (per_page=100, follows rel="next")
+    - Code Scanning & Secret Scanning: Use efficient page-based pagination (1 API call)
+    
+    All three endpoints are queried in parallel.
+    Results are stored in ``<name>_access``/``<name>_alerts`` keys.
+    Errors are classified to distinguish forbidden vs not found.
     """
     result: Dict[str, Any] = {}
 
-    def _fetch(name: str, endpoint: str) -> None:
-        try:
-            items = gh_api(f"/repos/{owner}/{repo}/{endpoint}?state=open", paginate=True)
-            count = len(items) if isinstance(items, list) else 0
+    def _fetch_dependabot() -> None:
+        count, err = _count_alerts_dependabot(owner, repo)
+        if err is None:
+            result["dependabot_access"] = "ok"
+            result["dependabot_alerts"] = count
+        elif err == "403":
+            result["dependabot_access"] = "forbidden"
+            result["dependabot_alerts"] = None
+        elif err == "404":
+            result["dependabot_access"] = "not_found"
+            result["dependabot_alerts"] = 0
+        else:
+            result["dependabot_access"] = err
+            result["dependabot_alerts"] = None
+
+    def _fetch_efficient(name: str, endpoint: str) -> None:
+        count, err = _count_alerts_efficient(owner, repo, endpoint)
+        if err is None:
             result[f"{name}_access"] = "ok"
             result[f"{name}_alerts"] = count
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code
-            if status == 403:
-                result[f"{name}_access"] = "forbidden"
-                result[f"{name}_alerts"] = None
-            elif status == 404:
-                result[f"{name}_access"] = "not_found"
-                result[f"{name}_alerts"] = 0
-            else:
-                result[f"{name}_access"] = str(status)
-                result[f"{name}_alerts"] = None
-        except Exception:
-            result[f"{name}_access"] = "error"
+        elif err == "403":
+            result[f"{name}_access"] = "forbidden"
+            result[f"{name}_alerts"] = None
+        elif err == "404":
+            result[f"{name}_access"] = "not_found"
+            result[f"{name}_alerts"] = 0
+        else:
+            result[f"{name}_access"] = err
             result[f"{name}_alerts"] = None
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = []
-        futures.append(executor.submit(_fetch, "dependabot", "dependabot/alerts"))
-        futures.append(executor.submit(_fetch, "code_scanning", "code-scanning/alerts"))
-        futures.append(executor.submit(_fetch, "secret_scanning", "secret-scanning/alerts"))
+        futures.append(executor.submit(_fetch_dependabot))
+        futures.append(executor.submit(_fetch_efficient, "code_scanning", "code-scanning/alerts"))
+        futures.append(executor.submit(_fetch_efficient, "secret_scanning", "secret-scanning/alerts"))
         for fut in as_completed(futures):
             pass
 

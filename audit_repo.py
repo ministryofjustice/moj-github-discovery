@@ -75,6 +75,34 @@ def repo_info(owner: str, repo: str) -> Dict[str, Any]:
     return gh_api(f"/repos/{owner}/{repo}")
 
 
+def fork_and_template_info(owner: str, repo: str, repo_data: Dict[str, Any]) -> Dict[str, Any]:
+    # Extract information about fork source and template source.
+    # The repo_data parameter should be the result from repo_info().
+    #   - parent: if repo is a fork, contains parent repo info with full_name
+    #   - template_repository: if repo was created from a template, contains template info
+    #
+    info: Dict[str, Any] = {
+        "is_fork": False,
+        "fork_source": None,
+        "is_generated_from_template": False,
+        "template_source": None,
+    }
+    
+    # Check if this is a fork
+    if repo_data.get("fork") and repo_data.get("parent"):
+        info["is_fork"] = True
+        parent = repo_data.get("parent", {})
+        info["fork_source"] = parent.get("full_name")
+    
+    # Check if generated from a template
+    if repo_data.get("template_repository"):
+        info["is_generated_from_template"] = True
+        template = repo_data.get("template_repository", {})
+        info["template_source"] = template.get("full_name")
+    
+    return info
+
+
 def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # The community profile endpoint gives a high-level view of repository
     # documentation and policy files.  The `files` dict indicates whether
@@ -196,13 +224,16 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     community = community_profile(owner, repo)
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
+    fork_template = fork_and_template_info(owner, repo, info)
 
     # assemble a handful of simple flags to highlight potential concerns
     flags: List[str] = []
     if info.get("archived"):
         flags.append("archived")  # not receiving updates
-    if info.get("fork"):
-        flags.append("fork")
+    if fork_template.get("is_fork"):
+        flags.append(f"fork_of_{fork_template.get('fork_source')}")
+    if fork_template.get("is_generated_from_template"):
+        flags.append(f"generated_from_template_{fork_template.get('template_source')}")
     if info.get("license") is None:
         # absence of a license file; depending on policy this may be
         # considered a legal issue for open-source distributions.
@@ -234,6 +265,8 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     #   - workflow_analysis['has_tests'] indicates if testing is in workflows.
     #   - workflow_analysis['has_linting'] indicates if linting is in workflows.
     #   - prot['default_branch_protected'] False indicates missing status checks.
+    #   - fork_template['is_fork'] indicates if repo is a fork, with fork_source showing parent
+    #   - fork_template['is_generated_from_template'] indicates if repo created from template
 
     return {
         "repo": info,
@@ -242,6 +275,7 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
         "community": community,
         "workflows": {"count": len(workflows), "list": workflows},
         "workflow_analysis": workflow_analysis,
+        "fork_and_template": fork_template,
         "flags": flags,
     }
 
