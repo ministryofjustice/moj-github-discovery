@@ -130,6 +130,38 @@ def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
         return None, "other"
 
 
+def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract fork source and template source information from repo data.
+    
+    Args:
+        repo_data: Repository metadata dict (from repo_info() or similar)
+    
+    Returns:
+        Dict with keys: is_fork, fork_source, is_generated_from_template, template_source
+    """
+    info: Dict[str, Any] = {
+        "is_fork": False,
+        "fork_source": None,
+        "is_generated_from_template": False,
+        "template_source": None,
+    }
+    
+    # Check if this is a fork
+    if repo_data.get("fork") and repo_data.get("parent"):
+        info["is_fork"] = True
+        parent = repo_data.get("parent", {})
+        info["fork_source"] = parent.get("full_name")
+    
+    # Check if generated from a template
+    if repo_data.get("template_repository"):
+        info["is_generated_from_template"] = True
+        template = repo_data.get("template_repository", {})
+        info["template_source"] = template.get("full_name")
+    
+    return info
+
+
+
 def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[int, Optional[str]]:
     """Count alerts efficiently using Link header pagination without fetching all results.
     

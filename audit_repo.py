@@ -57,7 +57,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -75,34 +75,6 @@ def repo_info(owner: str, repo: str) -> Dict[str, Any]:
     return gh_api(f"/repos/{owner}/{repo}")
 
 
-def fork_and_template_info(owner: str, repo: str, repo_data: Dict[str, Any]) -> Dict[str, Any]:
-    # Extract information about fork source and template source.
-    # The repo_data parameter should be the result from repo_info().
-    #   - parent: if repo is a fork, contains parent repo info with full_name
-    #   - template_repository: if repo was created from a template, contains template info
-    #
-    info: Dict[str, Any] = {
-        "is_fork": False,
-        "fork_source": None,
-        "is_generated_from_template": False,
-        "template_source": None,
-    }
-    
-    # Check if this is a fork
-    if repo_data.get("fork") and repo_data.get("parent"):
-        info["is_fork"] = True
-        parent = repo_data.get("parent", {})
-        info["fork_source"] = parent.get("full_name")
-    
-    # Check if generated from a template
-    if repo_data.get("template_repository"):
-        info["is_generated_from_template"] = True
-        template = repo_data.get("template_repository", {})
-        info["template_source"] = template.get("full_name")
-    
-    return info
-
-
 def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # The community profile endpoint gives a high-level view of repository
     # documentation and policy files.  The `files` dict indicates whether
@@ -110,7 +82,15 @@ def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # are present.  The presence of a security policy is useful for
     # incident response and disclosure reporting; code of conduct helps
     # ensure a healthy contributor community.
-    return gh_api(f"/repos/{owner}/{repo}/community/profile")
+    data, err = try_get(f"/repos/{owner}/{repo}/community/profile")
+    if err or data is None:
+        # Return empty community profile if endpoint not available
+        return {
+            "files": {},
+            "health_percentage": None,
+            "profile_availability": err or "unknown"
+        }
+    return data
 
 
 def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
@@ -224,7 +204,9 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     community = community_profile(owner, repo)
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
-    fork_template = fork_and_template_info(owner, repo, info)
+    fork_template = fork_and_template_info(info)
+    with open("output.json", "w", encoding="utf-8") as f:
+        json.dump(info, f, indent=2, ensure_ascii=False)
 
     # assemble a handful of simple flags to highlight potential concerns
     flags: List[str] = []
