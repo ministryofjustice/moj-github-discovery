@@ -57,7 +57,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -82,7 +82,15 @@ def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # are present.  The presence of a security policy is useful for
     # incident response and disclosure reporting; code of conduct helps
     # ensure a healthy contributor community.
-    return gh_api(f"/repos/{owner}/{repo}/community/profile")
+    data, err = try_get(f"/repos/{owner}/{repo}/community/profile")
+    if err or data is None:
+        # Return empty community profile if endpoint not available
+        return {
+            "files": {},
+            "health_percentage": None,
+            "profile_availability": err or "unknown"
+        }
+    return data
 
 
 def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
@@ -196,13 +204,24 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     community = community_profile(owner, repo)
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
+    fork_template = fork_and_template_info(info)
 
     # assemble a handful of simple flags to highlight potential concerns
     flags: List[str] = []
     if info.get("archived"):
         flags.append("archived")  # not receiving updates
-    if info.get("fork"):
-        flags.append("fork")
+    if fork_template.get("is_fork"):
+        fork_source = fork_template.get("fork_source")
+        if fork_source:
+            flags.append(f"fork_of_{fork_source}")
+        else:
+            flags.append("fork")
+    if fork_template.get("is_generated_from_template"):
+        template_source = fork_template.get("template_source")
+        if template_source:
+            flags.append(f"generated_from_template_{template_source}")
+        else:
+            flags.append("generated_from_template")
     if info.get("license") is None:
         # absence of a license file; depending on policy this may be
         # considered a legal issue for open-source distributions.
@@ -234,6 +253,8 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     #   - workflow_analysis['has_tests'] indicates if testing is in workflows.
     #   - workflow_analysis['has_linting'] indicates if linting is in workflows.
     #   - prot['default_branch_protected'] False indicates missing status checks.
+    #   - fork_template['is_fork'] indicates if repo is a fork, with fork_source showing parent
+    #   - fork_template['is_generated_from_template'] indicates if repo created from template
 
     return {
         "repo": info,
@@ -242,6 +263,7 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
         "community": community,
         "workflows": {"count": len(workflows), "list": workflows},
         "workflow_analysis": workflow_analysis,
+        "fork_and_template": fork_template,
         "flags": flags,
     }
 
