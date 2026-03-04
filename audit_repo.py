@@ -213,9 +213,17 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     if info.get("archived"):
         flags.append("archived")  # not receiving updates
     if fork_template.get("is_fork"):
-        flags.append(f"fork_of_{fork_template.get('fork_source')}")
+        fork_source = fork_template.get("fork_source")
+        if fork_source:
+            flags.append(f"fork_of_{fork_source}")
+        else:
+            flags.append("fork")
     if fork_template.get("is_generated_from_template"):
-        flags.append(f"generated_from_template_{fork_template.get('template_source')}")
+        template_source = fork_template.get("template_source")
+        if template_source:
+            flags.append(f"generated_from_template_{template_source}")
+        else:
+            flags.append("generated_from_template")
     if info.get("license") is None:
         # absence of a license file; depending on policy this may be
         # considered a legal issue for open-source distributions.
