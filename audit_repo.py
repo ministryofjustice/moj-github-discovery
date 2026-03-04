@@ -205,8 +205,6 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
     fork_template = fork_and_template_info(info)
-    with open("output.json", "w", encoding="utf-8") as f:
-        json.dump(info, f, indent=2, ensure_ascii=False)
 
     # assemble a handful of simple flags to highlight potential concerns
     flags: List[str] = []

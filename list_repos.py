@@ -195,8 +195,6 @@ def main():
         owner = r["owner"]["login"]
         default_branch = r.get("default_branch")
         fork_template = fork_and_template_info(r)
-        with open(f"dumps/{owner}__{name}.json", "w", encoding="utf-8") as f:
-            json.dump(r, f, indent=2, ensure_ascii=False)
         row: Dict[str, Any] = {
             "org": org,
             "repo": name,
