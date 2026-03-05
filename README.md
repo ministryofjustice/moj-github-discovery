@@ -37,6 +37,7 @@ pip install -r requirements-dashboard.txt
 Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
 
 **Usage:**
+
 ```bash
 python list_repos.py <org> [options]
 ```
@@ -46,6 +47,7 @@ python list_repos.py <org> [options]
 > `--audit-db` (or specifying a limit) changes this behaviour as described below.
 
 **Options:**
+
 - `--excel <path>` - Export results to Excel file (full list unless `--limit` set). Requires the `openpyxl` package.
 - `--limit <N>` - Maximum number of repos to fetch (default: 400; when no other options provided output is limited to 10)
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
@@ -83,14 +85,17 @@ python list_repos.py github --sort +stargazers
 Performs a detailed audit of a single repository and saves results to the database. Outputs full JSON report to stdout.
 
 **Usage:**
+
 ```bash
 python audit_repo.py <owner/repo> [options]
 ```
 
 **Options:**
+
 - `--db <path>` - Custom database path (default: `repo_audit.db`)
 
 **Output:**
+
 - Detailed JSON audit report printed to stdout
 - Data saved to `audits` table in SQLite database
 - Status message printed to stderr
@@ -110,6 +115,7 @@ python audit_repo.py github/cli > audit_report.json
 ```
 
 **Audit Includes:**
+
 - Repository metadata (visibility, fork status, language, activity)
 - Security alerts (Dependabot, code scanning, secret scanning)
 - Branch protection status
@@ -123,11 +129,13 @@ python audit_repo.py github/cli > audit_report.json
 Launches an interactive Dash web dashboard to browse and manage repository audits. Allows searching, filtering, and running new audits directly from the UI.
 
 **Usage:**
+
 ```bash
 python dashboard.py [options]
 ```
 
 **Options:**
+
 - `--db <path>` - Custom database path (default: `repo_audit.db`)
 
 **Examples:**
@@ -142,6 +150,7 @@ python dashboard.py --db /tmp/audit.db
 ```
 
 **Features:**
+
 - Search and filter repositories by name
 - Filter by flagged status
 
@@ -150,27 +159,29 @@ python dashboard.py --db /tmp/audit.db
 > noticeably faster results on large orgs. Each script also reports the
 > elapsed time after completion (and the timers will print even if you
 > interrupt or error out).
-
 > Both the dashboard and command‑line tools now reuse a persistent GitHub
 > API session and perform work in parallel where possible, delivering
 > noticeably faster results on large orgs.
+
 - Click any row to view detailed audit information
 - Run audits on-demand from the dashboard
 - View security metrics, alerts, and compliance status
 - Color-coded risk flags
 
-**Access:** Open http://localhost:8050 in your browser
+**Access:** Open <http://localhost:8050> in your browser
 
 ### 4. `testEnv.py` - Diagnose GitHub CLI Authentication
 
 Diagnoses why `gh` authentication might differ between environments (e.g., terminal vs Jupyter in Codespaces).
 
 **Usage:**
+
 ```bash
 python testEnv.py
 ```
 
 **Output:**
+
 - Environment variables (PATH, HOME, config locations)
 - Token presence and SHA256 prefix (redacted)
 - `gh auth status`
@@ -196,20 +207,22 @@ python testEnv.py
 ## Database Schema
 
 ### `repo_rows` Table
+
 Contains summary information from `list_repos.py`:
 
-| Column | Type | Description |
-|--------|------|-------------|
-| full_name | TEXT (PK) | Repository full name (owner/repo) |
-| audit_json | TEXT | JSON data including metadata, alerts, flags |
+| Column     | Type      | Description                                 |
+| ---------- | --------- | ------------------------------------------- |
+| full_name  | TEXT (PK) | Repository full name (owner/repo)           |
+| audit_json | TEXT      | JSON data including metadata, alerts, flags |
 
 ### `audits` Table
+
 Contains detailed audit information from `audit_repo.py`:
 
-| Column | Type | Description |
-|--------|------|-------------|
-| full_name | TEXT (PK) | Repository full name (owner/repo) |
-| audit_json | TEXT | Complete nested audit JSON |
+| Column     | Type      | Description                       |
+| ---------- | --------- | --------------------------------- |
+| full_name  | TEXT (PK) | Repository full name (owner/repo) |
+| audit_json | TEXT      | Complete nested audit JSON        |
 
 ## Audit Flags Explained
 
@@ -275,34 +288,41 @@ python dashboard.py
 ## Troubleshooting
 
 ### "Command failed: gh api ..." Error
+
 - Ensure `gh` CLI is installed: `which gh`
 - Authenticate with `gh`: `gh auth login`
 - Check token has correct scopes (requires `repo` and `read:org`)
 
 ### Authentication Issues Between Environments
+
 ```bash
 python testEnv.py
 ```
+
 This will diagnose differences in PATH, HOME, and token availability.
 
 ### JSON Parse Errors in Dashboard
+
 - Ensure the database file exists and is valid
 - Check that previous audits completed successfully
 - Try running a fresh audit: Click "Run Audit" button
 
 ### Database Locked Error
+
 - Close other instances of the dashboard
 - Ensure no other processes are accessing the database
 
 ## Examples
 
 ### Export audit to XLSX report
+
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py github --limit 20 --excel github_audit.xlsx
 ```
 
 ### Audit specific critical repos
+
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 python audit_repo.py github/cli > cli_audit.json
@@ -310,6 +330,7 @@ python audit_repo.py github/copilot-docs > copilot_audit.json
 ```
 
 ### Use dashboard to identify high-risk repos
+
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py myorg --audit-db
