@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info
+from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, list_workflows, community_profile
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
@@ -211,6 +211,16 @@ def main():
             "open_issues": r.get("open_issues_count"),
             "stargazers": r.get("stargazers_count"),
         }
+        # include workflows info (count and full list) so it appears in
+        # Excel, DB and JSON outputs
+        try:
+            workflows = list_workflows(owner, name)
+        except Exception:
+            workflows = []
+        row["workflows_count"] = len(workflows)
+        row["workflows"] = workflows
+        # provide a concise comma-separated names field for spreadsheet views
+        row["workflows_names"] = ", ".join([w.get("name", "") for w in workflows])
         if not no_alerts:
             row.update(count_alerts(owner, name))
         else:
@@ -225,6 +235,18 @@ def main():
             })
         if default_branch:
             row.update(branch_protection(owner, name, default_branch))
+        # community profile (files, health percentage) — include raw dict and
+        # a few spreadsheet-friendly summaries
+        try:
+            community = community_profile(owner, name)
+        except Exception:
+            community = {"files": {}, "health_percentage": None}
+        row["community"] = community
+        row["community_health"] = community.get("health_percentage")
+        files = community.get("files") or {}
+        row["community_files"] = ", ".join(sorted(files.keys()))
+        row["has_security_policy"] = bool(files.get("security_policy"))
+        row["has_code_of_conduct"] = bool(files.get("code_of_conduct"))
         flags: List[str] = []
         if row["archived"]:
             flags.append("archived")

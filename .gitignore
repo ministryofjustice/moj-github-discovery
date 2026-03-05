@@ -20,5 +20,13 @@ audit-*.xlsx
 *.db
 *.sqlite
 repo_audit.db
+
 #GH token file
 .token
+
+#Notebook files and folders
+notebooks/.ipynb_checkpoints/
+
+
+.python-version
+.venv/

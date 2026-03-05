@@ -131,6 +131,22 @@ def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
         return None, "other"
 
 
+def community_profile(owner: str, repo: str) -> Dict[str, Any]:
+    """Fetch repository community profile (SAFE wrapper around try_get).
+
+    Returns a dict with keys similar to the API response. On error returns a
+    minimal structure so callers can rely on the shape.
+    """
+    data, err = try_get(f"/repos/{owner}/{repo}/community/profile")
+    if err or data is None:
+        return {
+            "files": {},
+            "health_percentage": None,
+            "profile_availability": err or "unknown",
+        }
+    return data
+
+
 def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract fork source and template source information from repo data.
     
@@ -161,6 +177,18 @@ def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
         info["template_source"] = template.get("full_name")
     
     return info
+
+
+def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
+    """Return list of GitHub Actions workflows for a repository.
+
+    Returns an empty list on error or when no workflows are present.
+    """
+    out, err = try_get(f"/repos/{owner}/{repo}/actions/workflows")
+    # on error, err may be '403' if not permitted; treat as empty list
+    if isinstance(out, dict) and "workflows" in out:
+        return out.get("workflows", [])
+    return []
 
 
 

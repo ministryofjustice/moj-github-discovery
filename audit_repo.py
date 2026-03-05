@@ -57,7 +57,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info, list_workflows, community_profile
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -75,34 +75,10 @@ def repo_info(owner: str, repo: str) -> Dict[str, Any]:
     return gh_api(f"/repos/{owner}/{repo}")
 
 
-def community_profile(owner: str, repo: str) -> Dict[str, Any]:
-    # The community profile endpoint gives a high-level view of repository
-    # documentation and policy files.  The `files` dict indicates whether
-    # items like SECURITY.md, CODE_OF_CONDUCT, CONTRIBUTING, etc.
-    # are present.  The presence of a security policy is useful for
-    # incident response and disclosure reporting; code of conduct helps
-    # ensure a healthy contributor community.
-    data, err = try_get(f"/repos/{owner}/{repo}/community/profile")
-    if err or data is None:
-        # Return empty community profile if endpoint not available
-        return {
-            "files": {},
-            "health_percentage": None,
-            "profile_availability": err or "unknown"
-        }
-    return data
+# `community_profile` moved to `utils.community_profile`
 
 
-def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
-    # Returns the array of GitHub Actions workflows configured for the
-    # repository.  If the list is empty, the repo has no CI defined via
-    # Actions.  You could also look in `.github/workflows` directly but this
-    # API is convenient.
-    out, err = try_get(f"/repos/{owner}/{repo}/actions/workflows")
-    # on error, err may be '403' if not permitted; treat as empty list
-    if isinstance(out, dict) and "workflows" in out:
-        return out.get("workflows", [])
-    return []
+# `list_workflows` moved to `utils.list_workflows`
 
 
 def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
