@@ -133,6 +133,7 @@ python list_repos.py github --repo-file repos.txt --limit 20
 python list_repos.py github --audit-db /tmp/audit.db
 
 # Sort by other fields (stars were previously supported but have been removed from the dashboard list)
+# Sort by stars ascending and (with no other options) output ten most recent
 python list_repos.py github --sort +stargazers
 ```
 

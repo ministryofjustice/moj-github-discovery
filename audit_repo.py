@@ -57,7 +57,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, list_workflows, analyze_workflows, get_code_security_configuration
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -82,9 +82,118 @@ def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # are present.  The presence of a security policy is useful for
     # incident response and disclosure reporting; code of conduct helps
     # ensure a healthy contributor community.
-    return gh_api(f"/repos/{owner}/{repo}/community/profile")
+    data, err = try_get(f"/repos/{owner}/{repo}/community/profile")
+    if err or data is None:
+        # Return empty community profile if endpoint not available
+        return {
+            "files": {},
+            "health_percentage": None,
+            "profile_availability": err or "unknown"
+        }
+    return data
 
 
+def list_workflows(owner: str, repo: str) -> List[Dict[str, Any]]:
+    # Returns the array of GitHub Actions workflows configured for the
+    # repository.  If the list is empty, the repo has no CI defined via
+    # Actions.  You could also look in `.github/workflows` directly but this
+    # API is convenient.
+    out, err = try_get(f"/repos/{owner}/{repo}/actions/workflows")
+    # on error, err may be '403' if not permitted; treat as empty list
+    if isinstance(out, dict) and "workflows" in out:
+        return out.get("workflows", [])
+    return []
+
+
+def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
+    # Fetch and analyze the actual workflow files to detect if they include
+    # test or lint jobs/steps.  Returns a dict with:
+    #   "has_tests": bool - True if ANY workflow mentions test-related keywords
+    #   "has_linting": bool - True if ANY workflow mentions lint-related keywords
+    #   "workflows_analyzed": int - number of workflows we examined
+    #   "findings": dict - keyed by workflow name, lists detected keywords
+    #
+    # Common keywords searched:
+    #   - test: test, pytest, jest, mocha, unittest, rspec, cargo test, vitest
+    #   - lint: lint, eslint, pylint, flake8, black, prettier, clippy, rustfmt
+    #
+    test_keywords = [
+        "test", "pytest", "jest", "mocha", "unittest", "rspec", "cargo test",
+        "vitest", "tap", "ava", "jasmine", "nightwatch", "cypress", "vitest test"
+    ]
+    lint_keywords = [
+        "lint", "eslint", "pylint", "flake8", "black", "prettier", "clippy",
+        "rustfmt", "golangci-lint", "shellcheck", "shfmt", "hadolint", "yamllint"
+    ]
+
+    findings: Dict[str, List[str]] = {}
+    has_tests = False
+    has_linting = False
+    workflows_analyzed = 0
+
+    # Try to list files in .github/workflows/
+    contents_path = f"/repos/{owner}/{repo}/contents/.github/workflows"
+    workflow_files, err = try_get(contents_path)
+    if err or not isinstance(workflow_files, list):
+        # If we can't get the directory, return empty analysis
+        return {
+            "has_tests": False,
+            "has_linting": False,
+            "workflows_analyzed": 0,
+            "findings": {},
+            "note": "could not access .github/workflows directory",
+        }
+
+    # we'll fetch workflow files concurrently since network I/O is the
+    # slowest part.
+    session = _get_session()
+    def fetch_and_scan(file_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(file_info, dict):
+            return None
+        name = file_info.get("name", "")
+        download_url = file_info.get("download_url")
+        if not download_url or not (name.endswith(".yml") or name.endswith(".yaml")):
+            return None
+        try:
+            resp = session.get(download_url, timeout=10)
+            resp.raise_for_status()
+            content = resp.text
+        except Exception:
+            return None
+        detected: List[str] = []
+        lower = content.lower()
+        for keyword in test_keywords:
+            if keyword.lower() in lower:
+                detected.append(f"test:{keyword}")
+                return {"name": name, "detected": detected, "has_tests": True}
+        for keyword in lint_keywords:
+            if keyword.lower() in lower:
+                detected.append(f"lint:{keyword}")
+                return {"name": name, "detected": detected, "has_linting": True}
+        return None
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for fi in workflow_files:
+            futures.append(executor.submit(fetch_and_scan, fi))
+        for fut in as_completed(futures):
+            res = fut.result()
+            if not res:
+                continue
+            workflows_analyzed += 1
+            name = res["name"]
+            findings[name] = res.get("detected", [])
+            if res.get("has_tests"):
+                has_tests = True
+            if res.get("has_linting"):
+                has_linting = True
+
+    return {
+        "has_tests": has_tests,
+        "has_linting": has_linting,
+        "workflows_analyzed": workflows_analyzed,
+        "findings": findings,
+    }
 
 
 def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
@@ -95,13 +204,24 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     community = community_profile(owner, repo)
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
+    fork_template = fork_and_template_info(info)
 
     # assemble a handful of simple flags to highlight potential concerns
     flags: List[str] = []
     if info.get("archived"):
         flags.append("archived")  # not receiving updates
-    if info.get("fork"):
-        flags.append("fork")
+    if fork_template.get("is_fork"):
+        fork_source = fork_template.get("fork_source")
+        if fork_source:
+            flags.append(f"fork_of_{fork_source}")
+        else:
+            flags.append("fork")
+    if fork_template.get("is_generated_from_template"):
+        template_source = fork_template.get("template_source")
+        if template_source:
+            flags.append(f"generated_from_template_{template_source}")
+        else:
+            flags.append("generated_from_template")
     if info.get("license") is None:
         # absence of a license file; depending on policy this may be
         # considered a legal issue for open-source distributions.
@@ -133,6 +253,8 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     #   - workflow_analysis['has_tests'] indicates if testing is in workflows.
     #   - workflow_analysis['has_linting'] indicates if linting is in workflows.
     #   - prot['default_branch_protected'] False indicates missing status checks.
+    #   - fork_template['is_fork'] indicates if repo is a fork, with fork_source showing parent
+    #   - fork_template['is_generated_from_template'] indicates if repo created from template
 
     return {
         "repo": info,
@@ -141,6 +263,7 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
         "community": community,
         "workflows": {"count": len(workflows), "list": workflows},
         "workflow_analysis": workflow_analysis,
+        "fork_and_template": fork_template,
         "flags": flags,
     }
 

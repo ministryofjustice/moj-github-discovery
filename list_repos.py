@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db
+from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
@@ -26,8 +26,12 @@ atexit.register(_report_elapsed)
 # to write audit rows to a SQLite database, or `--excel` to export an Excel file.
 # Filtering, sorting and specific repo selection are also supported.
 
+# This script lists (and optionally audits) every repository in an organization.
+# By default it prints the most recent 10 repos to stdout.  Use `--audit-db`
+# to write audit rows to a SQLite database, or `--excel` to export an Excel file.
+# Filtering, sorting and specific repo selection are also supported.
 
-def list_org_repos(org: str, limit: int = 5000) -> List[Dict[str, Any]]:
+def list_org_repos(org: str, limit: int = 400) -> List[Dict[str, Any]]:
     """Retrieve repositories for an organization, sorted by last push.
 
     This helper simply delegates to ``gh_api`` with ``paginate=True`` and
@@ -152,12 +156,49 @@ def main():
             effective_limit = limit
         repos = list_org_repos(org, limit=effective_limit)
 
+    # Enrich fork/template data for repos from org listing
+    # The org endpoint doesn't include parent/template_repository fields,
+    # so fetch full details for forked or template repos
+    def enrich_fork_template_info(r: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch full repo details if fork or template to get parent/template info."""
+        try:
+            owner = r.get("owner", {}).get("login")
+            name = r.get("name")
+            if not owner or not name:
+                return r
+            
+            # Only fetch if fork or is_template (otherwise skip to save API calls)
+            if not (r.get("fork") or r.get("is_template")):
+                return r
+            
+            full_info = gh_api(f"/repos/{owner}/{name}")
+            # Merge parent and template_repository if present
+            if full_info.get("parent"):
+                r["parent"] = full_info.get("parent")
+            if full_info.get("template_repository"):
+                r["template_repository"] = full_info.get("template_repository")
+            return r
+        except Exception:
+            # If enrichment fails, return original repo data
+            return r
+
+    # Enrich fork/template data in parallel for org-listed repos (skip if using --repo-file)
+    if repo_list is None and repos:
+        enriched_repos = []
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(enrich_fork_template_info, r) for r in repos]
+            # Maintain order by iterating through futures in order
+            for fut in futures:
+                enriched_repos.append(fut.result())
+        repos = enriched_repos
+
     # helper for a single repo; extracted so it can run in a pool
     def process_single(r: Dict[str, Any]) -> Dict[str, Any]:
         start_repo = time.monotonic()
         name = r["name"]
         owner = r["owner"]["login"]
         default_branch = r.get("default_branch")
+        fork_template = fork_and_template_info(r)
         row: Dict[str, Any] = {
             "org": org,
             "repo": name,
@@ -165,6 +206,9 @@ def main():
             "private": r.get("private"),
             "archived": r.get("archived"),
             "fork": r.get("fork"),
+            "fork_source": fork_template.get("fork_source"),
+            "is_generated_from_template": fork_template.get("is_generated_from_template"),
+            "template_source": fork_template.get("template_source"),
             "pushed_at": r.get("pushed_at"),
             "default_branch": default_branch,
             "language": r.get("language"),

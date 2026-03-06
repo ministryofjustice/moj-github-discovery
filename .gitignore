@@ -22,3 +22,5 @@ audit-*.xlsx
 repo_audit.db
 *.csv
 *.pkl
+#GH token file
+.token
