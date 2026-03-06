@@ -71,6 +71,25 @@ and `code_security_configuration`.  Those values are surfaced automatically in
 the dashboard when you point it at a database created by this script.
 
 
+### 1. `archive_repos.py` - Identify Stale/Archived Candidates
+
+Specialized tool for looking at repositories that may be candidates for
+archiving.  In addition to the usual age/activity fields it now:
+
+- records whether the GitHub dependency graph feature is enabled for the
+  repository
+- performs a lightweight code search to find other repositories that
+  mention the project, and classifies those references as archived or
+  active
+
+Output includes `dependency_graph_enabled`, `references` (list of hits),
+`archive_references` and `active_references`.  Summary metrics reflect these
+new checks.
+
+Usage and options match the other listing tools; see the script header for
+full details.
+
+
 ### 2. `list_repos.py` - List and Audit Organization Repositories
 
 Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
@@ -274,6 +293,8 @@ Each repo is assigned risk flags:
 - `no_actions_workflows` - No CI/CD workflows configured
 - `no_detected_tests` - CI/CD exists but no test detection
 - `no_detected_linting` - CI/CD exists but no lint detection
+- `dependency_graph_disabled` - Dependency graph is not enabled (could mean the repo isn't used by others)
+- `has_references` - Other repos in the same organization mention this one in their code (the script also categorizes them as active or archived)
 
 ## Workflow
 
