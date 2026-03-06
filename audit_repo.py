@@ -159,6 +159,9 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
         "hadolint",
         "yamllint",
     ]
+    security_keywords = [
+        "scan", "trivy", "checkov", "sast", "sonarqube"
+    ]
 
     findings: Dict[str, List[str]] = {}
     has_tests = False
