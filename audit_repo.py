@@ -59,16 +59,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-from utils import (
-    gh_api,
-    try_get,
-    count_alerts,
-    branch_protection,
-    init_db,
-    save_to_db,
-    _get_session,
-    fork_and_template_info,
-)
+from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info, check_codeowners_exists
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -239,6 +230,7 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
     alerts = {} if no_alerts else count_alerts(owner, repo)
     prot = branch_protection(owner, repo, default_branch) if default_branch else {}
     community = community_profile(owner, repo)
+    codeowners = check_codeowners_exists(owner, repo, default_branch) if default_branch else {}
     workflows = list_workflows(owner, repo)
     workflow_analysis = analyze_workflows(owner, repo)
     fork_template = fork_and_template_info(info)
