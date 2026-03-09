@@ -391,6 +391,20 @@ def branch_protection(owner: str, repo: str, default_branch: str) -> Dict[str, A
         return result
     return {"default_branch_protected": None, "branch_protection_access": err}
 
+def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
+    CODEOWNERS_PATHS = [
+        "CODEOWNERS",
+        ".github/CODEOWNERS",
+        "docs/CODEOWNERS"
+    ]
+
+    for path in CODEOWNERS_PATHS:
+        reponse = gh_api(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": default_branch})
+
+        if response.status_code == 200:
+            return {"present": True, "path": path}
+    return {"present": False, "path": None}
+
 
 def init_db(db_path: str, table_name: str = "audits") -> None:
     """Initialize SQLite database with a table."""
