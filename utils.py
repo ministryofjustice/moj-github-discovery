@@ -405,7 +405,6 @@ def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
             return {"present": True, "path": path}
     return {"present": False, "path": None}
 
-
 def init_db(db_path: str, table_name: str = "audits") -> None:
     """Initialize SQLite database with a table."""
     conn = sqlite3.connect(db_path)
