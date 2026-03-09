@@ -85,7 +85,6 @@ def repo_info(owner: str, repo: str) -> Dict[str, Any]:
     #
     return gh_api(f"/repos/{owner}/{repo}")
 
-
 def community_profile(owner: str, repo: str) -> Dict[str, Any]:
     # The community profile endpoint gives a high-level view of repository
     # documentation and policy files.  The `files` dict indicates whether
@@ -299,6 +298,7 @@ def assess(owner: str, repo: str, no_alerts: bool = False) -> Dict[str, Any]:
         "alerts": alerts,
         "branch_protection": prot,
         "community": community,
+        "codeowners": codeowners,
         "workflows": {"count": len(workflows), "list": workflows},
         "workflow_analysis": workflow_analysis,
         "fork_and_template": fork_template,
