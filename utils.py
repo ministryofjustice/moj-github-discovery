@@ -1,8 +1,11 @@
 """Common utilities for GitHub repository auditing."""
 
 import json
+import logging
 import os
 import sqlite3
+import threading
+import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +15,11 @@ import requests
 # module‑level globals used to cache the GitHub token and HTTP session
 _TOKEN: Optional[str] = None
 _SESSION: Optional[requests.Session] = None
+# Rate limit state shared across requests
+_RATE_LIMIT_LOCK = threading.Lock()
+_RATE_LIMIT_RESET: Optional[float] = None
+_RATE_LIMIT_REMAINING: Optional[int] = None
+_RATE_LIMIT_THRESHOLD = int(os.getenv("GITHUB_RATE_THRESHOLD", "2"))
 
 
 def _get_github_token() -> str:
@@ -68,6 +76,76 @@ def _get_session() -> requests.Session:
                 "Accept": "application/vnd.github.v3+json",
             }
         )
+
+        # wrap the session.request method to monitor rate-limit headers
+        orig_request = sess.request
+
+        def request_wrapper(method, url, **kwargs):
+            global _RATE_LIMIT_RESET, _RATE_LIMIT_REMAINING
+            # Only sleep pre-request when we know remaining is low (<= threshold)
+            with _RATE_LIMIT_LOCK:
+                reset = _RATE_LIMIT_RESET
+                rem = _RATE_LIMIT_REMAINING
+            if rem is not None and reset is not None and rem <= _RATE_LIMIT_THRESHOLD:
+                now = time.time()
+                if now < reset:
+                    sleep_for = int(reset - now) + 1
+                    try:
+                        logging.getLogger(__name__).info(
+                            "Rate limit low (%s remaining) before request to %s — sleeping %s seconds until %s",
+                            rem,
+                            url,
+                            sleep_for,
+                            reset,
+                        )
+                    except Exception:
+                        pass
+                    time.sleep(sleep_for)
+
+            resp = orig_request(method, url, **kwargs)
+
+            # Update global rate-limit info from response headers
+            hdrs = resp.headers
+            rem = hdrs.get("X-RateLimit-Remaining")
+            rst = hdrs.get("X-RateLimit-Reset")
+            try:
+                rem_i = int(rem) if rem is not None else None
+            except Exception:
+                rem_i = None
+            try:
+                rst_i = int(rst) if rst is not None else None
+            except Exception:
+                rst_i = None
+            with _RATE_LIMIT_LOCK:
+                if rem_i is not None:
+                    _RATE_LIMIT_REMAINING = rem_i
+                if rst_i is not None:
+                    # store as epoch seconds (float)
+                    _RATE_LIMIT_RESET = float(rst_i)
+
+            # If remaining is at or below threshold, sleep until reset (post-response)
+            with _RATE_LIMIT_LOCK:
+                rem_local = _RATE_LIMIT_REMAINING
+                reset_local = _RATE_LIMIT_RESET
+            if rem_local is not None and reset_local is not None and rem_local <= _RATE_LIMIT_THRESHOLD:
+                now = time.time()
+                if now < reset_local:
+                    sleep_for = int(reset_local - now) + 1
+                    try:
+                        logging.getLogger(__name__).info(
+                            "Rate limit reached (%s remaining) after request to %s — sleeping %s seconds until %s",
+                            rem_local,
+                            url,
+                            sleep_for,
+                            reset_local,
+                        )
+                    except Exception:
+                        pass
+                    time.sleep(sleep_for)
+
+            return resp
+
+        sess.request = request_wrapper
         _SESSION = sess
     return _SESSION
 
@@ -175,6 +253,8 @@ def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
         info["is_generated_from_template"] = True
         template = repo_data.get("template_repository", {})
         info["template_source"] = template.get("full_name")
+    # Is this repository itself a template that others can use?
+    info["is_template"] = bool(repo_data.get("is_template"))
     
     return info
 
