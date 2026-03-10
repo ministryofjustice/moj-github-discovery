@@ -71,7 +71,7 @@ def old_org_repos(org: str, limit: int = 5000, use_cache: bool = True) -> List[D
     # Fetch from API if cache doesn't exist or failed
     collected: List[Dict[str, Any]] = []
     page = 1
-    per_page = 100
+    per_page = 10
     while len(collected) < limit:
         print(f"Fetching page {page} from {org}...", file=sys.stderr)
         batch = gh_api(
@@ -201,7 +201,7 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
         # Manually paginate through search results
         # The search API returns max 100 items per page but may have more total results
         page = 1
-        per_page = 100
+        per_page = 10
         total_count = 0
         while True:
             resp = gh_api(f"/search/code?q={query}&per_page={per_page}&page={page}")
