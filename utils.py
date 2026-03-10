@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+import sys
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -415,12 +416,20 @@ def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
         ".github/CODEOWNERS",
         "docs/CODEOWNERS"
     ]
+    sess = _get_session()
+    base_url = "https://api.github.com"
+    tree_url = f"{base_url}/repos/{owner}/{repo}/git/trees/{default_branch}"
+
+    resp = sess.get(f"{tree_url}?recursive=1")
+    resp.raise_for_status()
+    tree_paths = {item["path"] for item in resp.json().get("tree", [])}
 
     for path in CODEOWNERS_PATHS:
-        reponse = gh_api(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": default_branch})
 
-        if response.status_code == 200:
+        if path in tree_paths:
+            print(f"CODEOWNERS found at {path}", file=sys.stderr)
             return {"present": True, "path": path}
+    print(f"CODEOWNERS not found", file=sys.stderr)
     return {"present": False, "path": None}
 
 def init_db(db_path: str, table_name: str = "audits") -> None:
