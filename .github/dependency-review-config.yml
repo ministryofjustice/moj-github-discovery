@@ -1,0 +1,41 @@
+---
+# Dependency Review Configuration
+#
+# This configuration is used by the dependency-review-action to validate
+# dependencies in pull requests and block merges that introduce security risks.
+
+# Fail if any vulnerability is found with the specified severity or higher
+fail-on-severity: critical
+
+# Fail if any packages are found with the specified license
+# Common restrictive licenses to block: GPL-3.0, AGPL-3.0
+fail-on-licenses:
+  - GPL-3.0-only
+  - GPL-3.0-or-later
+  - AGPL-3.0-only
+  - AGPL-3.0-or-later
+
+# Allow specific licenses (permissive open source)
+allow-licenses:
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - ISC
+  - 0BSD
+  - CC0-1.0
+  - Unlicense
+
+# Allow dependencies from these sources
+# allow-dependencies-licenses:
+#   - pkg:npm/example-package
+
+# Block specific packages if needed
+# deny-packages:
+#   - pkg:npm/malicious-package
+
+# Allow GitHub-hosted Actions
+allow-ghsas: []
+
+# Warn on moderate vulnerabilities but don't fail
+# comment-summary-in-pr: always
