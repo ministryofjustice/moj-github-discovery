@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info
+from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, check_codeowners_exists
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
@@ -225,6 +225,7 @@ def main():
             })
         if default_branch:
             row.update(branch_protection(owner, name, default_branch))
+            row.update(check_codeowners_exists(owner, name, default_branch))
         flags: List[str] = []
         if row["archived"]:
             flags.append("archived")

@@ -66,6 +66,7 @@ def load_data():
                 "secret_alerts": data.get("secret_scanning_alerts"),
                 "code_scanning_alerts": data.get("code_scanning_alerts"),
                 "branch_protected": data.get("default_branch_protected"),
+                "codeowners": data.get("codeowners"),
                 "flags": data.get("flags", ""),
                 "pushed_at": data.get("pushed_at", ""),
             })
