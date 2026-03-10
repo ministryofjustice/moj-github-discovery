@@ -39,7 +39,9 @@ def redacted_token_info(name: str) -> str:
     return f"present len={len(v)} stripped_len={len(v_stripped)} sha256={sha256_prefix(v_stripped)}{changed}"
 
 
-def run(cmd, env: Optional[Dict[str, str]] = None, timeout: int = 30) -> Tuple[int, str, str]:
+def run(
+    cmd, env: Optional[Dict[str, str]] = None, timeout: int = 30
+) -> Tuple[int, str, str]:
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
     return p.returncode, p.stdout, p.stderr
 
@@ -56,7 +58,16 @@ def main() -> int:
     print("CWD:", os.getcwd())
 
     # Basic env snapshot (safe)
-    keys = ["HOME", "USER", "SHELL", "PATH", "XDG_CONFIG_HOME", "GH_HOST", "CODESPACES", "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN"]
+    keys = [
+        "HOME",
+        "USER",
+        "SHELL",
+        "PATH",
+        "XDG_CONFIG_HOME",
+        "GH_HOST",
+        "CODESPACES",
+        "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN",
+    ]
     env_view = {k: (os.environ.get(k) or "MISSING") for k in keys}
     print_kv("Environment snapshot", env_view)
 
@@ -78,7 +89,9 @@ def main() -> int:
 
     # Show gh config directories (no secrets)
     # gh uses HOME / XDG_CONFIG_HOME to find config
-    config_dir = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ.get("HOME", ""), ".config")
+    config_dir = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.environ.get("HOME", ""), ".config"
+    )
     print("\n=== Config locations (expected) ===")
     print("XDG_CONFIG_HOME:", os.environ.get("XDG_CONFIG_HOME") or "MISSING")
     print("Computed config dir:", config_dir)
@@ -152,13 +165,17 @@ def main() -> int:
 
     print("\n\n### Interpretation guide")
     print("- If Variant B_no_token works but Variant C_force_GH_TOKEN_stripped fails:")
-    print("    => stored gh login is fine, but the token is not accepted (or wrong host/scopes).")
+    print(
+        "    => stored gh login is fine, but the token is not accepted (or wrong host/scopes)."
+    )
     print("- If Variant A_env_as_is differs between terminal and notebook:")
     print("    => kernel env differs (token missing, different HOME/PATH).")
     print("- If `which gh` differs between terminal and notebook:")
     print("    => different gh binary/version being used.")
     print("- If all variants fail in notebook but work in terminal:")
-    print("    => most likely PATH/HOME/XDG_CONFIG_HOME differences or the kernel started before secrets were injected.")
+    print(
+        "    => most likely PATH/HOME/XDG_CONFIG_HOME differences or the kernel started before secrets were injected."
+    )
     print("\nDone.")
     return 0
 
