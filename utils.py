@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +14,53 @@ import requests
 # module‑level globals used to cache the GitHub token and HTTP session
 _TOKEN: Optional[str] = None
 _SESSION: Optional[requests.Session] = None
+
+
+def _rate_limit_retry_delay(resp: requests.Response, attempt: int) -> int:
+    """Return backoff delay in seconds for a 403 response.
+
+    Prefer GitHub-provided headers when available and fall back to bounded
+    exponential backoff for secondary/abuse limits.
+    """
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        try:
+            return max(1, int(float(retry_after)))
+        except ValueError:
+            pass
+
+    remaining = resp.headers.get("X-RateLimit-Remaining")
+    reset_at = resp.headers.get("X-RateLimit-Reset")
+    if remaining == "0" and reset_at:
+        try:
+            reset_epoch = int(reset_at)
+            return max(1, min(900, reset_epoch - int(time.time()) + 1))
+        except ValueError:
+            pass
+
+    return min(300, 15 * (2 ** (attempt - 1)))
+
+
+def _request_with_backoff(
+    sess: requests.Session,
+    method: str,
+    url: str,
+    max_attempts: int = 5,
+) -> requests.Response:
+    """Send an API request and retry when GitHub returns rate-limit 403s."""
+    for attempt in range(1, max_attempts + 1):
+        resp = sess.request(method, url)
+        try:
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status != 403 or attempt >= max_attempts:
+                raise
+            time.sleep(_rate_limit_retry_delay(resp, attempt))
+
+    # Defensive fallback; loop should have returned or raised.
+    raise RuntimeError("Unexpected request retry flow")
 
 
 def _get_github_token() -> str:
@@ -99,8 +147,7 @@ def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optio
         while True:
             sep = "&" if "?" in url else "?"
             paged = f"{url}{sep}per_page={per_page}&page={page}"
-            resp = sess.request(method, paged)
-            resp.raise_for_status()
+            resp = _request_with_backoff(sess, method, paged)
             data = resp.json()
             if isinstance(data, list):
                 if not data:
@@ -112,8 +159,7 @@ def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optio
             page += 1
         return results
     else:
-        resp = sess.request(method, url)
-        resp.raise_for_status()
+        resp = _request_with_backoff(sess, method, url)
         data = resp.json()
         return data if data else None
 
