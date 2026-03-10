@@ -15,7 +15,15 @@
     "xlink",
     "noopener",
     "noreferrer",
-    "Familiarise"
+    "Familiarise",
+    "clippy",
+    "golangci",
+    "sonarqube",
+    "openpyxl",
+    "myorg",
+    "ministryofsound",
+    "sess",
+    "restr"
   ],
   "dictionaries": ["en-gb", "companies", "softwareTerms", "misc", "lorem-ipsum", "typescript", "node", "bash", "npm"],
   "languageSettings": [
