@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, list_workflows, community_profile
+from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, list_workflows, community_profile, try_get
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
@@ -162,17 +162,25 @@ def main():
             name = r.get("name")
             if not owner or not name:
                 return r
-            
-            # Only fetch if fork or is_template (otherwise skip to save API calls)
-            if not (r.get("fork") or r.get("is_template")):
-                return r
-            
+            # Fetch full repository metadata — the org listing does not
+            # include `parent` or `template_repository` fields, so to
+            # reliably detect forks and repos created from templates we
+            # must request the full repo object.
             full_info = gh_api(f"/repos/{owner}/{name}")
             # Merge parent and template_repository if present
             if full_info.get("parent"):
                 r["parent"] = full_info.get("parent")
             if full_info.get("template_repository"):
                 r["template_repository"] = full_info.get("template_repository")
+            # copy is_template and fork flag from the full metadata so
+            # downstream logic has accurate values
+            if "is_template" in full_info:
+                r["is_template"] = full_info.get("is_template")
+            if "fork" in full_info:
+                r["fork"] = full_info.get("fork")
+            # attach the full repo object so downstream processing can
+            # reuse fields and avoid extra API calls
+            r["_full_info"] = full_info
             return r
         except Exception:
             # If enrichment fails, return original repo data
@@ -193,24 +201,43 @@ def main():
         start_repo = time.monotonic()
         name = r["name"]
         owner = r["owner"]["login"]
-        default_branch = r.get("default_branch")
-        fork_template = fork_and_template_info(r)
+        # prefer full repo data when available
+        source = r.get("_full_info", r)
+        default_branch = source.get("default_branch")
+        # compute fork/template info from the full metadata when present
+        fork_template = fork_and_template_info(source)
         row: Dict[str, Any] = {
             "org": org,
             "repo": name,
             "full_name": r.get("full_name"),
             "private": r.get("private"),
             "archived": r.get("archived"),
-            "fork": r.get("fork"),
+            # `fork` indicates this repo was created by forking another repo
+            "fork": fork_template.get("is_fork"),
             "fork_source": fork_template.get("fork_source"),
             "is_generated_from_template": fork_template.get("is_generated_from_template"),
             "template_source": fork_template.get("template_source"),
-            "pushed_at": r.get("pushed_at"),
+            # whether this repository is itself a template
+            "is_template": fork_template.get("is_template"),
+            "pushed_at": source.get("pushed_at") or r.get("pushed_at"),
             "default_branch": default_branch,
-            "language": r.get("language"),
-            "open_issues": r.get("open_issues_count"),
-            "stargazers": r.get("stargazers_count"),
+            "language": source.get("language") or r.get("language"),
+            "open_issues": source.get("open_issues_count") or r.get("open_issues_count"),
+            "stargazers": source.get("stargazers_count") or r.get("stargazers_count"),
         }
+        # description present
+        row["description_present"] = bool(source.get("description") or r.get("description"))
+        # default branch is 'main'
+        row["default_branch_is_main"] = (default_branch == "main") if default_branch is not None else None
+        # issues enabled
+        row["issues_section_enabled"] = (source.get("has_issues") if source.get("has_issues") is not None else r.get("has_issues"))
+        # license is MIT
+        try:
+            lic = source.get("license") or r.get("license") or {}
+            spdx = (lic.get("spdx_id") or "").upper()
+            row["licence_mit"] = (spdx == "MIT")
+        except Exception:
+            row["licence_mit"] = None
         # include workflows info (count and full list) so it appears in
         # Excel, DB and JSON outputs
         try:
@@ -235,6 +262,23 @@ def main():
             })
         if default_branch:
             row.update(branch_protection(owner, name, default_branch))
+        # translate branch protection details into booleans
+        dbp = row.get("default_branch_protected")
+        prot_settings = row.get("protection_settings") or []
+        if dbp is None:
+            row["push_protection"] = None
+            row["branch_protection_admins"] = None
+            row["branch_protection_signed"] = None
+        else:
+            # push protection = protected AND force pushes not allowed
+            row["push_protection"] = bool(dbp) and ("allow_force_pushes" not in prot_settings)
+            row["branch_protection_admins"] = ("enforce_admins" in prot_settings)
+            # requiring signed commits cannot be reliably detected without admin access
+            row["branch_protection_signed"] = None
+        # PR review related booleans
+        row["branch_protection_code_owner_review"] = ("required_pull_request_reviews" in prot_settings)
+        row["pull_dismiss_stale_reviews"] = None
+        row["pull_requires_review"] = ("required_pull_request_reviews" in prot_settings)
         # community profile (files, health percentage) — include raw dict and
         # a few spreadsheet-friendly summaries
         try:
@@ -247,6 +291,19 @@ def main():
         row["community_files"] = ", ".join(sorted(files.keys()))
         row["has_security_policy"] = bool(files.get("security_policy"))
         row["has_code_of_conduct"] = bool(files.get("code_of_conduct"))
+        # authoritative owner: check for CODEOWNERS in common locations
+        co_paths = [
+            ".github/CODEOWNERS",
+            "docs/CODEOWNERS",
+            "CODEOWNERS",
+        ]
+        co_found = False
+        for pth in co_paths:
+            _, err = try_get(f"/repos/{owner}/{name}/contents/{pth}")
+            if err is None:
+                co_found = True
+                break
+        row["authoritative_owner"] = co_found
         flags: List[str] = []
         if row["archived"]:
             flags.append("archived")
