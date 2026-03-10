@@ -49,15 +49,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # global start timestamp
 __start_time: Optional[float] = None
 
+
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
 
+
 atexit.register(_report_elapsed)
 
 
-from utils import gh_api, try_get, count_alerts, branch_protection, init_db, save_to_db, _get_session, fork_and_template_info
+from utils import (
+    gh_api,
+    try_get,
+    count_alerts,
+    branch_protection,
+    init_db,
+    save_to_db,
+    _get_session,
+    fork_and_template_info,
+)
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -88,7 +99,7 @@ def community_profile(owner: str, repo: str) -> Dict[str, Any]:
         return {
             "files": {},
             "health_percentage": None,
-            "profile_availability": err or "unknown"
+            "profile_availability": err or "unknown",
         }
     return data
 
@@ -118,12 +129,35 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
     #   - lint: lint, eslint, pylint, flake8, black, prettier, clippy, rustfmt
     #
     test_keywords = [
-        "test", "pytest", "jest", "mocha", "unittest", "rspec", "cargo test",
-        "vitest", "tap", "ava", "jasmine", "nightwatch", "cypress", "vitest test"
+        "test",
+        "pytest",
+        "jest",
+        "mocha",
+        "unittest",
+        "rspec",
+        "cargo test",
+        "vitest",
+        "tap",
+        "ava",
+        "jasmine",
+        "nightwatch",
+        "cypress",
+        "vitest test",
     ]
     lint_keywords = [
-        "lint", "eslint", "pylint", "flake8", "black", "prettier", "clippy",
-        "rustfmt", "golangci-lint", "shellcheck", "shfmt", "hadolint", "yamllint"
+        "lint",
+        "eslint",
+        "pylint",
+        "flake8",
+        "black",
+        "prettier",
+        "clippy",
+        "rustfmt",
+        "golangci-lint",
+        "shellcheck",
+        "shfmt",
+        "hadolint",
+        "yamllint",
     ]
 
     findings: Dict[str, List[str]] = {}
@@ -147,6 +181,7 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
     # we'll fetch workflow files concurrently since network I/O is the
     # slowest part.
     session = _get_session()
+
     def fetch_and_scan(file_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not isinstance(file_info, dict):
             return None
