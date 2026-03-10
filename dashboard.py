@@ -53,23 +53,25 @@ def load_data():
     for _, row in df.iterrows():
         try:
             data = json.loads(row["audit_json"])
-            
-            rows.append({
-                "repo": data.get("full_name", row["full_name"]),
-                "private": data.get("private"),
-                "archived": data.get("archived"),
-                "fork": data.get("fork"),
-                "language": data.get("language"),
-                "stars": data.get("stargazers", 0),
-                "open_issues": data.get("open_issues", 0),
-                "dependabot_alerts": data.get("dependabot_alerts"),
-                "secret_alerts": data.get("secret_scanning_alerts"),
-                "code_scanning_alerts": data.get("code_scanning_alerts"),
-                "branch_protected": data.get("default_branch_protected"),
-                "codeowners": data.get("codeowners"),
-                "flags": data.get("flags", ""),
-                "pushed_at": data.get("pushed_at", ""),
-            })
+
+            rows.append(
+                {
+                    "repo": data.get("full_name", row["full_name"]),
+                    "private": data.get("private"),
+                    "archived": data.get("archived"),
+                    "fork": data.get("fork"),
+                    "language": data.get("language"),
+                    "stars": data.get("stargazers", 0),
+                    "open_issues": data.get("open_issues", 0),
+                    "dependabot_alerts": data.get("dependabot_alerts"),
+                    "secret_alerts": data.get("secret_scanning_alerts"),
+                    "code_scanning_alerts": data.get("code_scanning_alerts"),
+                    "branch_protected": data.get("default_branch_protected"),
+                    "codeowners": data.get("codeowners"),
+                    "flags": data.get("flags", ""),
+                    "pushed_at": data.get("pushed_at", ""),
+                }
+            )
         except Exception as e:
             print(f"Error parsing {row['full_name']}: {e}")
             continue
