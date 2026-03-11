@@ -10,31 +10,9 @@ A comprehensive Python toolset for auditing GitHub repositories across organizat
 
 ## Setup
 
-### Prerequisites
+Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisites installed and configured where appropriate.
 
-- Python 3.7+
-- GitHub CLI (`gh`) installed and authenticated
-- GitHub personal access token with appropriate scopes
-
-### Environment Variables
-
-Set your GitHub token as an environment variable:
-
-```bash
-# Using a personal access token
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-
-# Or if using the GitHub CLI default:
-export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-```
-
-The tools will automatically use whichever token is available (checks both `GH_TOKEN` and `GITHUB_TOKEN`).
-
-### Installation
-
-```bash
-pip install -r requirements-dashboard.txt
-```
+[Setup Docs](./docs/setup.md)
 
 ## Scripts
 
