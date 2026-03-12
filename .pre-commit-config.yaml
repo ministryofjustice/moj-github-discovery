@@ -23,5 +23,7 @@ repos:
     rev: v0.15.5
     hooks:
       - id: ruff-check
+        name: Ruff Check
         args: [ --fix ]
       - id: ruff-format
+        name: Ruff Format
