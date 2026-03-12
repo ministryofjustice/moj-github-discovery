@@ -16,7 +16,6 @@ from utils import (
     fork_and_template_info,
     gh_api,
     init_db,
-    save_to_db,
 )
 
 # track start time for automatic reporting
@@ -320,13 +319,13 @@ def main():
             ],
             "value": [
                 len(df),
-                int((df["private"] == False).sum()),
-                int((df["private"] == True).sum()),
+                int((not df["private"]).sum()),
+                int((df["private"]).sum()),
                 int(df["archived"].sum()),
                 int((df["dependabot_alerts"].fillna(0) > 0).sum()),
                 int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
                 int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
-                int((df["default_branch_protected"] == False).sum()),
+                int((not df["default_branch_protected"]).sum()),
             ],
         }
     )

@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from utils import gh_api, init_db, save_to_db, try_get
+from utils import gh_api, init_db, try_get
 
 # Store script directory early so it's available in atexit callbacks
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -523,7 +523,7 @@ def main():
             # Wait 1 minute after every 10 pages
             if (page + 1) % 10 == 0:
                 print(
-                    f"Completed 10 pages, waiting 1 minute before next batch...",
+                    "Completed 10 pages, waiting 1 minute before next batch...",
                     file=sys.stderr,
                 )
                 time.sleep(60)
@@ -589,8 +589,8 @@ def main():
     ]
     values: List[Any] = [
         len(df),
-        int((df["private"] == False).sum()),
-        int((df["private"] == True).sum()),
+        int((not df["private"]).sum()),
+        int((df["private"]).sum()),
         int(df["archived"].sum()),
     ]
     # compute some additional counts that apply when a repo is archived
