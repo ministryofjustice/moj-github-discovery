@@ -89,6 +89,7 @@ jobs:
 
       - name: Install Python
         uses: actions/setup-python@v6
+        python-version: 3.9.6
 
       - name: Install Python dependencies
         run: |
