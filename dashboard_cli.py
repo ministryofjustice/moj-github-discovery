@@ -74,9 +74,9 @@ def apply_filters(df: pd.DataFrame, filters: list) -> pd.DataFrame:
 
         # Handle boolean values
         if value.lower() in ("true", "yes"):
-            df = df[df[column] == True]
+            df = df[df[column]]
         elif value.lower() in ("false", "no"):
-            df = df[df[column] == False]
+            df = df[not df[column]]
         else:
             # Try numeric comparison
             try:
@@ -148,8 +148,8 @@ def main():
 
     # Display summary
     print(f"\nTotal repositories: {len(df)}", file=sys.stderr)
-    print(f"Public: {(df['private'] == False).sum()}", file=sys.stderr)
-    print(f"Private: {(df['private'] == True).sum()}", file=sys.stderr)
+    print(f"Public: {(not df['private']).sum()}", file=sys.stderr)
+    print(f"Private: {(df['private']).sum()}", file=sys.stderr)
     print(f"Archived: {df['archived'].sum()}", file=sys.stderr)
     print(
         f"With flagged issues: {((df['flags'] != '') & (df['flags'].notna())).sum()}\n",
@@ -230,7 +230,7 @@ def main():
     <h1>Repository Audit Dashboard</h1>
     <div class="summary">
         <p><strong>Total repositories:</strong> {len(df)}</p>
-        <p><strong>Public:</strong> {(df['private'] == False).sum()} | <strong>Private:</strong> {(df['private'] == True).sum()} | <strong>Archived:</strong> {df['archived'].sum()}</p>
+        <p><strong>Public:</strong> {(not df["private"]).sum()} | <strong>Private:</strong> {(df["private"]).sum()} | <strong>Archived:</strong> {df["archived"].sum()}</p>
     </div>
     {html_content}
 </body>
