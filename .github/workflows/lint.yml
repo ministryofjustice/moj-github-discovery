@@ -83,9 +83,23 @@ jobs:
         with:
           node-version: ${{ vars.NODE_VERSION }}
 
-      - name: Install
+      - name: Install npm
         shell: bash
         run: npm ci --ignore-scripts
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+
+      - name: Install Python dependencies
+        run |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dashboard.txt
+      
+      - name: Run Ruff Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
 
       - name: MD
         shell: bash
