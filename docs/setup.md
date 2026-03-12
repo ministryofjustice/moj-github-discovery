@@ -57,6 +57,12 @@ Verify pre-commit and install:
 pre-commit install
 ```
 
+Optionally, run pre-commit against all files:
+
+```shell
+pre-commit run --all-files
+```
+
 Authenticate to the Github Docker Container Registry with your PAT, providing your username after the `-u` flag and your Github password upon command execution:
 
 ```shell
