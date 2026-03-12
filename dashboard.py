@@ -16,7 +16,6 @@ import os
 import sqlite3
 import subprocess
 import sys
-from pathlib import Path
 
 import dash
 from dash import dcc, html, callback, Input, Output, State, ALL, callback_context
@@ -90,7 +89,8 @@ def load_audit_data(full_name: str) -> dict:
     if row:
         try:
             return json.loads(row[0])
-        except:
+        except Exception as e:
+            print(f"There was a problem loading audit data: {e}")
             return None
     return None
 
@@ -719,7 +719,8 @@ def update_detail_panel(selected_repo, audit_data):
         if isinstance(audit_data, str):
             try:
                 audit_data = json.loads(audit_data)
-            except:
+            except Exception as e:
+                print(f"There was an issue loading audit data: {e}", file=sys.stderr)
                 audit_data = None
 
     if not audit_data:

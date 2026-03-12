@@ -38,6 +38,18 @@ from a loop or integrate it into other tooling.  See ``main.py`` in this
 workspace for an example of how to audit an entire organization.
 """
 
+from utils import (
+    gh_api,
+    try_get,
+    count_alerts,
+    branch_protection,
+    init_db,
+    save_to_db,
+    _get_session,
+    fork_and_template_info,
+    check_codeowners_exists,
+)
+
 import atexit
 import json
 import os
@@ -57,19 +69,6 @@ def _report_elapsed() -> None:
 
 
 atexit.register(_report_elapsed)
-
-
-from utils import (
-    gh_api,
-    try_get,
-    count_alerts,
-    branch_protection,
-    init_db,
-    save_to_db,
-    _get_session,
-    fork_and_template_info,
-    check_codeowners_exists,
-)
 
 
 def repo_info(owner: str, repo: str) -> Dict[str, Any]:
@@ -160,7 +159,6 @@ def analyze_workflows(owner: str, repo: str) -> Dict[str, Any]:
         "hadolint",
         "yamllint",
     ]
-    security_keywords = ["scan", "trivy", "checkov", "sast", "sonarqube"]
 
     findings: Dict[str, List[str]] = {}
     has_tests = False
