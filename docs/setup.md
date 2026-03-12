@@ -5,6 +5,7 @@
 ### Python
 
 - Python 3.7+ (Self Service or [Direct Download](https://www.python.org/downloads/))
+- NodeJS (Self-Service or [Direct Download](https://nodejs.org/en/download))
 
 ### Brew
 
