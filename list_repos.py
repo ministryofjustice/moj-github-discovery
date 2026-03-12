@@ -9,15 +9,24 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, check_codeowners_exists
+from utils import (
+    branch_protection,
+    check_codeowners_exists,
+    count_alerts,
+    fork_and_template_info,
+    gh_api,
+    init_db,
+)
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
+
 
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
+
 
 atexit.register(_report_elapsed)
 
@@ -58,9 +67,11 @@ def main():
     global __start_time
     __start_time = time.monotonic()
     if len(sys.argv) < 2:
-        print("Usage: python list_repos.py <org> [--excel path] [--limit N] [--sort [-]column] [--repo-file file] [--audit-db path]")
+        print(
+            "Usage: python list_repos.py <org> [--excel path] [--limit N] [--sort [-]column] [--repo-file file] [--audit-db path]"
+        )
         sys.exit(2)
-    
+
     org = sys.argv[1]
     # defaults – paths alongside script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -91,7 +102,7 @@ def main():
             if raw.startswith("-"):
                 sort_key = raw[1:]
                 sort_asc = False
-            elif raw.startswith("+" ):
+            elif raw.startswith("+"):
                 sort_key = raw[1:]
                 sort_asc = True
             else:
@@ -162,11 +173,11 @@ def main():
             name = r.get("name")
             if not owner or not name:
                 return r
-            
+
             # Only fetch if fork or is_template (otherwise skip to save API calls)
             if not (r.get("fork") or r.get("is_template")):
                 return r
-            
+
             full_info = gh_api(f"/repos/{owner}/{name}")
             # Merge parent and template_repository if present
             if full_info.get("parent"):
@@ -203,7 +214,9 @@ def main():
             "archived": r.get("archived"),
             "fork": r.get("fork"),
             "fork_source": fork_template.get("fork_source"),
-            "is_generated_from_template": fork_template.get("is_generated_from_template"),
+            "is_generated_from_template": fork_template.get(
+                "is_generated_from_template"
+            ),
             "template_source": fork_template.get("template_source"),
             "pushed_at": r.get("pushed_at"),
             "default_branch": default_branch,
@@ -215,14 +228,16 @@ def main():
             row.update(count_alerts(owner, name))
         else:
             # mark as skipped rather than fetching
-            row.update({
-                "dependabot_access": "skipped",
-                "dependabot_alerts": None,
-                "code_scanning_access": "skipped",
-                "code_scanning_alerts": None,
-                "secret_scanning_access": "skipped",
-                "secret_scanning_alerts": None,
-            })
+            row.update(
+                {
+                    "dependabot_access": "skipped",
+                    "dependabot_alerts": None,
+                    "code_scanning_access": "skipped",
+                    "code_scanning_alerts": None,
+                    "secret_scanning_access": "skipped",
+                    "secret_scanning_alerts": None,
+                }
+            )
         if default_branch:
             row.update(branch_protection(owner, name, default_branch))
             row.update(check_codeowners_exists(owner, name, default_branch))
@@ -263,7 +278,7 @@ def main():
         sort_key = "pushed_at"
         sort_asc = False
     if sort_key in df.columns:
-        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position='last')
+        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position="last")
     else:
         if sort_key is not None:
             print(f"Warning: sort key '{sort_key}' not a column", file=sys.stderr)
@@ -304,13 +319,13 @@ def main():
             ],
             "value": [
                 len(df),
-                int((df["private"] == False).sum()),
-                int((df["private"] == True).sum()),
+                int((not df["private"]).sum()),
+                int((df["private"]).sum()),
                 int(df["archived"].sum()),
                 int((df["dependabot_alerts"].fillna(0) > 0).sum()),
                 int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
                 int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
-                int((df["default_branch_protected"] == False).sum()),
+                int((not df["default_branch_protected"]).sum()),
             ],
         }
     )
@@ -322,14 +337,16 @@ def main():
                 summary.to_excel(writer, index=False, sheet_name="Summary")
             print(f"Wrote {excel_path}", file=sys.stderr)
         except ImportError:
-            print("Excel export requires the openpyxl package.\n"
-                  "Install it with `pip install openpyxl` and retry.",
-                  file=sys.stderr)
+            print(
+                "Excel export requires the openpyxl package.\n"
+                "Install it with `pip install openpyxl` and retry.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
     # when no excel and no repo-file and no audit-db, output recent results
     if not excel_path and repo_list is None and audit_db_path is None:
-        output_data = df.to_dict(orient='records')
+        output_data = df.to_dict(orient="records")
         print(json.dumps(output_data, indent=2))
 
 

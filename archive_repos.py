@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from utils import gh_api, init_db, save_to_db, try_get
+from utils import gh_api, init_db, try_get
 
 # Store script directory early so it's available in atexit callbacks
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,10 +28,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # track start time for automatic reporting
 __start_time: Optional[float] = None
 
+
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
+
 
 atexit.register(_report_elapsed)
 
@@ -42,6 +44,7 @@ def _save_all_search_caches() -> None:
         _save_search_cache(org, cache)
     _save_repo_info_cache(_repo_info_cache)
 
+
 atexit.register(_save_all_search_caches)
 
 
@@ -50,24 +53,29 @@ def _get_repo_cache_path(org: str) -> str:
     return os.path.join(SCRIPT_DIR, f".repos_cache_{org}.pkl")
 
 
-def old_org_repos(org: str, limit: int = 5000, use_cache: bool = True) -> List[Dict[str, Any]]:
+def old_org_repos(
+    org: str, limit: int = 5000, use_cache: bool = True
+) -> List[Dict[str, Any]]:
     """Fetch repos from GitHub API, caching results to reduce API calls.
-    
+
     If use_cache=True, checks for cached repos first and uses them.
     If cache doesn't exist or use_cache=False, fetches from API and caches.
     """
     cache_path = _get_repo_cache_path(org)
-    
+
     # Try to load from cache if it exists
     if use_cache and os.path.exists(cache_path):
         try:
-            with open(cache_path, 'rb') as f:
+            with open(cache_path, "rb") as f:
                 repos = pickle.load(f)
-                print(f"Loaded {len(repos)} repos from cache: {cache_path}", file=sys.stderr)
+                print(
+                    f"Loaded {len(repos)} repos from cache: {cache_path}",
+                    file=sys.stderr,
+                )
                 return repos[:limit]
         except Exception as e:
             print(f"Failed to load cache: {e}. Fetching from API.", file=sys.stderr)
-    
+
     # Fetch from API if cache doesn't exist or failed
     collected: List[Dict[str, Any]] = []
     page = 1
@@ -80,21 +88,27 @@ def old_org_repos(org: str, limit: int = 5000, use_cache: bool = True) -> List[D
         if not batch or not isinstance(batch, list):
             break
         collected.extend(batch)
-        print(f"Page {page}: got {len(batch)} repos, total collected: {len(collected)}", file=sys.stderr)
+        print(
+            f"Page {page}: got {len(batch)} repos, total collected: {len(collected)}",
+            file=sys.stderr,
+        )
         # if fewer than a full page returned, we've reached the end
         if len(batch) < per_page:
-            print(f"Reached end of repo list (fewer than {per_page} repos on page {page})", file=sys.stderr)
+            print(
+                f"Reached end of repo list (fewer than {per_page} repos on page {page})",
+                file=sys.stderr,
+            )
             break
         page += 1
-    
+
     # Cache the results
     try:
-        with open(cache_path, 'wb') as f:
+        with open(cache_path, "wb") as f:
             pickle.dump(collected, f)
             print(f"Cached {len(collected)} repos to: {cache_path}", file=sys.stderr)
     except Exception as e:
         print(f"Failed to cache repos: {e}", file=sys.stderr)
-    
+
     return collected[:limit]
 
 
@@ -108,9 +122,12 @@ def _load_search_cache(org: str) -> Dict[str, List[Dict[str, Any]]]:
     cache_path = _get_search_cache_path(org)
     if os.path.exists(cache_path):
         try:
-            with open(cache_path, 'rb') as f:
+            with open(cache_path, "rb") as f:
                 cache = pickle.load(f)
-                print(f"Loaded search cache for {org}: {len(cache)} repos cached", file=sys.stderr)
+                print(
+                    f"Loaded search cache for {org}: {len(cache)} repos cached",
+                    file=sys.stderr,
+                )
                 return cache
         except Exception as e:
             print(f"Failed to load search cache: {e}", file=sys.stderr)
@@ -121,9 +138,12 @@ def _save_search_cache(org: str, cache: Dict[str, List[Dict[str, Any]]]) -> None
     """Save the search cache for an organization."""
     cache_path = _get_search_cache_path(org)
     try:
-        with open(cache_path, 'wb') as f:
+        with open(cache_path, "wb") as f:
             pickle.dump(cache, f)
-            print(f"Saved search cache for {org}: {len(cache)} repos cached", file=sys.stderr)
+            print(
+                f"Saved search cache for {org}: {len(cache)} repos cached",
+                file=sys.stderr,
+            )
     except Exception as e:
         print(f"Failed to save search cache: {e}", file=sys.stderr)
 
@@ -142,7 +162,7 @@ def _load_repo_info_cache() -> Dict[str, Dict[str, Any]]:
     cache_path = _get_repo_info_cache_path()
     if os.path.exists(cache_path):
         try:
-            with open(cache_path, 'rb') as f:
+            with open(cache_path, "rb") as f:
                 cache = pickle.load(f)
                 print(f"Loaded repo info cache: {len(cache)} repos", file=sys.stderr)
                 return cache
@@ -155,7 +175,7 @@ def _save_repo_info_cache(cache: Dict[str, Dict[str, Any]]) -> None:
     """Save the repo info cache."""
     cache_path = _get_repo_info_cache_path()
     try:
-        with open(cache_path, 'wb') as f:
+        with open(cache_path, "wb") as f:
             pickle.dump(cache, f)
             print(f"Saved repo info cache: {len(cache)} repos", file=sys.stderr)
     except Exception as e:
@@ -175,22 +195,22 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
     organization are examined.  Results are returned as a list of dicts,
     each containing ``full_name`` (the repo doing the referencing) and
     ``path`` (file path where the string was found).
-    
+
     Self-references (hits within the repo itself) are filtered out.
     Results are cached in memory and persisted to disk.
     """
     # Initialize org cache if needed
     if org not in _search_cache:
         _search_cache[org] = _load_search_cache(org)
-    
+
     cache = _search_cache[org]
     repo_key = f"{owner}/{repo}"
-    
+
     # Check if we have cached results for this repo
     if repo_key in cache:
         print(f"Using cached search results for {repo_key}", file=sys.stderr)
         return cache[repo_key]
-    
+
     print(f"Searching for references to {repo_key} within {org}...", file=sys.stderr)
     hits: List[Dict[str, Any]] = []
     target_full_name = repo_key
@@ -208,28 +228,33 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
             if isinstance(resp, dict):
                 total = resp.get("total_count", 0)
                 items = resp.get("items", [])
-                print(f"Page {page}: got {len(items)} items, total: {total}", file=sys.stderr)
-                
+                print(
+                    f"Page {page}: got {len(items)} items, total: {total}",
+                    file=sys.stderr,
+                )
+
                 if not items:
                     break
-                    
+
                 for item in items:
                     repo_info = item.get("repository") or {}
                     # filter out self-references
                     if repo_info.get("full_name") != target_full_name:
-                        hits.append({
-                            "full_name": repo_info.get("full_name"),
-                            "path": item.get("path"),
-                        })
-                
+                        hits.append(
+                            {
+                                "full_name": repo_info.get("full_name"),
+                                "path": item.get("path"),
+                            }
+                        )
+
                 # If we got fewer items than requested, we've reached the end
                 if len(items) < per_page:
                     break
-                    
+
                 page += 1
             else:
                 break
-        
+
         # Cache the results
         cache[repo_key] = hits
         print(f"Cached {len(hits)} references for {repo_key}", file=sys.stderr)
@@ -237,10 +262,11 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
         time.sleep(2.1)
     except Exception as e:
         import traceback
+
         print(f"ERROR during search for references to {repo_key}: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         # Don't cache errors - only cache successful results
-    
+
     return hits
 
 
@@ -312,7 +338,10 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
             if repo_full in _repo_info_cache:
                 archived = _repo_info_cache[repo_full].get("archived", False)
                 seen[repo_full] = bool(archived)
-                print(f"Using cached info for {repo_full}: archived={archived}", file=sys.stderr)
+                print(
+                    f"Using cached info for {repo_full}: archived={archived}",
+                    file=sys.stderr,
+                )
             else:
                 # Fetch from API if not in cache
                 info, err = try_get(f"/repos/{repo_full}")
@@ -327,12 +356,16 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
                     seen[repo_full] = False
                     # Don't cache errors
         archived_flag = seen.get(repo_full)
-        print(f"Classifying {repo_full}: archived_flag={archived_flag}", file=sys.stderr)
-        row["references"].append({
-            "full_name": repo_full,
-            "path": hit.get("path"),
-            "archived": archived_flag,
-        })
+        print(
+            f"Classifying {repo_full}: archived_flag={archived_flag}", file=sys.stderr
+        )
+        row["references"].append(
+            {
+                "full_name": repo_full,
+                "path": hit.get("path"),
+                "archived": archived_flag,
+            }
+        )
         if archived_flag:
             row["archive_references"].append(repo_full)
         else:
@@ -365,15 +398,18 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
         print(f"repo {owner}/{name} took {elapsed:.2f}s", file=sys.stderr)
     return row
 
+
 def main():
     global __start_time
     __start_time = time.monotonic()
     if len(sys.argv) < 2:
-        print("Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path]" \
-        "\n(requires --csv or --audit-db; default sort is days_since_push ascending)\n" \
-        "--page-num: Get only repos in specified page (page size 100, 0-indexed)")
+        print(
+            "Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path]"
+            "\n(requires --csv or --audit-db; default sort is days_since_push ascending)\n"
+            "--page-num: Get only repos in specified page (page size 100, 0-indexed)"
+        )
         sys.exit(2)
-    
+
     org = sys.argv[1]
     # defaults – paths alongside script
     default_db_path = os.path.join(SCRIPT_DIR, "repo_audit.db")
@@ -410,7 +446,7 @@ def main():
             if raw.startswith("-"):
                 sort_key = raw[1:]
                 sort_asc = False
-            elif raw.startswith("+" ):
+            elif raw.startswith("+"):
                 sort_key = raw[1:]
                 sort_asc = True
             else:
@@ -440,27 +476,32 @@ def main():
     else:
         effective_limit = limit
     repos = old_org_repos(org, limit=effective_limit)
-    
+
     # Page size: 100 repos per page
     page_size = 100
-    
+
     rows: List[Dict[str, Any]] = []
-    
+
     # If page_num is specified, only process that page
     if page_num is not None:
         start_idx = page_num * page_size
         end_idx = start_idx + page_size
         repos_to_process = repos[start_idx:end_idx]
-        print(f"Processing page {page_num} (repos {start_idx}-{end_idx})", file=sys.stderr)
+        print(
+            f"Processing page {page_num} (repos {start_idx}-{end_idx})", file=sys.stderr
+        )
         for r in repos_to_process:
             try:
                 rows.append(process_single(org, r))
             except Exception:
                 print("error processing repo", file=sys.stderr)
-        
+
         # Wait 1 minute after pages that are multiples of 10
         if (page_num + 1) % 10 == 0:
-            print(f"Completed page {page_num} (10-page checkpoint), waiting 1 minute...", file=sys.stderr)
+            print(
+                f"Completed page {page_num} (10-page checkpoint), waiting 1 minute...",
+                file=sys.stderr,
+            )
             time.sleep(60)
     else:
         # Process all repos in pages with wait time after every 10 pages
@@ -470,18 +511,23 @@ def main():
             start_idx = page * page_size
             end_idx = start_idx + page_size
             repos_to_process = repos[start_idx:end_idx]
-            print(f"Processing page {page} (repos {start_idx}-{end_idx})", file=sys.stderr)
+            print(
+                f"Processing page {page} (repos {start_idx}-{end_idx})", file=sys.stderr
+            )
             for r in repos_to_process:
                 try:
                     rows.append(process_single(org, r))
                 except Exception:
                     print("error processing repo", file=sys.stderr)
-            
+
             # Wait 1 minute after every 10 pages
             if (page + 1) % 10 == 0:
-                print(f"Completed 10 pages, waiting 1 minute before next batch...", file=sys.stderr)
+                print(
+                    "Completed 10 pages, waiting 1 minute before next batch...",
+                    file=sys.stderr,
+                )
                 time.sleep(60)
-    
+
     if not rows:
         rows = []
 
@@ -507,7 +553,7 @@ def main():
         sort_key = "days_since_push"
         sort_asc = True
     if sort_key in df.columns:
-        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position='last')
+        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position="last")
     else:
         if sort_key is not None:
             print(f"Warning: sort key '{sort_key}' not a column", file=sys.stderr)
@@ -543,8 +589,8 @@ def main():
     ]
     values: List[Any] = [
         len(df),
-        int((df["private"] == False).sum()),
-        int((df["private"] == True).sum()),
+        int((not df["private"]).sum()),
+        int((df["private"]).sum()),
         int(df["archived"].sum()),
     ]
     # compute some additional counts that apply when a repo is archived
@@ -563,10 +609,14 @@ def main():
         values.append(int(df["dependency_graph_enabled"].sum()))
     if "active_references" in df.columns:
         metrics.append("repos_with_active_refs")
-        values.append(int(df["active_references"].apply(lambda lst: len(lst) > 0).sum()))
+        values.append(
+            int(df["active_references"].apply(lambda lst: len(lst) > 0).sum())
+        )
     if "archive_references" in df.columns:
         metrics.append("repos_with_archive_refs")
-        values.append(int(df["archive_references"].apply(lambda lst: len(lst) > 0).sum()))
+        values.append(
+            int(df["archive_references"].apply(lambda lst: len(lst) > 0).sum())
+        )
     # add age-based stats if available
     if "days_since_push" in df.columns:
         metrics.append("repos_not_pushed_in_year")
@@ -589,7 +639,7 @@ def main():
 
     # when no csv and no audit-db, output recent results
     if not csv_path and audit_db_path is None:
-        output_data = df.to_dict(orient='records')
+        output_data = df.to_dict(orient="records")
         print(json.dumps(output_data, indent=2))
 
 
