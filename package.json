@@ -1,7 +1,7 @@
 {
   "name": "moj-github-discovery",
   "version": "1.0.0",
-  "description": "Ministry of Justice Developer Experience baseline security and compliance",
+  "description": "MOJ Github Discovery baseline security and compliance",
   "private": true,
   "scripts": {
     "validate:all": "npm run validate:md && npm run validate:yml && npm run lint && npm run validate:ts",
