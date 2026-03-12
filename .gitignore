@@ -24,3 +24,6 @@ repo_audit.db
 *.pkl
 #GH token file
 .token
+
+# Node Modules
+node_modules
