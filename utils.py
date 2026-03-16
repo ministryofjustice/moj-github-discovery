@@ -152,7 +152,7 @@ def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optio
             if isinstance(data, list):
                 if not data:
                     break
-                results.extend(data)
+                results.extend([item for item in data if item is not None])
             else:
                 results.append(data)
                 break
