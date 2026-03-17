@@ -15,7 +15,7 @@ assignees: ''
 **so that**
 
 ## 💡 Value / Purpose
-<!-- Describe the business or user value of delivering this story -->
+<!-- Describe the value of delivering this story. Does this link to our OKRs? -->
 
 - 
 
