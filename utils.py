@@ -455,9 +455,7 @@ def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
     for path in CODEOWNERS_PATHS:
 
         if path in tree_paths:
-            print(f"CODEOWNERS found at {path}", file=sys.stderr)
             return {"present": True, "path": path}
-    print(f"CODEOWNERS not found", file=sys.stderr)
     return {"present": False, "path": None}
 
 def init_db(db_path: str, table_name: str = "audits") -> None:
