@@ -151,6 +151,9 @@ def _save_search_cache(org: str, cache: Dict[str, List[Dict[str, Any]]]) -> None
 # Global search cache - populated at script start
 _search_cache: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
 
+# When True, skip all API calls and use only cached data
+_cache_only: bool = False
+
 
 def _get_repo_info_cache_path() -> str:
     """Return the pickle cache filename for repo info."""
@@ -211,6 +214,10 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
         print(f"Using cached search results for {repo_key}", file=sys.stderr)
         return cache[repo_key]
 
+    # In cache-only mode, skip API calls for uncached repos
+    if _cache_only:
+        return []
+
     print(f"Searching for references to {repo_key} within {org}...", file=sys.stderr)
     hits: List[Dict[str, Any]] = []
     target_full_name = repo_key
@@ -222,7 +229,6 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
         # The search API returns max 100 items per page but may have more total results
         page = 1
         per_page = 10
-        total_count = 0
         while True:
             resp = gh_api(f"/search/code?q={query}&per_page={per_page}&page={page}")
             if isinstance(resp, dict):
@@ -311,13 +317,14 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
         "security_and_analysis": r.get("security_and_analysis"),
     }
     # check whether the dependency graph endpoint is available
-    try:
-        dg, err = try_get(f"/repos/{owner}/{name}/dependency-graph")
-        if err is None:
-            row["dependency_graph_enabled"] = True
-    except Exception:
-        # ignore errors; just leave default False
-        pass
+    if not _cache_only:
+        try:
+            dg, err = try_get(f"/repos/{owner}/{name}/dependency-graph")
+            if err is None:
+                row["dependency_graph_enabled"] = True
+        except Exception:
+            # ignore errors; just leave default False
+            pass
 
     # conduct a code search (restricted to the org) to see if other
     # repositories reference this project.  we collect the repo names and
@@ -342,6 +349,9 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
                     f"Using cached info for {repo_full}: archived={archived}",
                     file=sys.stderr,
                 )
+            elif _cache_only:
+                # In cache-only mode, skip API calls for uncached repos
+                seen[repo_full] = False
             else:
                 # Fetch from API if not in cache
                 info, err = try_get(f"/repos/{repo_full}")
@@ -356,9 +366,6 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
                     seen[repo_full] = False
                     # Don't cache errors
         archived_flag = seen.get(repo_full)
-        print(
-            f"Classifying {repo_full}: archived_flag={archived_flag}", file=sys.stderr
-        )
         row["references"].append(
             {
                 "full_name": repo_full,
@@ -400,13 +407,14 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def main():
-    global __start_time
+    global __start_time, _cache_only
     __start_time = time.monotonic()
     if len(sys.argv) < 2:
         print(
-            "Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path]"
+            "Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path] [--cache-only]"
             "\n(requires --csv or --audit-db; default sort is days_since_push ascending)\n"
-            "--page-num: Get only repos in specified page (page size 100, 0-indexed)"
+            "--page-num: Get only repos in specified page (page size 100, 0-indexed)\n"
+            "--cache-only: Skip all API calls, use only cached data for fast results"
         )
         sys.exit(2)
 
@@ -462,6 +470,9 @@ def main():
                 # no path provided; use default
                 audit_db_path = default_db_path
                 i += 1
+        elif arg == "--cache-only":
+            _cache_only = True
+            i += 1
         else:
             print(f"Unknown argument: {arg}")
             sys.exit(2)
@@ -472,7 +483,7 @@ def main():
 
     # determine how many repos to fetch (always use full list since we require --csv or --audit-db)
     if limit is None:
-        effective_limit = 10000
+        effective_limit = 5000
     else:
         effective_limit = limit
     repos = old_org_repos(org, limit=effective_limit)
@@ -497,7 +508,7 @@ def main():
                 print("error processing repo", file=sys.stderr)
 
         # Wait 1 minute after pages that are multiples of 10
-        if (page_num + 1) % 10 == 0:
+        if not _cache_only and (page_num + 1) % 10 == 0:
             print(
                 f"Completed page {page_num} (10-page checkpoint), waiting 1 minute...",
                 file=sys.stderr,
@@ -521,7 +532,7 @@ def main():
                     print("error processing repo", file=sys.stderr)
 
             # Wait 1 minute after every 10 pages
-            if (page + 1) % 10 == 0:
+            if not _cache_only and (page + 1) % 10 == 0:
                 print(
                     "Completed 10 pages, waiting 1 minute before next batch...",
                     file=sys.stderr,
@@ -589,9 +600,9 @@ def main():
     ]
     values: List[Any] = [
         len(df),
-        int((not df["private"]).sum()),
-        int((df["private"]).sum()),
-        int(df["archived"].sum()),
+        int((not df["private"]).sum()) if "private" in df.columns else 0,
+        int((df["private"]).sum()) if "private" in df.columns else 0,
+        int(df["archived"].sum()) if "archived" in df.columns else 0,
     ]
     # compute some additional counts that apply when a repo is archived
     if "open_issues" in df.columns:
@@ -627,7 +638,7 @@ def main():
         metrics.append("oldest_repo_days")
         values.append(int(df["age_days"].max()))
 
-    summary = pd.DataFrame({"metric": metrics, "value": values})
+    pd.DataFrame({"metric": metrics, "value": values})
 
     if csv_path:
         try:
