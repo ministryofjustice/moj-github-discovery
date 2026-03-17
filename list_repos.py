@@ -42,6 +42,7 @@ _alert_cache: Dict[str, Dict[str, Any]] = {}
 _alert_cache_lock = threading.Lock()
 _alert_cache_dirty = False
 
+
 def _load_alert_cache() -> Dict[str, Dict[str, Any]]:
     if os.path.exists(_ALERT_CACHE_PATH):
         try:
@@ -53,6 +54,7 @@ def _load_alert_cache() -> Dict[str, Dict[str, Any]]:
             print(f"Alert cache load failed: {e}", file=sys.stderr)
     return {}
 
+
 def _save_alert_cache() -> None:
     if not _alert_cache_dirty:
         return
@@ -63,6 +65,7 @@ def _save_alert_cache() -> None:
     except Exception as e:
         print(f"Alert cache save failed: {e}", file=sys.stderr)
 
+
 _alert_cache = _load_alert_cache()
 atexit.register(_save_alert_cache)
 
@@ -72,7 +75,9 @@ atexit.register(_save_alert_cache)
 # Filtering, sorting and specific repo selection are also supported.
 
 
-def list_org_repos(org: str, limit: int = 5000, use_cache: bool = True) -> List[Dict[str, Any]]:
+def list_org_repos(
+    org: str, limit: int = 5000, use_cache: bool = True
+) -> List[Dict[str, Any]]:
     """Retrieve repositories for an organization, sorted by last push.
 
     Results are cached to disk so subsequent runs are instant.
@@ -87,7 +92,10 @@ def list_org_repos(org: str, limit: int = 5000, use_cache: bool = True) -> List[
                 try:
                     with open(cp, "rb") as f:
                         repos = pickle.load(f)
-                    print(f"Loaded {len(repos)} repos from cache ({os.path.basename(cp)})", file=sys.stderr)
+                    print(
+                        f"Loaded {len(repos)} repos from cache ({os.path.basename(cp)})",
+                        file=sys.stderr,
+                    )
                     return repos[:limit]
                 except Exception as e:
                     print(f"Cache load failed ({cp}): {e}", file=sys.stderr)
@@ -221,7 +229,7 @@ def main():
         else:
             effective_limit = limit
         repos = list_org_repos(org, limit=effective_limit, use_cache=not no_cache)
-    
+
     print(f"Loaded {len(repos)} repos total", file=sys.stderr, flush=True)
 
     # Enrich fork/template data for repos from org listing
@@ -271,6 +279,7 @@ def main():
         name = r["name"]
         owner = r["owner"]["login"]
         default_branch = r.get("default_branch")
+        fork_template = fork_and_template_info(r)
         row: Dict[str, Any] = {
             "org": org,
             "repo": name,
@@ -325,12 +334,20 @@ def main():
             print(f"repo {owner}/{name} took {elapsed:.2f}s", file=sys.stderr)
         return row
 
-    print(f"Processing {len(repos)} repos (no_alerts={no_alerts})...", file=sys.stderr, flush=True)
+    print(
+        f"Processing {len(repos)} repos (no_alerts={no_alerts})...",
+        file=sys.stderr,
+        flush=True,
+    )
     rows: List[Dict[str, Any]] = []
     if repos:
         total = len(repos)
         t_start = time.monotonic()
-        print(f"\nProcessing {total} repos (alert cache: {len(_alert_cache)} entries)...", file=sys.stderr, flush=True)
+        print(
+            f"\nProcessing {total} repos (alert cache: {len(_alert_cache)} entries)...",
+            file=sys.stderr,
+            flush=True,
+        )
         # Use fewer workers for alert fetching to avoid rate limits
         workers = 8 if no_alerts else 4
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -343,16 +360,22 @@ def main():
                         elapsed_so_far = time.monotonic() - t_start
                         rate = count / elapsed_so_far if elapsed_so_far > 0 else 0
                         eta = (total - count) / rate if rate > 0 else 0
-                        print(f"  [{count}/{total}] {elapsed_so_far:.1f}s elapsed, ~{eta:.0f}s remaining  (cached={_cached_count} fetched={_fetched_count})",
-                              file=sys.stderr, flush=True)
+                        print(
+                            f"  [{count}/{total}] {elapsed_so_far:.1f}s elapsed, ~{eta:.0f}s remaining  (cached={_cached_count} fetched={_fetched_count})",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                         _save_alert_cache()
                 except Exception as e:
                     print(f"  ERROR processing repo: {e}", file=sys.stderr)
         # Final save after all repos processed
         _save_alert_cache()
         elapsed_total = time.monotonic() - t_start
-        print(f"\nDone: {len(rows)}/{total} repos in {elapsed_total:.1f}s (cached={_cached_count} fetched={_fetched_count})",
-              file=sys.stderr, flush=True)
+        print(
+            f"\nDone: {len(rows)}/{total} repos in {elapsed_total:.1f}s (cached={_cached_count} fetched={_fetched_count})",
+            file=sys.stderr,
+            flush=True,
+        )
     else:
         rows = []
 

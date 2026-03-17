@@ -1,5 +1,5 @@
 {
-  "ignorePaths": ["dist/", "**/node_modules/**", "**/*.drawio", "**/*.svg", "**/package*.json", "**/*.xml"],
+  "ignorePaths": ["dist/", "**/node_modules/**", "**/*.drawio", "**/*.svg", "**/package*.json", "**/*.xml", "**/*.csv"],
   "language": "en",
   "noConfigSearch": true,
   "allowCompoundWords": true,
@@ -24,7 +24,9 @@
     "sonarqube",
     "restr",
     "pyyaml",
-    "xlink"
+    "xlink",
+    "GHAS",
+    "gmtime"
   ],
   "dictionaries": [
     "en-gb", 

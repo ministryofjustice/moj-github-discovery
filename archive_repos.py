@@ -213,11 +213,11 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
     if repo_key in cache:
         print(f"Using cached search results for {repo_key}", file=sys.stderr)
         return cache[repo_key]
-    
+
     # In cache-only mode, skip API calls for uncached repos
     if _cache_only:
         return []
-    
+
     print(f"Searching for references to {repo_key} within {org}...", file=sys.stderr)
     hits: List[Dict[str, Any]] = []
     target_full_name = repo_key
@@ -229,7 +229,6 @@ def _search_references(org: str, owner: str, repo: str) -> List[Dict[str, Any]]:
         # The search API returns max 100 items per page but may have more total results
         page = 1
         per_page = 10
-        total_count = 0
         while True:
             resp = gh_api(f"/search/code?q={query}&per_page={per_page}&page={page}")
             if isinstance(resp, dict):
@@ -346,7 +345,10 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
             if repo_full in _repo_info_cache:
                 archived = _repo_info_cache[repo_full].get("archived", False)
                 seen[repo_full] = bool(archived)
-                print(f"Using cached info for {repo_full}: archived={archived}", file=sys.stderr)
+                print(
+                    f"Using cached info for {repo_full}: archived={archived}",
+                    file=sys.stderr,
+                )
             elif _cache_only:
                 # In cache-only mode, skip API calls for uncached repos
                 seen[repo_full] = False
@@ -364,11 +366,13 @@ def process_single(org: str, r: Dict[str, Any]) -> Dict[str, Any]:
                     seen[repo_full] = False
                     # Don't cache errors
         archived_flag = seen.get(repo_full)
-        row["references"].append({
-            "full_name": repo_full,
-            "path": hit.get("path"),
-            "archived": archived_flag,
-        })
+        row["references"].append(
+            {
+                "full_name": repo_full,
+                "path": hit.get("path"),
+                "archived": archived_flag,
+            }
+        )
         if archived_flag:
             row["archive_references"].append(repo_full)
         else:
@@ -406,10 +410,12 @@ def main():
     global __start_time, _cache_only
     __start_time = time.monotonic()
     if len(sys.argv) < 2:
-        print("Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path] [--cache-only]" \
-        "\n(requires --csv or --audit-db; default sort is days_since_push ascending)\n" \
-        "--page-num: Get only repos in specified page (page size 100, 0-indexed)\n" \
-        "--cache-only: Skip all API calls, use only cached data for fast results")
+        print(
+            "Usage: python archive_repos.py <org> [--csv path] [--limit N] [--page-num N] [--sort [-]column] [--audit-db path] [--cache-only]"
+            "\n(requires --csv or --audit-db; default sort is days_since_push ascending)\n"
+            "--page-num: Get only repos in specified page (page size 100, 0-indexed)\n"
+            "--cache-only: Skip all API calls, use only cached data for fast results"
+        )
         sys.exit(2)
 
     org = sys.argv[1]
@@ -503,7 +509,10 @@ def main():
 
         # Wait 1 minute after pages that are multiples of 10
         if not _cache_only and (page_num + 1) % 10 == 0:
-            print(f"Completed page {page_num} (10-page checkpoint), waiting 1 minute...", file=sys.stderr)
+            print(
+                f"Completed page {page_num} (10-page checkpoint), waiting 1 minute...",
+                file=sys.stderr,
+            )
             time.sleep(60)
     else:
         # Process all repos in pages with wait time after every 10 pages
@@ -524,7 +533,10 @@ def main():
 
             # Wait 1 minute after every 10 pages
             if not _cache_only and (page + 1) % 10 == 0:
-                print(f"Completed 10 pages, waiting 1 minute before next batch...", file=sys.stderr)
+                print(
+                    "Completed 10 pages, waiting 1 minute before next batch...",
+                    file=sys.stderr,
+                )
                 time.sleep(60)
 
     if not rows:
@@ -588,8 +600,8 @@ def main():
     ]
     values: List[Any] = [
         len(df),
-        int((df["private"] == False).sum()) if "private" in df.columns else 0,
-        int((df["private"] == True).sum()) if "private" in df.columns else 0,
+        int((not df["private"]).sum()) if "private" in df.columns else 0,
+        int((df["private"]).sum()) if "private" in df.columns else 0,
         int(df["archived"].sum()) if "archived" in df.columns else 0,
     ]
     # compute some additional counts that apply when a repo is archived
@@ -626,7 +638,7 @@ def main():
         metrics.append("oldest_repo_days")
         values.append(int(df["age_days"].max()))
 
-    summary = pd.DataFrame({"metric": metrics, "value": values})
+    pd.DataFrame({"metric": metrics, "value": values})
 
     if csv_path:
         try:

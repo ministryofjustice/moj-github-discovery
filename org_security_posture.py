@@ -40,7 +40,7 @@ import pickle
 import sys
 import time
 from typing import Any, Dict, List, Optional
-
+import pandas as pd
 import requests
 from utils import _get_github_token
 
@@ -55,12 +55,15 @@ def _get_posture_session() -> requests.Session:
     if _POSTURE_SESSION is None:
         token = _get_github_token()
         sess = requests.Session()
-        sess.headers.update({
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.v3+json",
-        })
+        sess.headers.update(
+            {
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+            }
+        )
         _POSTURE_SESSION = sess
     return _POSTURE_SESSION
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -140,6 +143,7 @@ def _org_api(path: str) -> tuple:
 # 1. Organisation-level settings & permissions
 # =====================================================================
 
+
 def _count_org_members(org: str, max_pages: int = 30) -> Dict[str, Any]:
     """Count total members and public members (works without admin scope)."""
     total = 0
@@ -170,7 +174,9 @@ def members_without_2fa(org: str) -> Dict[str, Any]:
     """Return members that do not have two-factor authentication enabled."""
     members: List[Dict[str, Any]] = []
     for page in range(1, 6):
-        data, err = _org_api(f"/orgs/{org}/members?filter=2fa_disabled&per_page=100&page={page}")
+        data, err = _org_api(
+            f"/orgs/{org}/members?filter=2fa_disabled&per_page=100&page={page}"
+        )
         if err:
             print(f"    access error: {err} (needs admin:org scope)", file=sys.stderr)
             return {"access": err, "members": []}
@@ -180,24 +186,38 @@ def members_without_2fa(org: str) -> Dict[str, Any]:
         print(f"    page {page}: {len(data)} members", file=sys.stderr, flush=True)
         if len(data) < 100:
             break
-    return {"access": "ok", "members": [{"login": m.get("login"), "id": m.get("id")} for m in members]}
+    return {
+        "access": "ok",
+        "members": [{"login": m.get("login"), "id": m.get("id")} for m in members],
+    }
 
 
 def outside_collaborators(org: str, max_pages: int = 5) -> Dict[str, Any]:
     """Return outside collaborators for the org (capped to avoid runaway pagination)."""
     collabs: List[Dict[str, Any]] = []
     for page in range(1, max_pages + 1):
-        data, err = _org_api(f"/orgs/{org}/outside_collaborators?per_page=100&page={page}")
+        data, err = _org_api(
+            f"/orgs/{org}/outside_collaborators?per_page=100&page={page}"
+        )
         if err:
-            print(f"    access error: {err} (needs Members read scope)", file=sys.stderr)
+            print(
+                f"    access error: {err} (needs Members read scope)", file=sys.stderr
+            )
             return {"access": err, "collaborators": []}
         if not isinstance(data, list) or not data:
             break
         collabs.extend(data)
-        print(f"    page {page}: {len(data)} collaborators", file=sys.stderr, flush=True)
+        print(
+            f"    page {page}: {len(data)} collaborators", file=sys.stderr, flush=True
+        )
         if len(data) < 100:
             break
-    return {"access": "ok", "collaborators": [{"login": c.get("login"), "id": c.get("id")} for c in collabs]}
+    return {
+        "access": "ok",
+        "collaborators": [
+            {"login": c.get("login"), "id": c.get("id")} for c in collabs
+        ],
+    }
 
 
 def teams_and_repos(org: str, max_pages: int = 10) -> List[Dict[str, Any]]:
@@ -211,7 +231,11 @@ def teams_and_repos(org: str, max_pages: int = 10) -> List[Dict[str, Any]]:
         if not isinstance(data, list) or not data:
             break
         teams.extend(data)
-        print(f"    page {page}: {len(data)} teams (total so far: {len(teams)})", file=sys.stderr, flush=True)
+        print(
+            f"    page {page}: {len(data)} teams (total so far: {len(teams)})",
+            file=sys.stderr,
+            flush=True,
+        )
         if len(data) < 100:
             break
 
@@ -231,7 +255,9 @@ def teams_and_repos(org: str, max_pages: int = 10) -> List[Dict[str, Any]]:
 
 def audit_log_recent(org: str, limit: int = 100) -> Dict[str, Any]:
     """Fetch recent audit log entries (requires org-admin token)."""
-    data, err = _org_api(f"/orgs/{org}/audit-log?per_page={min(limit, 100)}&include=all")
+    data, err = _org_api(
+        f"/orgs/{org}/audit-log?per_page={min(limit, 100)}&include=all"
+    )
     if err:
         print(f"    access error: {err} (requires org admin)", file=sys.stderr)
         return {"access": err, "entries": []}
@@ -244,6 +270,7 @@ def audit_log_recent(org: str, limit: int = 100) -> Dict[str, Any]:
 # 2. GitHub Advanced Security (GHAS) — org-wide alerts
 # =====================================================================
 
+
 def org_code_scanning_alerts(org: str, max_pages: int = 10) -> Dict[str, Any]:
     """Fetch org-wide code scanning alert summary (capped pagination)."""
     data, err = _org_api(f"/orgs/{org}/code-scanning/alerts?state=open&per_page=100")
@@ -254,11 +281,17 @@ def org_code_scanning_alerts(org: str, max_pages: int = 10) -> Dict[str, Any]:
         print(f"    page 1: {len(data)} alerts", file=sys.stderr, flush=True)
         page = 2
         while len(data) == 100 and page <= max_pages:
-            data, err = _org_api(f"/orgs/{org}/code-scanning/alerts?state=open&per_page=100&page={page}")
+            data, err = _org_api(
+                f"/orgs/{org}/code-scanning/alerts?state=open&per_page=100&page={page}"
+            )
             if err or not isinstance(data, list) or not data:
                 break
             alerts.extend(data)
-            print(f"    page {page}: {len(data)} alerts (total: {len(alerts)})", file=sys.stderr, flush=True)
+            print(
+                f"    page {page}: {len(data)} alerts (total: {len(alerts)})",
+                file=sys.stderr,
+                flush=True,
+            )
             page += 1
         truncated = page > max_pages and len(data) == 100
         summary = [
@@ -270,8 +303,12 @@ def org_code_scanning_alerts(org: str, max_pages: int = 10) -> Dict[str, Any]:
             }
             for a in alerts
         ]
-        return {"access": "ok", "open_count": len(alerts), "alerts": summary,
-                "truncated": truncated}
+        return {
+            "access": "ok",
+            "open_count": len(alerts),
+            "alerts": summary,
+            "truncated": truncated,
+        }
     return {"access": "ok", "open_count": 0, "alerts": []}
 
 
@@ -285,30 +322,42 @@ def org_secret_scanning_alerts(org: str, max_pages: int = 10) -> Dict[str, Any]:
         print(f"    page 1: {len(data)} alerts", file=sys.stderr, flush=True)
         page = 2
         while len(data) == 100 and page <= max_pages:
-            data, err = _org_api(f"/orgs/{org}/secret-scanning/alerts?state=open&per_page=100&page={page}")
+            data, err = _org_api(
+                f"/orgs/{org}/secret-scanning/alerts?state=open&per_page=100&page={page}"
+            )
             if err or not isinstance(data, list) or not data:
                 break
             alerts.extend(data)
-            print(f"    page {page}: {len(data)} alerts (total: {len(alerts)})", file=sys.stderr, flush=True)
+            print(
+                f"    page {page}: {len(data)} alerts (total: {len(alerts)})",
+                file=sys.stderr,
+                flush=True,
+            )
             page += 1
         truncated = page > max_pages and len(data) == 100
         summary = [
             {
-                "secret_type": a.get("secret_type_display_name") or a.get("secret_type"),
+                "secret_type": a.get("secret_type_display_name")
+                or a.get("secret_type"),
                 "repo": a.get("repository", {}).get("full_name"),
                 "state": a.get("state"),
                 "created_at": a.get("created_at"),
             }
             for a in alerts
         ]
-        return {"access": "ok", "open_count": len(alerts), "alerts": summary,
-                "truncated": truncated}
+        return {
+            "access": "ok",
+            "open_count": len(alerts),
+            "alerts": summary,
+            "truncated": truncated,
+        }
     return {"access": "ok", "open_count": 0, "alerts": []}
 
 
 # =====================================================================
 # 3. Dependency & supply chain
 # =====================================================================
+
 
 def dependency_supply_chain(org: str, repo_limit: int = 100) -> Dict[str, Any]:
     """Check SBOM availability and branch protection on the most recently
@@ -317,10 +366,17 @@ def dependency_supply_chain(org: str, repo_limit: int = 100) -> Dict[str, Any]:
       - /repos/.../branches/{branch}      (needs read access)
     """
     cap = min(repo_limit, 100)  # never fetch more than 1 page
-    repos, err = _org_api(f"/orgs/{org}/repos?per_page={cap}&page=1&sort=pushed&direction=desc")
+    repos, err = _org_api(
+        f"/orgs/{org}/repos?per_page={cap}&page=1&sort=pushed&direction=desc"
+    )
     if err or not isinstance(repos, list):
         print(f"    error listing repos: {err}", file=sys.stderr)
-        return {"repos_checked": 0, "sbom_available": 0, "default_branch_protected": 0, "details": []}
+        return {
+            "repos_checked": 0,
+            "sbom_available": 0,
+            "default_branch_protected": 0,
+            "details": [],
+        }
 
     details: List[Dict[str, Any]] = []
     for i, repo in enumerate(repos):
@@ -345,23 +401,29 @@ def dependency_supply_chain(org: str, repo_limit: int = 100) -> Dict[str, Any]:
         if bp_err is None and isinstance(bp_data, dict):
             bp_protected = bp_data.get("protected", False)
 
-        details.append({
-            "repo": full_name,
-            "visibility": visibility,
-            "archived": archived,
-            "default_branch": default_branch,
-            "license": license_id,
-            "topics": ", ".join(topics) if topics else "",
-            "sbom_available": sbom_ok,
-            "default_branch_protected": bp_protected,
-        })
+        details.append(
+            {
+                "repo": full_name,
+                "visibility": visibility,
+                "archived": archived,
+                "default_branch": default_branch,
+                "license": license_id,
+                "topics": ", ".join(topics) if topics else "",
+                "sbom_available": sbom_ok,
+                "default_branch_protected": bp_protected,
+            }
+        )
         if (i + 1) % 10 == 0:
-            print(f"    checked {i + 1}/{len(repos)} repos", file=sys.stderr, flush=True)
+            print(
+                f"    checked {i + 1}/{len(repos)} repos", file=sys.stderr, flush=True
+            )
 
     return {
         "repos_checked": len(details),
         "sbom_available": sum(1 for d in details if d["sbom_available"]),
-        "default_branch_protected": sum(1 for d in details if d["default_branch_protected"]),
+        "default_branch_protected": sum(
+            1 for d in details if d["default_branch_protected"]
+        ),
         "details": details,
     }
 
@@ -369,6 +431,7 @@ def dependency_supply_chain(org: str, repo_limit: int = 100) -> Dict[str, Any]:
 # =====================================================================
 # 4. Actions & CI/CD operational posture
 # =====================================================================
+
 
 def actions_posture(org: str) -> Dict[str, Any]:
     """Gather Actions configuration: runners, permissions, secrets."""
@@ -430,8 +493,12 @@ def actions_posture(org: str) -> Dict[str, Any]:
     elif isinstance(wf_perms_data, dict):
         result["default_workflow_permissions"] = {
             "access": "ok",
-            "default_workflow_permissions": wf_perms_data.get("default_workflow_permissions"),
-            "can_approve_pull_request_reviews": wf_perms_data.get("can_approve_pull_request_reviews"),
+            "default_workflow_permissions": wf_perms_data.get(
+                "default_workflow_permissions"
+            ),
+            "can_approve_pull_request_reviews": wf_perms_data.get(
+                "can_approve_pull_request_reviews"
+            ),
         }
     else:
         result["default_workflow_permissions"] = {"access": "ok"}
@@ -442,6 +509,7 @@ def actions_posture(org: str) -> Dict[str, Any]:
 # =====================================================================
 # 5. Webhooks & integrations
 # =====================================================================
+
 
 def webhooks_and_integrations(org: str) -> Dict[str, Any]:
     """List org webhooks and installed GitHub Apps."""
@@ -472,7 +540,11 @@ def webhooks_and_integrations(org: str) -> Dict[str, Any]:
     # Installed GitHub Apps
     installs_data, installs_err = _org_api(f"/orgs/{org}/installations")
     if installs_err:
-        result["github_apps"] = {"access": installs_err, "total_count": None, "apps": []}
+        result["github_apps"] = {
+            "access": installs_err,
+            "total_count": None,
+            "apps": [],
+        }
     elif isinstance(installs_data, dict):
         result["github_apps"] = {
             "access": "ok",
@@ -498,6 +570,7 @@ def webhooks_and_integrations(org: str) -> Dict[str, Any]:
 # =====================================================================
 # 6. Policy-as-code / rulesets
 # =====================================================================
+
 
 def org_rulesets(org: str) -> Dict[str, Any]:
     """Fetch org-level repository rulesets."""
@@ -526,19 +599,26 @@ def org_rulesets(org: str) -> Dict[str, Any]:
 # Aggregation & output
 # =====================================================================
 
-def run_full_audit(org: str, repo_sample_limit: int = 100, use_cache: bool = True) -> Dict[str, Any]:
+
+def run_full_audit(
+    org: str, repo_sample_limit: int = 100, use_cache: bool = True
+) -> Dict[str, Any]:
     """Execute all six audit dimensions and return a combined report.
 
     Completed sections are cached to disk so a killed/resumed run picks up
     where it left off.  Pass ``use_cache=False`` to force a fresh run.
     """
     cache = _load_cache(org) if use_cache else {}
-    report: Dict[str, Any] = {"org": org, "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    report: Dict[str, Any] = {
+        "org": org,
+        "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
 
     # Org overview (always fetch, cheap single call)
     print("\n── org_overview ──", file=sys.stderr, flush=True)
     org_data, org_err = _org_api(f"/orgs/{org}")
     if org_err is None and isinstance(org_data, dict):
+
         def _get(key: str, admin_only: bool = False):
             """Get a field, returning 'admin_only' marker if key missing and admin_only=True."""
             if key in org_data:
@@ -556,34 +636,74 @@ def run_full_audit(org: str, repo_sample_limit: int = 100, use_cache: bool = Tru
             "created_at": _get("created_at"),
             "updated_at": _get("updated_at"),
             # Security-critical org settings (admin-only fields marked)
-            "two_factor_requirement_enabled": _get("two_factor_requirement_enabled", admin_only=True),
-            "default_repository_permission": _get("default_repository_permission", admin_only=True),
+            "two_factor_requirement_enabled": _get(
+                "two_factor_requirement_enabled", admin_only=True
+            ),
+            "default_repository_permission": _get(
+                "default_repository_permission", admin_only=True
+            ),
             "default_repository_branch": _get("default_repository_branch"),
             "members_can_create_repositories": _get("members_can_create_repositories"),
-            "members_can_create_public_repositories": _get("members_can_create_public_repositories"),
-            "members_can_create_private_repositories": _get("members_can_create_private_repositories"),
-            "members_can_create_internal_repositories": _get("members_can_create_internal_repositories"),
-            "members_can_fork_private_repositories": _get("members_can_fork_private_repositories"),
+            "members_can_create_public_repositories": _get(
+                "members_can_create_public_repositories"
+            ),
+            "members_can_create_private_repositories": _get(
+                "members_can_create_private_repositories"
+            ),
+            "members_can_create_internal_repositories": _get(
+                "members_can_create_internal_repositories"
+            ),
+            "members_can_fork_private_repositories": _get(
+                "members_can_fork_private_repositories"
+            ),
             "members_can_delete_repositories": _get("members_can_delete_repositories"),
-            "members_can_change_repo_visibility": _get("members_can_change_repo_visibility"),
-            "members_can_invite_outside_collaborators": _get("members_can_invite_outside_collaborators"),
+            "members_can_change_repo_visibility": _get(
+                "members_can_change_repo_visibility"
+            ),
+            "members_can_invite_outside_collaborators": _get(
+                "members_can_invite_outside_collaborators"
+            ),
             "members_can_create_pages": _get("members_can_create_pages"),
             "members_can_create_public_pages": _get("members_can_create_public_pages"),
-            "members_can_create_private_pages": _get("members_can_create_private_pages"),
+            "members_can_create_private_pages": _get(
+                "members_can_create_private_pages"
+            ),
             "members_can_delete_issues": _get("members_can_delete_issues"),
             "members_can_create_teams": _get("members_can_create_teams"),
-            "members_can_view_dependency_insights": _get("members_can_view_dependency_insights"),
+            "members_can_view_dependency_insights": _get(
+                "members_can_view_dependency_insights"
+            ),
             "web_commit_signoff_required": _get("web_commit_signoff_required"),
-            "deploy_keys_enabled_for_repositories": _get("deploy_keys_enabled_for_repositories"),
+            "deploy_keys_enabled_for_repositories": _get(
+                "deploy_keys_enabled_for_repositories"
+            ),
             # GHAS / security features for new repos (admin-only)
-            "advanced_security_enabled_for_new_repositories": _get("advanced_security_enabled_for_new_repositories", admin_only=True),
-            "dependency_graph_enabled_for_new_repositories": _get("dependency_graph_enabled_for_new_repositories", admin_only=True),
-            "dependabot_alerts_enabled_for_new_repositories": _get("dependabot_alerts_enabled_for_new_repositories", admin_only=True),
-            "dependabot_security_updates_enabled_for_new_repositories": _get("dependabot_security_updates_enabled_for_new_repositories", admin_only=True),
-            "secret_scanning_enabled_for_new_repositories": _get("secret_scanning_enabled_for_new_repositories", admin_only=True),
-            "secret_scanning_push_protection_enabled_for_new_repositories": _get("secret_scanning_push_protection_enabled_for_new_repositories", admin_only=True),
-            "secret_scanning_push_protection_custom_link_enabled": _get("secret_scanning_push_protection_custom_link_enabled", admin_only=True),
-            "secret_scanning_push_protection_custom_link": _get("secret_scanning_push_protection_custom_link", admin_only=True),
+            "advanced_security_enabled_for_new_repositories": _get(
+                "advanced_security_enabled_for_new_repositories", admin_only=True
+            ),
+            "dependency_graph_enabled_for_new_repositories": _get(
+                "dependency_graph_enabled_for_new_repositories", admin_only=True
+            ),
+            "dependabot_alerts_enabled_for_new_repositories": _get(
+                "dependabot_alerts_enabled_for_new_repositories", admin_only=True
+            ),
+            "dependabot_security_updates_enabled_for_new_repositories": _get(
+                "dependabot_security_updates_enabled_for_new_repositories",
+                admin_only=True,
+            ),
+            "secret_scanning_enabled_for_new_repositories": _get(
+                "secret_scanning_enabled_for_new_repositories", admin_only=True
+            ),
+            "secret_scanning_push_protection_enabled_for_new_repositories": _get(
+                "secret_scanning_push_protection_enabled_for_new_repositories",
+                admin_only=True,
+            ),
+            "secret_scanning_push_protection_custom_link_enabled": _get(
+                "secret_scanning_push_protection_custom_link_enabled", admin_only=True
+            ),
+            "secret_scanning_push_protection_custom_link": _get(
+                "secret_scanning_push_protection_custom_link", admin_only=True
+            ),
             "plan": _get("plan"),
         }
     else:
@@ -632,7 +752,9 @@ def run_full_audit(org: str, repo_sample_limit: int = 100, use_cache: bool = Tru
             except Exception as exc:
                 print(f"    ERROR: {exc}", file=sys.stderr)
                 section_data[task_name] = {"error": str(exc)}
-            print(f"    done ({time.monotonic() - t0:.1f}s)", file=sys.stderr, flush=True)
+            print(
+                f"    done ({time.monotonic() - t0:.1f}s)", file=sys.stderr, flush=True
+            )
         report[section_key] = section_data
 
         # Save after each section so progress survives a kill
@@ -667,39 +789,89 @@ def _build_summary(report: Dict[str, Any]) -> Dict[str, Any]:
     if overview.get("access") is None:  # no access key = successful fetch
         summary["org_name"] = overview.get("name", "")
         summary["public_repos"] = overview.get("public_repos")
-        summary["total_private_repos"] = overview.get("total_private_repos", "no_access")
-        summary["2fa_requirement_enabled"] = overview.get("two_factor_requirement_enabled")
-        summary["default_repo_permission"] = overview.get("default_repository_permission")
+        summary["total_private_repos"] = overview.get(
+            "total_private_repos", "no_access"
+        )
+        summary["2fa_requirement_enabled"] = overview.get(
+            "two_factor_requirement_enabled"
+        )
+        summary["default_repo_permission"] = overview.get(
+            "default_repository_permission"
+        )
         summary["default_branch"] = overview.get("default_repository_branch")
-        summary["members_can_create_public_repos"] = overview.get("members_can_create_public_repositories")
-        summary["members_can_create_private_repos"] = overview.get("members_can_create_private_repositories")
-        summary["members_can_fork_private_repos"] = overview.get("members_can_fork_private_repositories")
-        summary["members_can_delete_repos"] = overview.get("members_can_delete_repositories")
-        summary["members_can_change_visibility"] = overview.get("members_can_change_repo_visibility")
-        summary["members_can_invite_outside_collabs"] = overview.get("members_can_invite_outside_collaborators")
-        summary["web_commit_signoff_required"] = overview.get("web_commit_signoff_required")
-        summary["deploy_keys_enabled_for_repos"] = overview.get("deploy_keys_enabled_for_repositories")
-        summary["advanced_security_new_repos"] = overview.get("advanced_security_enabled_for_new_repositories")
-        summary["dependency_graph_new_repos"] = overview.get("dependency_graph_enabled_for_new_repositories")
-        summary["dependabot_alerts_new_repos"] = overview.get("dependabot_alerts_enabled_for_new_repositories")
-        summary["dependabot_security_updates_new_repos"] = overview.get("dependabot_security_updates_enabled_for_new_repositories")
-        summary["secret_scanning_new_repos"] = overview.get("secret_scanning_enabled_for_new_repositories")
-        summary["secret_scanning_push_protection_new_repos"] = overview.get("secret_scanning_push_protection_enabled_for_new_repositories")
+        summary["members_can_create_public_repos"] = overview.get(
+            "members_can_create_public_repositories"
+        )
+        summary["members_can_create_private_repos"] = overview.get(
+            "members_can_create_private_repositories"
+        )
+        summary["members_can_fork_private_repos"] = overview.get(
+            "members_can_fork_private_repositories"
+        )
+        summary["members_can_delete_repos"] = overview.get(
+            "members_can_delete_repositories"
+        )
+        summary["members_can_change_visibility"] = overview.get(
+            "members_can_change_repo_visibility"
+        )
+        summary["members_can_invite_outside_collabs"] = overview.get(
+            "members_can_invite_outside_collaborators"
+        )
+        summary["web_commit_signoff_required"] = overview.get(
+            "web_commit_signoff_required"
+        )
+        summary["deploy_keys_enabled_for_repos"] = overview.get(
+            "deploy_keys_enabled_for_repositories"
+        )
+        summary["advanced_security_new_repos"] = overview.get(
+            "advanced_security_enabled_for_new_repositories"
+        )
+        summary["dependency_graph_new_repos"] = overview.get(
+            "dependency_graph_enabled_for_new_repositories"
+        )
+        summary["dependabot_alerts_new_repos"] = overview.get(
+            "dependabot_alerts_enabled_for_new_repositories"
+        )
+        summary["dependabot_security_updates_new_repos"] = overview.get(
+            "dependabot_security_updates_enabled_for_new_repositories"
+        )
+        summary["secret_scanning_new_repos"] = overview.get(
+            "secret_scanning_enabled_for_new_repositories"
+        )
+        summary["secret_scanning_push_protection_new_repos"] = overview.get(
+            "secret_scanning_push_protection_enabled_for_new_repositories"
+        )
 
     # Org settings
     total_members = org_settings.get("total_members", {})
-    summary["total_members"] = _val_or_no_access(total_members, "total_members") if isinstance(total_members, dict) else "no_access"
-    summary["public_members"] = total_members.get("public_members") if isinstance(total_members, dict) and total_members.get("access") == "ok" else "no_access"
+    summary["total_members"] = (
+        _val_or_no_access(total_members, "total_members")
+        if isinstance(total_members, dict)
+        else "no_access"
+    )
+    summary["public_members"] = (
+        total_members.get("public_members")
+        if isinstance(total_members, dict) and total_members.get("access") == "ok"
+        else "no_access"
+    )
 
     mfa_data = org_settings.get("members_without_2fa", {})
     if isinstance(mfa_data, dict):
-        summary["members_without_2fa"] = _val_or_no_access(mfa_data, "members") if mfa_data.get("access") != "ok" else len(mfa_data.get("members", []))
+        summary["members_without_2fa"] = (
+            _val_or_no_access(mfa_data, "members")
+            if mfa_data.get("access") != "ok"
+            else len(mfa_data.get("members", []))
+        )
     else:
         summary["members_without_2fa"] = "no_access"
 
     collabs_data = org_settings.get("outside_collaborators", {})
     if isinstance(collabs_data, dict):
-        summary["outside_collaborators"] = _val_or_no_access(collabs_data, "collaborators") if collabs_data.get("access") != "ok" else len(collabs_data.get("collaborators", []))
+        summary["outside_collaborators"] = (
+            _val_or_no_access(collabs_data, "collaborators")
+            if collabs_data.get("access") != "ok"
+            else len(collabs_data.get("collaborators", []))
+        )
     else:
         summary["outside_collaborators"] = "no_access"
 
@@ -708,13 +880,21 @@ def _build_summary(report: Dict[str, Any]) -> Dict[str, Any]:
 
     audit_data = org_settings.get("audit_log_recent", {})
     if isinstance(audit_data, dict):
-        summary["audit_log_entries_fetched"] = _val_or_no_access(audit_data, "entries") if audit_data.get("access") != "ok" else len(audit_data.get("entries", []))
+        summary["audit_log_entries_fetched"] = (
+            _val_or_no_access(audit_data, "entries")
+            if audit_data.get("access") != "ok"
+            else len(audit_data.get("entries", []))
+        )
     else:
         summary["audit_log_entries_fetched"] = "no_access"
 
     # GHAS
-    summary["code_scanning_open_alerts"] = _val_or_no_access(ghas.get("code_scanning", {}), "open_count")
-    summary["secret_scanning_open_alerts"] = _val_or_no_access(ghas.get("secret_scanning", {}), "open_count")
+    summary["code_scanning_open_alerts"] = _val_or_no_access(
+        ghas.get("code_scanning", {}), "open_count"
+    )
+    summary["secret_scanning_open_alerts"] = _val_or_no_access(
+        ghas.get("secret_scanning", {}), "open_count"
+    )
 
     # Supply chain + repo-level security
     summary["repos_checked_for_supply_chain"] = deps.get("repos_checked", 0)
@@ -722,17 +902,29 @@ def _build_summary(report: Dict[str, Any]) -> Dict[str, Any]:
     summary["repos_with_branch_protection"] = deps.get("default_branch_protected", 0)
 
     # Actions
-    summary["self_hosted_runners"] = _val_or_no_access(actions.get("runners", {}), "total_count")
-    summary["allowed_actions_policy"] = _val_or_no_access(actions.get("actions_permissions", {}), "allowed_actions")
-    summary["sha_pinning_required"] = _val_or_no_access(actions.get("actions_permissions", {}), "sha_pinning_required")
-    summary["org_secrets_count"] = _val_or_no_access(actions.get("secrets", {}), "total_count")
+    summary["self_hosted_runners"] = _val_or_no_access(
+        actions.get("runners", {}), "total_count"
+    )
+    summary["allowed_actions_policy"] = _val_or_no_access(
+        actions.get("actions_permissions", {}), "allowed_actions"
+    )
+    summary["sha_pinning_required"] = _val_or_no_access(
+        actions.get("actions_permissions", {}), "sha_pinning_required"
+    )
+    summary["org_secrets_count"] = _val_or_no_access(
+        actions.get("secrets", {}), "total_count"
+    )
     summary["default_workflow_permissions"] = _val_or_no_access(
         actions.get("default_workflow_permissions", {}), "default_workflow_permissions"
     )
 
     # Webhooks
-    summary["org_webhooks_count"] = _val_or_no_access(webhooks.get("webhooks", {}), "count")
-    summary["installed_github_apps"] = _val_or_no_access(webhooks.get("github_apps", {}), "total_count")
+    summary["org_webhooks_count"] = _val_or_no_access(
+        webhooks.get("webhooks", {}), "count"
+    )
+    summary["installed_github_apps"] = _val_or_no_access(
+        webhooks.get("github_apps", {}), "total_count"
+    )
 
     # Rulesets
     summary["org_rulesets_count"] = _val_or_no_access(rulesets, "count")
@@ -742,7 +934,6 @@ def _build_summary(report: Dict[str, Any]) -> Dict[str, Any]:
 
 def write_excel(report: Dict[str, Any], path: str) -> None:
     """Write the audit report to a multi-sheet Excel workbook."""
-    import pandas as pd
 
     summary = _build_summary(report)
     summary_df = pd.DataFrame(list(summary.items()), columns=["metric", "value"])
@@ -763,15 +954,23 @@ def write_excel(report: Dict[str, Any], path: str) -> None:
 
     # Outside collaborators (now returns dict with 'collaborators' key)
     collabs_raw = org_settings.get("outside_collaborators", {})
-    collabs_list = collabs_raw.get("collaborators", []) if isinstance(collabs_raw, dict) else []
+    collabs_list = (
+        collabs_raw.get("collaborators", []) if isinstance(collabs_raw, dict) else []
+    )
     collabs_df = pd.DataFrame(collabs_list) if collabs_list else pd.DataFrame()
 
     # Teams
     teams_raw = org_settings.get("teams", [])
     teams_flat = [
-        {"name": t.get("name"), "slug": t.get("slug"), "description": t.get("description"),
-         "privacy": t.get("privacy"), "notification_setting": t.get("notification_setting"),
-         "permission": t.get("permission"), "parent": t.get("parent")}
+        {
+            "name": t.get("name"),
+            "slug": t.get("slug"),
+            "description": t.get("description"),
+            "privacy": t.get("privacy"),
+            "notification_setting": t.get("notification_setting"),
+            "permission": t.get("permission"),
+            "parent": t.get("parent"),
+        }
         for t in teams_raw
     ]
     teams_df = pd.DataFrame(teams_flat) if teams_flat else pd.DataFrame()
@@ -794,7 +993,11 @@ def write_excel(report: Dict[str, Any], path: str) -> None:
     runners_df = pd.DataFrame(runners) if runners else pd.DataFrame()
 
     secrets_names = actions.get("secrets", {}).get("names", [])
-    secrets_df = pd.DataFrame({"secret_name": secrets_names}) if secrets_names else pd.DataFrame()
+    secrets_df = (
+        pd.DataFrame({"secret_name": secrets_names})
+        if secrets_names
+        else pd.DataFrame()
+    )
 
     # Webhooks
     wh = report.get("5_webhooks_integrations", {}).get("details", {})
@@ -816,13 +1019,17 @@ def write_excel(report: Dict[str, Any], path: str) -> None:
             if not mfa_df.empty:
                 mfa_df.to_excel(writer, index=False, sheet_name="2FA Disabled")
             if not collabs_df.empty:
-                collabs_df.to_excel(writer, index=False, sheet_name="Outside Collaborators")
+                collabs_df.to_excel(
+                    writer, index=False, sheet_name="Outside Collaborators"
+                )
             if not teams_df.empty:
                 teams_df.to_excel(writer, index=False, sheet_name="Teams")
             if not code_df.empty:
                 code_df.to_excel(writer, index=False, sheet_name="Code Scanning Alerts")
             if not secret_df.empty:
-                secret_df.to_excel(writer, index=False, sheet_name="Secret Scanning Alerts")
+                secret_df.to_excel(
+                    writer, index=False, sheet_name="Secret Scanning Alerts"
+                )
             if not deps_df.empty:
                 deps_df.to_excel(writer, index=False, sheet_name="Supply Chain")
             if not runners_df.empty:
@@ -837,8 +1044,11 @@ def write_excel(report: Dict[str, Any], path: str) -> None:
                 rulesets_df.to_excel(writer, index=False, sheet_name="Rulesets")
         print(f"Wrote {path}", file=sys.stderr)
     except ImportError:
-        print("Excel export requires openpyxl and pandas.\n"
-              "Install with: pip install openpyxl pandas", file=sys.stderr)
+        print(
+            "Excel export requires openpyxl and pandas.\n"
+            "Install with: pip install openpyxl pandas",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -846,12 +1056,15 @@ def write_excel(report: Dict[str, Any], path: str) -> None:
 # CLI
 # =====================================================================
 
+
 def main() -> None:
     global __start_time
     __start_time = time.monotonic()
 
     if len(sys.argv) < 2:
-        print("Usage: python org_security_posture.py <org> [--excel path] [--json] [--repo-limit N] [--no-cache]")
+        print(
+            "Usage: python org_security_posture.py <org> [--excel path] [--json] [--repo-limit N] [--no-cache]"
+        )
         sys.exit(2)
 
     org = sys.argv[1]
