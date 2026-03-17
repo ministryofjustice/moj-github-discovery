@@ -3,7 +3,6 @@
 import json
 import os
 import sqlite3
-import sys
 import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -469,9 +468,7 @@ def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
 
     for path in CODEOWNERS_PATHS:
         if path in tree_paths:
-            print(f"CODEOWNERS found at {path}", file=sys.stderr)
             return {"present": True, "path": path}
-    print("CODEOWNERS not found", file=sys.stderr)
     return {"present": False, "path": None}
 
 
@@ -479,14 +476,12 @@ def init_db(db_path: str, table_name: str = "audits") -> None:
     """Initialize SQLite database with a table."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute(
-        f"""
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             full_name TEXT PRIMARY KEY,
             audit_json TEXT
         )
-    """
-    )
+    """)
     conn.commit()
     conn.close()
 
