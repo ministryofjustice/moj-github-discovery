@@ -11,17 +11,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-from utils import gh_api, count_alerts, branch_protection, init_db, save_to_db, fork_and_template_info, check_codeowners_exists
+from utils import (
+    branch_protection,
+    check_codeowners_exists,
+    count_alerts,
+    fork_and_template_info,
+    gh_api,
+    init_db,
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # track start time for automatic reporting
 __start_time: Optional[float] = None
 
+
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
+
 
 atexit.register(_report_elapsed)
 
@@ -113,9 +122,11 @@ def main():
     global __start_time
     __start_time = time.monotonic()
     if len(sys.argv) < 2:
-        print("Usage: python list_repos.py <org> [--excel path] [--limit N] [--sort [-]column] [--repo-file file] [--audit-db path]")
+        print(
+            "Usage: python list_repos.py <org> [--excel path] [--limit N] [--sort [-]column] [--repo-file file] [--audit-db path]"
+        )
         sys.exit(2)
-    
+
     org = sys.argv[1]
     # defaults – paths alongside script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -147,7 +158,7 @@ def main():
             if raw.startswith("-"):
                 sort_key = raw[1:]
                 sort_asc = False
-            elif raw.startswith("+" ):
+            elif raw.startswith("+"):
                 sort_key = raw[1:]
                 sort_asc = True
             else:
@@ -213,8 +224,41 @@ def main():
     
     print(f"Loaded {len(repos)} repos total", file=sys.stderr, flush=True)
 
-    # Skip fork/template enrichment — the org listing already has fork/is_template
-    # booleans. Fetching parent info per-fork is too slow (hits rate limits).
+    # Enrich fork/template data for repos from org listing
+    # The org endpoint doesn't include parent/template_repository fields,
+    # so fetch full details for forked or template repos
+    def enrich_fork_template_info(r: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch full repo details if fork or template to get parent/template info."""
+        try:
+            owner = r.get("owner", {}).get("login")
+            name = r.get("name")
+            if not owner or not name:
+                return r
+
+            # Only fetch if fork or is_template (otherwise skip to save API calls)
+            if not (r.get("fork") or r.get("is_template")):
+                return r
+
+            full_info = gh_api(f"/repos/{owner}/{name}")
+            # Merge parent and template_repository if present
+            if full_info.get("parent"):
+                r["parent"] = full_info.get("parent")
+            if full_info.get("template_repository"):
+                r["template_repository"] = full_info.get("template_repository")
+            return r
+        except Exception:
+            # If enrichment fails, return original repo data
+            return r
+
+    # Enrich fork/template data in parallel for org-listed repos (skip if using --repo-file)
+    if repo_list is None and repos:
+        enriched_repos = []
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(enrich_fork_template_info, r) for r in repos]
+            # Maintain order by iterating through futures in order
+            for fut in futures:
+                enriched_repos.append(fut.result())
+        repos = enriched_repos
 
     # helper for a single repo; extracted so it can run in a pool
     _cached_count = 0
@@ -234,65 +278,34 @@ def main():
             "private": r.get("private"),
             "archived": r.get("archived"),
             "fork": r.get("fork"),
+            "fork_source": fork_template.get("fork_source"),
+            "is_generated_from_template": fork_template.get(
+                "is_generated_from_template"
+            ),
+            "template_source": fork_template.get("template_source"),
             "pushed_at": r.get("pushed_at"),
             "default_branch": default_branch,
             "language": r.get("language"),
             "open_issues": r.get("open_issues_count"),
             "stargazers": r.get("stargazers_count"),
         }
-        if no_alerts:
-            # Fast path: skip all per-repo API calls
-            row.update({
-                "fork_source": None,
-                "is_generated_from_template": r.get("is_template", False),
-                "template_source": None,
-                "dependabot_access": "skipped",
-                "dependabot_alerts": None,
-                "code_scanning_access": "skipped",
-                "code_scanning_alerts": None,
-                "secret_scanning_access": "skipped",
-                "secret_scanning_alerts": None,
-                "default_branch_protected": None,
-                "codeowners_exists": None,
-            })
+        if not no_alerts:
+            row.update(count_alerts(owner, name))
         else:
-            full_name = r.get("full_name", f"{owner}/{name}")
-            # Check alert cache first
-            with _alert_cache_lock:
-                cached = _alert_cache.get(full_name)
-            if cached:
-                with _count_lock:
-                    _cached_count += 1
-                row.update(cached)
-            else:
-                t0 = time.monotonic()
-                print(f"  FETCH {full_name} ...", file=sys.stderr, flush=True)
-                enrichment: Dict[str, Any] = {}
-                enrichment["fork_source"] = None
-                enrichment["is_generated_from_template"] = r.get("is_template", False)
-                enrichment["template_source"] = None
-                enrichment.update(count_alerts(owner, name))
-                if default_branch:
-                    enrichment.update(branch_protection(owner, name, default_branch))
-                    try:
-                        enrichment.update(check_codeowners_exists(owner, name, default_branch))
-                    except Exception:
-                        enrichment["present"] = None
-                        enrichment["path"] = None
-                row.update(enrichment)
-                # Store in cache
-                global _alert_cache_dirty
-                with _alert_cache_lock:
-                    _alert_cache[full_name] = enrichment
-                    _alert_cache_dirty = True
-                with _count_lock:
-                    _fetched_count += 1
-                da = enrichment.get("dependabot_alerts", "?")
-                cs = enrichment.get("code_scanning_alerts", "?")
-                ss = enrichment.get("secret_scanning_alerts", "?")
-                bp = enrichment.get("default_branch_protected", "?")
-                elapsed_r = time.monotonic() - t0
-                print(f"  DONE  {full_name} ({elapsed_r:.1f}s) dependabot={da} code_scan={cs} secrets={ss} protected={bp}", file=sys.stderr, flush=True)
+            # mark as skipped rather than fetching
+            row.update(
+                {
+                    "dependabot_access": "skipped",
+                    "dependabot_alerts": None,
+                    "code_scanning_access": "skipped",
+                    "code_scanning_alerts": None,
+                    "secret_scanning_access": "skipped",
+                    "secret_scanning_alerts": None,
+                }
+            )
+        if default_branch:
+            row.update(branch_protection(owner, name, default_branch))
+            row.update(check_codeowners_exists(owner, name, default_branch))
         flags: List[str] = []
         if row["archived"]:
             flags.append("archived")
@@ -349,7 +362,7 @@ def main():
         sort_key = "pushed_at"
         sort_asc = False
     if sort_key in df.columns:
-        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position='last')
+        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position="last")
     else:
         if sort_key is not None:
             print(f"Warning: sort key '{sort_key}' not a column", file=sys.stderr)
@@ -376,25 +389,30 @@ def main():
     elapsed = time.monotonic() - __start_time
     print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
     # Summary dataframe (optional excel export)
-    metrics = ["repos_total", "repos_public", "repos_private", "repos_archived"]
-    values = [
-        len(df),
-        int((df["private"] == False).sum()) if "private" in df.columns else 0,
-        int((df["private"] == True).sum()) if "private" in df.columns else 0,
-        int(df["archived"].sum()) if "archived" in df.columns else 0,
-    ]
-    for col, label in [
-        ("dependabot_alerts", "repos_with_dependabot_alerts"),
-        ("secret_scanning_alerts", "repos_with_secret_alerts"),
-        ("code_scanning_alerts", "repos_with_code_scanning_alerts"),
-    ]:
-        if col in df.columns:
-            metrics.append(label)
-            values.append(int((df[col].fillna(0) > 0).sum()))
-    if "default_branch_protected" in df.columns and df["default_branch_protected"].notna().any():
-        metrics.append("repos_unprotected_default_branch")
-        values.append(int((df["default_branch_protected"] == False).sum()))
-    summary = pd.DataFrame({"metric": metrics, "value": values})
+    summary = pd.DataFrame(
+        {
+            "metric": [
+                "repos_total",
+                "repos_public",
+                "repos_private",
+                "repos_archived",
+                "repos_with_dependabot_alerts",
+                "repos_with_secret_alerts",
+                "repos_with_code_scanning_alerts",
+                "repos_unprotected_default_branch",
+            ],
+            "value": [
+                len(df),
+                int((not df["private"]).sum()),
+                int((df["private"]).sum()),
+                int(df["archived"].sum()),
+                int((df["dependabot_alerts"].fillna(0) > 0).sum()),
+                int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
+                int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
+                int((not df["default_branch_protected"]).sum()),
+            ],
+        }
+    )
 
     if excel_path:
         try:
@@ -403,14 +421,16 @@ def main():
                 summary.to_excel(writer, index=False, sheet_name="Summary")
             print(f"Wrote {excel_path}", file=sys.stderr)
         except ImportError:
-            print("Excel export requires the openpyxl package.\n"
-                  "Install it with `pip install openpyxl` and retry.",
-                  file=sys.stderr)
+            print(
+                "Excel export requires the openpyxl package.\n"
+                "Install it with `pip install openpyxl` and retry.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
     # when no excel and no repo-file and no audit-db, output recent results
     if not excel_path and repo_list is None and audit_db_path is None:
-        output_data = df.to_dict(orient='records')
+        output_data = df.to_dict(orient="records")
         print(json.dumps(output_data, indent=2))
 
 

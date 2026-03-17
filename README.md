@@ -1,40 +1,26 @@
 # Repository Audit Tool
 
-A comprehensive Python toolset for auditing GitHub repositories across organizations. Analyzes security posture, CI/CD workflows, branch protection, security alerts, and community standards.
+A comprehensive Python toolset for auditing GitHub repositories across organizations. Analyzes:
+
+- Security posture
+- CI/CD workflows
+- Branch Protection
+- Security Alerts
+- Adherence to [MOJ Github community standards](https://github-community.service.justice.gov.uk/repository-standards/guidance).
 
 ## Setup
 
-### Prerequisites
+Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisites installed and configured where appropriate.
 
-- Python 3.7+
-- GitHub CLI (`gh`) installed and authenticated
-- GitHub personal access token with appropriate scopes
-
-### Environment Variables
-
-Set your GitHub token as an environment variable:
-
-```bash
-# Using a personal access token
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-
-# Or if using the GitHub CLI default:
-export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-```
-
-The tools will automatically use whichever token is available (checks both `GH_TOKEN` and `GITHUB_TOKEN`).
-
-### Installation
-
-```bash
-pip install -r requirements-dashboard.txt
-```
+[Setup Docs](./docs/setup.md)
 
 ## Scripts
 
 ### 1. `list_repos.py` - List and Audit Organization Repositories
 
-Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.  Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations. Output defaults depend on options provided.
+Lists repositories from a GitHub organization and audits each one, storing results in a SQLite database.
+Internally the script reuses a single HTTP session and processes multiple repos in parallel, so it should be reasonably fast even for large organizations.
+Output defaults depend on options provided.
 
 **Usage:**
 
@@ -52,7 +38,8 @@ python list_repos.py <org> [options]
 - `--limit <N>` - Maximum number of repos to fetch (default: 400; when no other options provided output is limited to 10)
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
 - `--repo-file <file>` - Audit repos listed in a file (one per line, format: `owner/repo`)
-- `--audit-db [path]` - Write audit rows to SQLite database (default: `repo_audit.db` in current directory; optional custom path). Writes full list unless `--limit` set.
+- `--audit-db [path]` - Write audit rows to SQLite database (default: `repo_audit.db` in current directory; optional custom path).
+  - Writes full list unless `--limit` set.
 - `--no-alerts` - Skip security alert queries (dependabot/code-scanning/secret-scanning). Useful when your token lacks access or to speed up runs.
 
 **Examples:**
