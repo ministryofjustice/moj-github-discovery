@@ -459,7 +459,7 @@ def build_owner_summary(rows: List[Dict[str, Any]], stale_days: int) -> List[Dic
             if row.get("overdue"):
                 entry["overdue_open_alerts"] += 1
             if (row.get("age_days") or 0) >= stale_days:
-                entry["stage_open_alerts"] += 1
+                entry["stale_open_alerts"] += 1
         else:
             entry["closed_alerts"] += 1
             entry["remediated_alerts"] += 1
