@@ -3,6 +3,7 @@ import csv
 import time
 import requests
 import datetime
+import json
 
 TOKEN = os.getenv("GITHUB_TOKEN")
 HEADERS = {
@@ -13,6 +14,7 @@ HEADERS = {
 ORG = "ministryofjustice"
 BASE = "https://api.github.com"
 MAX_ALERTS = 400   # limit total alerts collected
+BREAK_NOW=False
 
 
 def paged_get(url, params=None):
@@ -62,6 +64,16 @@ def fetch_secret_scanning_alerts(owner, repo):
 def iso_to_dt(s):
     return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
 
+def get_severity(a, kind):
+    if kind == "dependabot":
+        return a.get("security_advisory", {"severity":"not_found"}).get("severity", "not_found")
+    elif kind == "code_scanning":
+        return a.get("rule", {"security_severity_level":"not_found"}).get("security_severity_level", "not_found")
+    elif kind == "secret_scanning":
+        return "critical"
+    else:
+        raise ValueError(f"Unknown alert kind: {kind}")
+
 
 def process_alerts(alerts, repo, kind):
     rows = []
@@ -74,7 +86,11 @@ def process_alerts(alerts, repo, kind):
         ttr = None
         if created and remediation_date:
             ttr = (remediation_date - created).days
+        with open(f"data_{kind}.json", "w") as f:
+            json.dump(a, f)
+            BREAK_NOW = True
 
+        
         rows.append({
             "id": a.get("number") or a.get("id"),
             "type": kind,
@@ -82,7 +98,7 @@ def process_alerts(alerts, repo, kind):
             "created_at": created.isoformat() if created else "",
             "remediated_at": remediation_date.isoformat() if remediation_date else "",
             "state": a.get("state"),
-            "severity": a.get("severity") or a.get("security_severity_level"),
+            "severity": get_severity(a, kind),
             "ttr_days": ttr
         })
 
@@ -93,7 +109,7 @@ def process_alerts(alerts, repo, kind):
 
 
 def main():
-    repos = list_repos(ORG)
+    repos = [{"owner":{"login":"ministryofjustice"}, "name":"moj-github-discovery"}] #list_repos(ORG)
 
     grouped = {}   # NEW: alerts grouped by repository
     total_count = 0
@@ -127,6 +143,8 @@ def main():
             print(f"Skipping {repo_full} due to error: {e}")
 
         time.sleep(0.3)
+        if BREAK_NOW:
+            break
 
     # Flatten grouped structure for CSV output
     flat = []
