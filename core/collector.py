@@ -1,0 +1,184 @@
+"""Collector — orchestrates API fetching and immediate persistence.
+
+For each repository the collector iterates through every registered
+:class:`~core.github_api.BaseEndpoint`, calls ``fetch()``, and immediately
+persists the result to the database via ``storage.upsert()``.  If the
+process is interrupted (Ctrl-C, quota limit, network error) all data
+collected so far has already been written — nothing is lost.
+
+Resume support
+--------------
+Pass ``resume=True`` to skip endpoints whose key is already populated in
+the database row for a given repo.  This makes it safe to re-run the
+collector against the same database after an interruption.
+
+Extending
+---------
+Subclass :class:`BaseCollector` to change the iteration strategy — for
+example to run endpoint calls in parallel or to apply a custom filter.
+
+See ``CONTRIBUTING.md`` for a walkthrough.
+
+Migration notes
+---------------
+Replaces the ``process_single()`` / ``main()`` logic in ``list_repos.py``,
+``audit_repo.py``, and ``archive_repos.py``.
+"""
+
+from __future__ import annotations
+
+import sys
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+
+from core.github_api import REPO_ENDPOINTS, BaseEndpoint, list_org_repos
+from core.http_client import BaseHttpClient, GitHubHttpClient
+from core.models import RepoData
+from core.storage import BaseStorage
+
+
+# ── Abstract base ─────────────────────────────────────────────────────
+
+
+class BaseCollector(ABC):
+    """Extend to change how repositories are iterated or collection is scheduled.
+
+    Example (parallel variant)::
+
+        class ParallelCollector(BaseCollector):
+            def collect(self, org, repos=None, resume=False):
+                ...  # use ThreadPoolExecutor over the repo list
+    """
+
+    @abstractmethod
+    def collect(
+        self,
+        org: str,
+        repos: list[str] | None = None,
+        resume: bool = False,
+    ) -> None:
+        """Fetch and persist data for all repositories.
+
+        Args:
+            org:    GitHub organisation name.
+            repos:  Optional explicit list of ``owner/repo`` strings.  If
+                    omitted, the full org repository list is discovered via
+                    the API.
+            resume: When ``True``, skip endpoints whose key is already
+                    populated in the database for a given repo.
+        """
+
+
+# ── Concrete implementation ───────────────────────────────────────────
+
+
+class OrgCollector(BaseCollector):
+    """Iterates an org's repos and calls every registered endpoint in order.
+
+    After **each** endpoint call the result is immediately merged into the
+    database row for that repo via ``storage.upsert()``.  An interruption
+    at any point leaves all previously collected data intact.
+
+    Usage::
+
+        storage = SqliteStorage("repo_data.db")
+        collector = OrgCollector(storage)
+        collector.collect("ministryofjustice")
+
+        # Resume after interruption:
+        collector.collect("ministryofjustice", resume=True)
+
+        # Audit a specific subset:
+        collector.collect("ministryofjustice", repos=["org/repo-a", "org/repo-b"])
+    """
+
+    def __init__(
+        self,
+        storage: BaseStorage,
+        client: BaseHttpClient | None = None,
+        endpoints: list[type[BaseEndpoint]] | None = None,
+    ) -> None:
+        """
+        Args:
+            storage:   Initialised storage backend.  The collector calls
+                       ``storage.init()`` automatically.
+            client:    HTTP client to use.  Defaults to
+                       :class:`~core.http_client.GitHubHttpClient`.
+            endpoints: List of endpoint classes to run.  Defaults to
+                       :data:`~core.github_api.REPO_ENDPOINTS`.
+        """
+        self.storage = storage
+        self.client = client or GitHubHttpClient()
+        self.endpoints: list[type[BaseEndpoint]] = endpoints or REPO_ENDPOINTS
+
+    # ── Public interface ──────────────────────────────────────────────
+
+    def collect(
+        self,
+        org: str,
+        repos: list[str] | None = None,
+        resume: bool = False,
+    ) -> None:
+        self.storage.init()
+
+        repo_list = repos if repos is not None else list_org_repos(org, self.client)
+        total = len(repo_list)
+        print(
+            f"Collecting {total} repo(s) for '{org}' "
+            f"({'resume mode' if resume else 'full run'})",
+            file=sys.stderr,
+        )
+
+        for idx, full_name in enumerate(repo_list, start=1):
+            parts = full_name.split("/", 1)
+            if len(parts) != 2:
+                print(
+                    f"[skip] Invalid repo name: {full_name!r}",
+                    file=sys.stderr,
+                )
+                continue
+            owner, repo = parts
+            print(
+                f"[{idx}/{total}] {full_name}",
+                file=sys.stderr,
+            )
+            self._collect_repo(owner, repo, full_name, resume=resume)
+
+    # ── Internal helpers ──────────────────────────────────────────────
+
+    def _collect_repo(
+        self,
+        owner: str,
+        repo: str,
+        full_name: str,
+        resume: bool,
+    ) -> None:
+        """Run all endpoints for a single repository."""
+        existing = self.storage.read(full_name) or RepoData()
+
+        for endpoint_cls in self.endpoints:
+            endpoint = endpoint_cls(self.client)
+            key = endpoint.name
+
+            if resume and getattr(existing, key, None) is not None:
+                print(
+                    f"  [resume] {key} already collected — skipping",
+                    file=sys.stderr,
+                )
+                continue
+
+            try:
+                result_model = endpoint.fetch(owner, repo)
+                self.storage.upsert(full_name, RepoData(**{key: result_model}))
+                # Refresh local copy so the next endpoint sees the updated state
+                existing = self.storage.read(full_name) or existing
+                print(f"  [ok] {key}", file=sys.stderr)
+            except Exception as exc:
+                print(f"  [error] {key}: {exc}", file=sys.stderr)
+                # Continue to the next endpoint — never abort the whole repo
+
+        # Stamp the collection timestamp
+        self.storage.upsert(
+            full_name,
+            RepoData(collected_at=datetime.now(timezone.utc).isoformat()),
+        )

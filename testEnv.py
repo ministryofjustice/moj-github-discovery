@@ -23,7 +23,7 @@ import subprocess
 import sys
 from typing import Dict, Tuple, Optional
 
-ORG = os.environ.get("GH_DIAG_ORG", "ministryofsound")  # override if needed
+ORG = os.environ.get("GH_DIAG_ORG", "ministryofjustice")  # override if needed
 
 
 def sha256_prefix(s: str, n: int = 10) -> str:
