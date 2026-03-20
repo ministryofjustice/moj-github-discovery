@@ -1,0 +1,49 @@
+{
+  "ignorePaths": ["dist/", "**/node_modules/**", "**/*.drawio", "**/*.svg", "**/package*.json", "**/*.xml", "**/*.csv"],
+  "language": "en",
+  "noConfigSearch": true,
+  "allowCompoundWords": true,
+  "words": [
+    "azuread",
+    "clientid",
+    "clippy",
+    "CREDS",
+    "Familiarise",
+    "golangci",
+    "govuk",
+    "hmpps",
+    "jgoz",
+    "ministryofsound",
+    "mojdt",
+    "myorg",
+    "nomis",
+    "noopener",
+    "noreferrer",
+    "openpyxl",
+    "sess",
+    "sonarqube",
+    "restr",
+    "pyyaml",
+    "xlink",
+    "GHAS",
+    "gmtime"
+  ],
+  "dictionaries": [
+    "en-gb", 
+    "companies", 
+    "softwareTerms", 
+    "misc", 
+    "lorem-ipsum", 
+    "typescript", 
+    "node", 
+    "bash", 
+    "npm"
+  ],
+  "languageSettings": [
+    {
+      "languageId": "commit-msg",
+      "ignoreRegExpList": ["/^#.*/gm"]
+    }
+  ],
+  "version": "0.2"
+}

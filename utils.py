@@ -3,7 +3,6 @@
 import json
 import os
 import sqlite3
-import sys
 import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -121,7 +120,12 @@ def _get_session() -> requests.Session:
     return _SESSION
 
 
-def gh_api(path: str, method: str = "GET", paginate: bool = False, params: Optional[List[str]] = None) -> Any:
+def gh_api(
+    path: str,
+    method: str = "GET",
+    paginate: bool = False,
+    params: Optional[List[str]] = None,
+) -> Any:
     """Invoke the GitHub API and return parsed JSON.
 
     ``path`` should be the request path (e.g. ``/repos/owner/name``).
@@ -180,10 +184,10 @@ def try_get(path: str) -> Tuple[Optional[Any], Optional[str]]:
 
 def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract fork source and template source information from repo data.
-    
+
     Args:
         repo_data: Repository metadata dict (from repo_info() or similar)
-    
+
     Returns:
         Dict with keys: is_fork, fork_source, is_generated_from_template, template_source
     """
@@ -193,29 +197,28 @@ def fork_and_template_info(repo_data: Dict[str, Any]) -> Dict[str, Any]:
         "is_generated_from_template": False,
         "template_source": None,
     }
-    
+
     # Check if this is a fork based on the boolean flag.
     is_fork = bool(repo_data.get("fork"))
     info["is_fork"] = is_fork
     if is_fork:
         parent = repo_data.get("parent") or {}
         info["fork_source"] = parent.get("full_name") or parent.get("name")
-    
+
     # Check if generated from a template
     if repo_data.get("template_repository"):
         info["is_generated_from_template"] = True
         template = repo_data.get("template_repository", {})
         info["template_source"] = template.get("full_name")
-    
-    return info
 
+    return info
 
 
 def _extract_link_rel(link_header: str, rel_name: str) -> Optional[str]:
     """Return URL for a given relation name from a GitHub Link header."""
     if not link_header:
         return None
-    for link_part in link_header.split(','):
+    for link_part in link_header.split(","):
         part = link_part.strip()
         if f'rel="{rel_name}"' not in part:
             continue
@@ -227,7 +230,9 @@ def _extract_link_rel(link_header: str, rel_name: str) -> Optional[str]:
     return None
 
 
-def _count_alerts_by_iteration(sess: requests.Session, initial_url: str, per_page: int = 100) -> int:
+def _count_alerts_by_iteration(
+    sess: requests.Session, initial_url: str, per_page: int = 100
+) -> int:
     """Count alerts by iterating pages when last-page parsing is unavailable."""
     sep = "&" if "?" in initial_url else "?"
     base_url = f"{initial_url}{sep}per_page={per_page}"
@@ -246,9 +251,11 @@ def _count_alerts_by_iteration(sess: requests.Session, initial_url: str, per_pag
     return total
 
 
-def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[Optional[int], Optional[str]]:
+def _count_alerts_efficient(
+    owner: str, repo: str, endpoint: str
+) -> Tuple[Optional[int], Optional[str]]:
     """Count alerts efficiently using Link header pagination without fetching all results.
-    
+
     Returns (count, error_kind) where error_kind is None on success, or one of
     {'403', '404', 'other'} on error. Makes one API call in the common case.
     """
@@ -256,13 +263,13 @@ def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[Optio
     base_url = "https://api.github.com"
     list_url = f"{base_url}/repos/{owner}/{repo}/{endpoint}?state=open"
     url = f"{list_url}&per_page=1"
-    
+
     try:
         resp = sess.get(url)
         resp.raise_for_status()
-        
+
         # Check Link header for pagination info.
-        link_header = resp.headers.get('link', '')
+        link_header = resp.headers.get("link", "")
         last_url = _extract_link_rel(link_header, "last")
         if last_url:
             try:
@@ -272,12 +279,12 @@ def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[Optio
             except (ValueError, TypeError):
                 # Fall back to iterative counting for correctness.
                 return _count_alerts_by_iteration(sess, list_url), None
-        
+
         # No "last" link means only 1 page or fewer results
         data = resp.json()
         count = len(data) if isinstance(data, list) else 0
         return count, None
-        
+
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code
         if status == 403:
@@ -290,34 +297,36 @@ def _count_alerts_efficient(owner: str, repo: str, endpoint: str) -> Tuple[Optio
         return None, "other"
 
 
-def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[Optional[int], Optional[str]]:
+def _count_alerts_dependabot(
+    owner: str, repo: str
+) -> Tuple[Optional[int], Optional[str]]:
     """Count Dependabot alerts using cursor-based pagination.
-    
+
     Dependabot uses cursor-based pagination (rel="next") instead of page-based.
     Fetch with per_page=100 and follow cursor links to get accurate count.
-    
+
     Returns (count, error_kind) where error_kind is None on success, or one of
     {'403', '404', 'other'} on error.
     """
     sess = _get_session()
     base_url = "https://api.github.com"
     url = f"{base_url}/repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100"
-    
+
     try:
         count = 0
         while url:
             resp = sess.get(url)
             resp.raise_for_status()
-            
+
             data = resp.json()
             if isinstance(data, list):
                 count += len(data)
-            
+
             # Check for next page in Link header.
             url = _extract_link_rel(resp.headers.get("link", ""), "next")
-        
+
         return count, None
-        
+
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code
         if status == 403:
@@ -328,7 +337,6 @@ def _count_alerts_dependabot(owner: str, repo: str) -> Tuple[Optional[int], Opti
             return None, "other"
     except Exception:
         return None, "other"
-
 
 
 def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
@@ -336,7 +344,7 @@ def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
 
     - Dependabot: Uses cursor-based pagination (per_page=100, follows rel="next")
     - Code Scanning & Secret Scanning: Use efficient page-based pagination (1 API call)
-    
+
     All three endpoints are queried in parallel.
     Results are stored in ``<name>_access``/``<name>_alerts`` keys.
     Errors are classified to distinguish forbidden vs not found.
@@ -376,8 +384,14 @@ def count_alerts(owner: str, repo: str) -> Dict[str, Any]:
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = []
         futures.append(executor.submit(_fetch_dependabot))
-        futures.append(executor.submit(_fetch_efficient, "code_scanning", "code-scanning/alerts"))
-        futures.append(executor.submit(_fetch_efficient, "secret_scanning", "secret-scanning/alerts"))
+        futures.append(
+            executor.submit(_fetch_efficient, "code_scanning", "code-scanning/alerts")
+        )
+        futures.append(
+            executor.submit(
+                _fetch_efficient, "secret_scanning", "secret-scanning/alerts"
+            )
+        )
         for fut in as_completed(futures):
             pass
 
@@ -399,7 +413,10 @@ def branch_protection(owner: str, repo: str, default_branch: str) -> Dict[str, A
         return {"default_branch_protected": False}
     if err == "403":
         # unlikely on this endpoint, but handle gracefully
-        return {"default_branch_protected": None, "branch_protection_access": "forbidden"}
+        return {
+            "default_branch_protected": None,
+            "branch_protection_access": "forbidden",
+        }
     if err is None:
         # data should be a dict with `protected` and optional `protection`.
         protected = False
@@ -438,12 +455,9 @@ def branch_protection(owner: str, repo: str, default_branch: str) -> Dict[str, A
         return result
     return {"default_branch_protected": None, "branch_protection_access": err}
 
+
 def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
-    CODEOWNERS_PATHS = [
-        "CODEOWNERS",
-        ".github/CODEOWNERS",
-        "docs/CODEOWNERS"
-    ]
+    CODEOWNERS_PATHS = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]
     sess = _get_session()
     base_url = "https://api.github.com"
     tree_url = f"{base_url}/repos/{owner}/{repo}/git/trees/{default_branch}"
@@ -453,12 +467,10 @@ def check_codeowners_exists(owner: str, repo: str, default_branch: str) -> dict:
     tree_paths = {item["path"] for item in resp.json().get("tree", [])}
 
     for path in CODEOWNERS_PATHS:
-
         if path in tree_paths:
-            print(f"CODEOWNERS found at {path}", file=sys.stderr)
             return {"present": True, "path": path}
-    print(f"CODEOWNERS not found", file=sys.stderr)
     return {"present": False, "path": None}
+
 
 def init_db(db_path: str, table_name: str = "audits") -> None:
     """Initialize SQLite database with a table."""
@@ -474,13 +486,15 @@ def init_db(db_path: str, table_name: str = "audits") -> None:
     conn.close()
 
 
-def save_to_db(db_path: str, full_name: str, data: Dict[str, Any], table_name: str = "audits") -> None:
+def save_to_db(
+    db_path: str, full_name: str, data: Dict[str, Any], table_name: str = "audits"
+) -> None:
     """Upsert data into SQLite database."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
         f"INSERT OR REPLACE INTO {table_name} (full_name, audit_json) VALUES (?, ?)",
-        (full_name, json.dumps(data))
+        (full_name, json.dumps(data)),
     )
     conn.commit()
     conn.close()
