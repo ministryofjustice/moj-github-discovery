@@ -90,9 +90,6 @@ def process_alerts(alerts, repo, kind):
         ttr = None
         if created and remediation_date:
             ttr = (remediation_date - created).days
-        with open(f"data_{kind}.json", "w") as f:
-            json.dump(a, f)
-            BREAK_NOW = True
 
         rows.append(
             {
