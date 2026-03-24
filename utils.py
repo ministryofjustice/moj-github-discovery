@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import time
+from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,7 +13,21 @@ import requests
 
 # module‑level globals used to cache the GitHub token and HTTP session
 _TOKEN: Optional[str] = None
+_TOKEN_EXPIRES_AT: Optional[float] = None
+_TOKEN_SOURCE: Optional[str] = None
 _SESSION: Optional[requests.Session] = None
+_APP_TOKEN_REFRESH_SKEW_SECONDS = 120
+
+
+def _parse_iso8601_to_epoch(value: Any) -> Optional[float]:
+    """Parse an ISO-8601 timestamp string to epoch seconds."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized).timestamp()
+    except ValueError:
+        return None
 
 
 def _read_github_app_private_key() -> Optional[str]:
@@ -39,7 +54,7 @@ def _resolve_github_app_installation_id(
     if not org_login:
         raise RuntimeError(
             "GitHub App auth requires GH_APP_INSTALLATION_ID (or GITHUB_APP_INSTALLATION_ID), "
-            "or GH_ORG/GITHUB_ORG to auto-resolve the installation."
+            "or GH_ORG/GITHUB_ORG/GITHUB_OWNER to auto-resolve the installation."
         )
 
     installation_accounts: List[str] = []
@@ -79,8 +94,8 @@ def _resolve_github_app_installation_id(
     )
 
 
-def _get_github_app_installation_token() -> Optional[str]:
-    """Return a GitHub App installation token when app env vars are configured."""
+def _get_github_app_installation_token() -> Optional[Tuple[str, Optional[float]]]:
+    """Return (token, expires_at_epoch) when GitHub App auth is configured."""
     app_id = os.getenv("GH_APP_ID") or os.getenv("GITHUB_APP_ID")
     if not app_id:
         return None
@@ -117,21 +132,22 @@ def _get_github_app_installation_token() -> Optional[str]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    sess = requests.Session()
-    installation_id = _resolve_github_app_installation_id(sess, headers)
-    token_resp = sess.post(
-        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-        headers=headers,
-        timeout=30,
-    )
-    token_resp.raise_for_status()
-    token_data = token_resp.json()
-    token = token_data.get("token")
-    if not token:
-        raise RuntimeError(
-            "GitHub App access token response did not include a token value."
+    with requests.Session() as sess:
+        installation_id = _resolve_github_app_installation_id(sess, headers)
+        token_resp = sess.post(
+            f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+            headers=headers,
+            timeout=30,
         )
-    return token
+        token_resp.raise_for_status()
+        token_data = token_resp.json()
+        token = token_data.get("token")
+        if not token:
+            raise RuntimeError(
+                "GitHub App access token response did not include a token value."
+            )
+        expires_at = _parse_iso8601_to_epoch(token_data.get("expires_at"))
+        return token, expires_at
 
 
 def _rate_limit_retry_delay(resp: requests.Response, attempt: int) -> int:
@@ -190,21 +206,34 @@ def _get_github_token() -> str:
     2. GitHub App installation token (when GitHub App env vars are set).
     3. GitHub CLI token from ``~/.config/gh/hosts.yml``.
 
-    The resolved value is cached in a module-level variable so repeated
-    calls are cheap.
+    Environment and GitHub CLI tokens are cached. GitHub App installation
+    tokens are cached and refreshed before expiry.
     """
-    global _TOKEN
+    global _TOKEN, _TOKEN_EXPIRES_AT, _TOKEN_SOURCE
     if _TOKEN:
-        return _TOKEN
+        if _TOKEN_SOURCE != "app":
+            return _TOKEN
+        if _TOKEN_EXPIRES_AT is not None and time.time() < (
+            _TOKEN_EXPIRES_AT - _APP_TOKEN_REFRESH_SKEW_SECONDS
+        ):
+            return _TOKEN
+        _TOKEN = None
+        _TOKEN_EXPIRES_AT = None
+        _TOKEN_SOURCE = None
 
     token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
     if token:
         _TOKEN = token
-        return token
+        _TOKEN_EXPIRES_AT = None
+        _TOKEN_SOURCE = "env"
+        return _TOKEN
 
-    app_token = _get_github_app_installation_token()
-    if app_token:
+    app_token_details = _get_github_app_installation_token()
+    if app_token_details:
+        app_token, app_token_expires_at = app_token_details
         _TOKEN = app_token
+        _TOKEN_EXPIRES_AT = app_token_expires_at
+        _TOKEN_SOURCE = "app"
         return app_token
 
     # gh CLI config fallback
@@ -219,6 +248,8 @@ def _get_github_token() -> str:
                     oauth_token = config["github.com"].get("oauth_token")
                     if oauth_token:
                         _TOKEN = oauth_token
+                        _TOKEN_EXPIRES_AT = None
+                        _TOKEN_SOURCE = "gh_cli"
                         return oauth_token
     except Exception:
         pass
@@ -236,16 +267,21 @@ def _get_session() -> requests.Session:
     speeds up multiple API calls in a row.
     """
     global _SESSION
-    if _SESSION is None:
-        token = _get_github_token()
-        sess = requests.Session()
-        sess.headers.update(
-            {
-                "Authorization": f"token {token}",
-                "Accept": "application/vnd.github.v3+json",
-            }
-        )
-        _SESSION = sess
+    token = _get_github_token()
+    expected_authorization = f"token {token}"
+    if _SESSION is not None:
+        current_authorization = _SESSION.headers.get("Authorization")
+        if current_authorization == expected_authorization:
+            return _SESSION
+
+    sess = requests.Session()
+    sess.headers.update(
+        {
+            "Authorization": expected_authorization,
+            "Accept": "application/vnd.github.v3+json",
+        }
+    )
+    _SESSION = sess
     return _SESSION
 
 

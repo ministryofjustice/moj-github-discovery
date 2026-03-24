@@ -22,7 +22,7 @@ Most of the prerequisites will require `homebrew` and the `brew` utility, this c
 - GitHub App credentials available for `Developer Experience GitHub Audit`
   - `GH_APP_ID` (or `GITHUB_APP_ID`)
   - `GH_APP_PRIVATE_KEY` (or `GITHUB_APP_PRIVATE_KEY`) with full PEM key content
-  - `GH_APP_INSTALLATION_ID` (or `GITHUB_APP_INSTALLATION_ID`) **or** `GH_ORG` / `GITHUB_ORG` for installation auto-discovery
+  - `GH_APP_INSTALLATION_ID` (or `GITHUB_APP_INSTALLATION_ID`) **or** `GH_ORG` / `GITHUB_ORG` / `GITHUB_OWNER` for installation auto-discovery
 - Note: If you are contributing to this repository, signed commits are required - guidance is available on how to do this via SSH or GPG keys here: [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 
 ### Environment Variables
