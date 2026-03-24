@@ -51,7 +51,7 @@ class TestTransformRegistry:
 
 
 class TestTimestampTransform:
-    def test_no_repo_meta_returns_unchanged(self):
+    def test_no_repo_details_returns_unchanged(self):
         t = TimestampTransform()
         data = RepoData()
         result = t.apply(data)
@@ -61,7 +61,7 @@ class TestTimestampTransform:
     def test_computes_days_since_push(self):
         t = TimestampTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 pushed_at="2020-01-01T00:00:00Z",
@@ -74,7 +74,7 @@ class TestTimestampTransform:
     def test_computes_age_days(self):
         t = TimestampTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 created_at="2020-01-01T00:00:00Z",
@@ -87,7 +87,7 @@ class TestTimestampTransform:
     def test_both_timestamps(self):
         t = TimestampTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 pushed_at="2024-01-01T00:00:00Z",
@@ -101,7 +101,7 @@ class TestTimestampTransform:
 
     def test_no_timestamps_returns_unchanged(self):
         t = TimestampTransform()
-        data = RepoData(repo_meta=RepoDetails(full_name="o/r", name="r"))
+        data = RepoData(repo_details=RepoDetails(full_name="o/r", name="r"))
         result = t.apply(data)
         assert result.days_since_push is None
         assert result.age_days is None
@@ -109,7 +109,7 @@ class TestTimestampTransform:
     def test_does_not_mutate_input(self):
         t = TimestampTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 pushed_at="2020-01-01T00:00:00Z",
@@ -177,14 +177,16 @@ class TestFlagTransform:
 
     def test_archived_flag(self):
         t = FlagTransform()
-        data = RepoData(repo_meta=RepoDetails(full_name="o/r", name="r", archived=True))
+        data = RepoData(
+            repo_details=RepoDetails(full_name="o/r", name="r", archived=True)
+        )
         result = t.apply(data)
         assert "archived" in result.flags
 
     def test_archived_with_open_issues(self):
         t = FlagTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 archived=True,
@@ -198,7 +200,7 @@ class TestFlagTransform:
     def test_archived_with_stars_and_forks(self):
         t = FlagTransform()
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 archived=True,
@@ -213,7 +215,7 @@ class TestFlagTransform:
     def test_archived_with_open_alerts(self):
         t = FlagTransform()
         data = RepoData(
-            repo_meta=RepoDetails(full_name="o/r", name="r", archived=True),
+            repo_details=RepoDetails(full_name="o/r", name="r", archived=True),
             alerts=AlertData(dependabot_alerts=2),
         )
         result = t.apply(data)
@@ -221,13 +223,15 @@ class TestFlagTransform:
 
     def test_fork_flag(self):
         t = FlagTransform()
-        data = RepoData(repo_meta=RepoDetails(full_name="o/r", name="r", fork=True))
+        data = RepoData(repo_details=RepoDetails(full_name="o/r", name="r", fork=True))
         result = t.apply(data)
         assert "fork" in result.flags
 
     def test_disabled_flag(self):
         t = FlagTransform()
-        data = RepoData(repo_meta=RepoDetails(full_name="o/r", name="r", disabled=True))
+        data = RepoData(
+            repo_details=RepoDetails(full_name="o/r", name="r", disabled=True)
+        )
         result = t.apply(data)
         assert "disabled" in result.flags
 
@@ -274,7 +278,7 @@ class TestFlagTransform:
     def test_multiple_flags_combined(self):
         t = FlagTransform()
         data = RepoData(
-            repo_meta=RepoDetails(full_name="o/r", name="r", fork=True),
+            repo_details=RepoDetails(full_name="o/r", name="r", fork=True),
             branch_protection=BranchProtection(default_branch_protected=False),
             codeowners=CodeownersData(present=False),
             days_since_push=500,
@@ -287,7 +291,9 @@ class TestFlagTransform:
 
     def test_does_not_mutate_input(self):
         t = FlagTransform()
-        data = RepoData(repo_meta=RepoDetails(full_name="o/r", name="r", archived=True))
+        data = RepoData(
+            repo_details=RepoDetails(full_name="o/r", name="r", archived=True)
+        )
         original_flags = data.flags.copy()
         t.apply(data)
         assert data.flags == original_flags
@@ -300,7 +306,7 @@ class TestTransformPipeline:
     def test_all_transforms_in_order(self):
         """Run all transforms in registry order on a rich RepoData."""
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 pushed_at="2020-01-01T00:00:00Z",

@@ -76,21 +76,21 @@ class TimestampTransform(BaseTransform):
         return "timestamp"
 
     def apply(self, data: RepoData) -> RepoData:
-        if data.repo_meta is None:
+        if data.repo_details is None:
             return data
 
         now = datetime.now(timezone.utc)
         updates: dict = {}
 
-        if data.repo_meta.pushed_at:
+        if data.repo_details.pushed_at:
             pushed = datetime.fromisoformat(
-                data.repo_meta.pushed_at.replace("Z", "+00:00")
+                data.repo_details.pushed_at.replace("Z", "+00:00")
             )
             updates["days_since_push"] = (now - pushed).days
 
-        if data.repo_meta.created_at:
+        if data.repo_details.created_at:
             created = datetime.fromisoformat(
-                data.repo_meta.created_at.replace("Z", "+00:00")
+                data.repo_details.created_at.replace("Z", "+00:00")
             )
             updates["age_days"] = (now - created).days
 
@@ -150,7 +150,7 @@ class FlagTransform(BaseTransform):
 
     def apply(self, data: RepoData) -> RepoData:
         flags: list[str] = []
-        meta = data.repo_meta
+        meta = data.repo_details
 
         if meta:
             if meta.archived:

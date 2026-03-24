@@ -250,8 +250,8 @@ class TestRepoCollectorIntegration:
 
         result = storage.read(TEST_FULL_NAME)
         assert result is not None
-        assert result.repo_meta is not None
-        assert result.repo_meta.full_name == TEST_FULL_NAME
+        assert result.repo_details is not None
+        assert result.repo_details.full_name == TEST_FULL_NAME
         assert result.community is not None
         assert result.collected_at is not None
 

@@ -145,7 +145,7 @@ class TestRepoDetailsEndpoint:
             }
         )
         ep = RepoDetailsEndpoint(client)
-        assert ep.name == "repo_meta"
+        assert ep.name == "repo_details"
         result = ep.fetch("org", "repo")
         assert isinstance(result, RepoDetails)
         assert result.full_name == "org/repo"

@@ -99,7 +99,7 @@ class TestLoadFieldsConfig:
         yaml_file = tmp_path / "fields.yaml"
         yaml_file.write_text(
             "fields:\n"
-            "  - source: repo_meta.name\n"
+            "  - source: repo_details.name\n"
             "    column: Name\n"
             "    type: string\n"
             "  - source: alerts.dependabot_alerts\n"
@@ -110,7 +110,7 @@ class TestLoadFieldsConfig:
         config = load_fields_config(yaml_file)
         assert isinstance(config, FieldsConfig)
         assert len(config.fields) == 2
-        assert config.fields[0].source == "repo_meta.name"
+        assert config.fields[0].source == "repo_details.name"
         assert config.fields[1].default == 0
 
     def test_missing_file_raises(self, tmp_path):
@@ -134,7 +134,7 @@ class TestLoadFieldsConfig:
 class TestApplyTransforms:
     def test_applies_in_order(self):
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="o/r",
                 name="r",
                 pushed_at="2020-01-01T00:00:00Z",
@@ -168,7 +168,9 @@ class TestBuildDataframe:
         return FieldsConfig(
             fields=[
                 FieldDefinition(
-                    source="repo_meta.full_name", column="Repo", type=FieldType.string
+                    source="repo_details.full_name",
+                    column="Repo",
+                    type=FieldType.string,
                 ),
                 FieldDefinition(
                     source="alerts.dependabot_alerts",
@@ -189,7 +191,7 @@ class TestBuildDataframe:
         storage.upsert(
             "org/repo",
             RepoData(
-                repo_meta=RepoDetails(full_name="org/repo", name="repo"),
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
                 alerts=AlertData(dependabot_alerts=5),
             ),
         )
@@ -219,7 +221,7 @@ class TestBuildDataframe:
         storage.upsert(
             "org/repo",
             RepoData(
-                repo_meta=RepoDetails(
+                repo_details=RepoDetails(
                     full_name="org/repo",
                     name="repo",
                     pushed_at="2020-01-01T00:00:00Z",
@@ -235,7 +237,9 @@ class TestBuildDataframe:
             storage.upsert(
                 f"org/repo-{i}",
                 RepoData(
-                    repo_meta=RepoDetails(full_name=f"org/repo-{i}", name=f"repo-{i}"),
+                    repo_details=RepoDetails(
+                        full_name=f"org/repo-{i}", name=f"repo-{i}"
+                    ),
                 ),
             )
         df = build_dataframe(storage, self._simple_config(), transforms=[])
@@ -260,14 +264,14 @@ class TestCsvCompiler:
         storage.upsert(
             "org/repo",
             RepoData(
-                repo_meta=RepoDetails(full_name="org/repo", name="repo"),
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
                 alerts=AlertData(dependabot_alerts=2),
             ),
         )
         config = FieldsConfig(
             fields=[
                 FieldDefinition(
-                    source="repo_meta.name", column="Name", type=FieldType.string
+                    source="repo_details.name", column="Name", type=FieldType.string
                 ),
                 FieldDefinition(
                     source="alerts.dependabot_alerts",
@@ -302,13 +306,13 @@ class TestExcelCompiler:
         storage.upsert(
             "org/repo",
             RepoData(
-                repo_meta=RepoDetails(full_name="org/repo", name="repo"),
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
             ),
         )
         config = FieldsConfig(
             fields=[
                 FieldDefinition(
-                    source="repo_meta.name", column="Name", type=FieldType.string
+                    source="repo_details.name", column="Name", type=FieldType.string
                 ),
             ]
         )

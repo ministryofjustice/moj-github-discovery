@@ -53,9 +53,9 @@ class TestFieldType:
 class TestFieldDefinition:
     def test_minimal(self):
         fd = FieldDefinition(
-            source="repo_meta.name", column="Name", type=FieldType.string
+            source="repo_details.name", column="Name", type=FieldType.string
         )
-        assert fd.source == "repo_meta.name"
+        assert fd.source == "repo_details.name"
         assert fd.default is None
 
     def test_with_default(self):
@@ -279,7 +279,7 @@ class TestRepoData:
     def test_all_fields_optional(self):
         """An empty RepoData should be valid."""
         rd = RepoData()
-        assert rd.repo_meta is None
+        assert rd.repo_details is None
         assert rd.alerts is None
         assert rd.collected_at is None
         assert rd.flags == []
@@ -287,7 +287,7 @@ class TestRepoData:
     def test_partial_construction(self):
         rd = RepoData(alerts=AlertData(dependabot_alerts=5))
         assert rd.alerts.dependabot_alerts == 5
-        assert rd.repo_meta is None
+        assert rd.repo_details is None
 
     def test_model_copy_merge(self):
         """model_copy + JSON round-trip should merge fields without discarding others.
@@ -314,18 +314,18 @@ class TestRepoData:
 
     def test_json_roundtrip(self):
         rd = RepoData(
-            repo_meta=RepoDetails(full_name="org/repo", name="repo"),
+            repo_details=RepoDetails(full_name="org/repo", name="repo"),
             alerts=AlertData(dependabot_alerts=1),
             flags=["stale"],
         )
         json_str = rd.model_dump_json()
         restored = RepoData.model_validate_json(json_str)
-        assert restored.repo_meta.full_name == "org/repo"
+        assert restored.repo_details.full_name == "org/repo"
         assert restored.alerts.dependabot_alerts == 1
         assert restored.flags == ["stale"]
 
     def test_model_dump_exclude_none(self):
         rd = RepoData(alerts=AlertData())
         dumped = rd.model_dump(exclude_none=True)
-        assert "repo_meta" not in dumped
+        assert "repo_details" not in dumped
         assert "alerts" in dumped

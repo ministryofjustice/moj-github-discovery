@@ -93,7 +93,7 @@ class TestSqliteStorageReadAll:
         storage.upsert(
             "org/repo",
             RepoData(
-                repo_meta=RepoDetails(full_name="org/repo", name="repo"),
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
                 alerts=AlertData(dependabot_alerts=1),
             ),
         )
@@ -101,7 +101,7 @@ class TestSqliteStorageReadAll:
         assert len(rows) == 1
         name, data = rows[0]
         assert name == "org/repo"
-        assert data.repo_meta.full_name == "org/repo"
+        assert data.repo_details.full_name == "org/repo"
         assert data.alerts.dependabot_alerts == 1
 
 
@@ -121,7 +121,7 @@ class TestSqliteStorageJsonRoundtrip:
     def test_complex_data_roundtrip(self, storage):
         """All nested Pydantic models should survive serialization."""
         data = RepoData(
-            repo_meta=RepoDetails(
+            repo_details=RepoDetails(
                 full_name="org/repo",
                 name="repo",
                 language="Python",
@@ -138,8 +138,8 @@ class TestSqliteStorageJsonRoundtrip:
         storage.upsert("org/repo", data)
 
         result = storage.read("org/repo")
-        assert result.repo_meta.language == "Python"
-        assert result.repo_meta.private is True
+        assert result.repo_details.language == "Python"
+        assert result.repo_details.private is True
         assert result.alerts.dependabot_alerts == 3
         assert result.flags == ["stale", "no_codeowners"]
         assert result.collected_at == "2024-06-15T12:00:00Z"

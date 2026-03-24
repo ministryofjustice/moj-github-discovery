@@ -117,7 +117,7 @@ def sample_repo_details() -> RepoDetails:
 @pytest.fixture
 def sample_repo_data(sample_repo_details) -> RepoData:
     return RepoData(
-        repo_meta=sample_repo_details,
+        repo_details=sample_repo_details,
         alerts=AlertData(dependabot_alerts=2, code_scanning_alerts=0),
         branch_protection=BranchProtection(default_branch_protected=True),
         codeowners=CodeownersData(present=True, path=".github/CODEOWNERS"),

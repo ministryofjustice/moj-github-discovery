@@ -172,7 +172,7 @@ class RepoDetailsEndpoint(BaseEndpoint):
 
     @property
     def name(self) -> str:
-        return "repo_meta"
+        return "repo_details"
 
     def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")

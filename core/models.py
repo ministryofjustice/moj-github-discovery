@@ -46,7 +46,7 @@ class FieldDefinition(BaseModel):
     """A single column entry in ``fields.yaml``."""
 
     source: str
-    """Dot-path into the ``RepoData`` JSON, e.g. ``repo_meta.language``."""
+    """Dot-path into the ``RepoData`` JSON, e.g. ``repo_details.language``."""
 
     column: str
     """Human-readable column header in the output file."""
@@ -236,7 +236,7 @@ class RepoData(BaseModel):
     """
 
     # Endpoint-populated fields
-    repo_meta: Optional[RepoDetails] = None
+    repo_details: Optional[RepoDetails] = None
     alerts: Optional[AlertData] = None
     branch_protection: Optional[BranchProtection] = None
     community: Optional[CommunityProfile] = None
