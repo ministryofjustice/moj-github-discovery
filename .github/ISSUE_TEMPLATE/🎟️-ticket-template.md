@@ -32,6 +32,7 @@ assignees: ''
 ## ✅ Definition of Done
 <!-- What conditions must be met before this story is considered complete -->
 
+- [ ] Document work completed in Developer Experience Team SharePoint
 - [ ] 
 
 ## ❓ Additional Information
