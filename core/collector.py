@@ -28,7 +28,7 @@ See ``CONTRIBUTING.md`` for a walkthrough.
 Migration notes
 ---------------
 Replaces the ``process_single()`` / ``main()`` logic in ``list_repos.py``,
-``audit_repo.py``, and ``archive_repos.py``.
+the legacy single-repo audit script, and ``archive_repos.py``.
 """
 
 from __future__ import annotations

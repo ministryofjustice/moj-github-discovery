@@ -21,7 +21,7 @@ Migration notes
 ---------------
 Consolidates endpoint logic from ``utils.py`` (``count_alerts``,
 ``branch_protection``, ``check_codeowners_exists``, ``fork_and_template_info``),
-``audit_repo.py`` (``repo_info``, ``community_profile``, ``list_workflows``,
+the legacy single-repo audit script (``repo_info``, ``community_profile``, ``list_workflows``,
 ``analyze_workflows``), ``archive_repos.py`` (``_search_references``), and
 ``org_security_posture.py`` (all org-level functions).
 """

@@ -13,13 +13,24 @@ To run with a custom database path:
 
 import json
 import os
-import sqlite3
-import subprocess
 import sys
 
 import dash
 from dash import dcc, html, callback, Input, Output, State, ALL, callback_context
 import pandas as pd
+
+from core.collector import RepoCollector
+from core.github_api import (
+    AlertsEndpoint,
+    BranchProtectionEndpoint,
+    CodeownersEndpoint,
+    CommunityProfileEndpoint,
+    ForkTemplateEndpoint,
+    RepoDetailsEndpoint,
+    WorkflowsEndpoint,
+)
+from core.models import RepoData
+from core.storage import SqliteStorage
 
 # Parse arguments
 db_path = "repo_audit.db"
@@ -40,89 +51,181 @@ if not os.path.exists(db_path):
 print(f"Loading data from {db_path}")
 
 
+def _get_storage() -> SqliteStorage:
+    storage = SqliteStorage(db_path)
+    storage.init()
+    return storage
+
+
 def load_data():
-    """Load repo audit data from SQLite."""
-    conn = sqlite3.connect(db_path)
-    query = "SELECT full_name, audit_json FROM repo_rows"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-
-    # Parse JSON - repo_rows has flat structure (not nested)
+    """Load repo summary data from core storage."""
+    storage = _get_storage()
     rows = []
-    for _, row in df.iterrows():
-        try:
-            data = json.loads(row["audit_json"])
-
-            rows.append(
-                {
-                    "repo": data.get("full_name", row["full_name"]),
-                    "private": data.get("private"),
-                    "archived": data.get("archived"),
-                    "fork": data.get("fork"),
-                    "language": data.get("language"),
-                    "stars": data.get("stargazers", 0),
-                    "open_issues": data.get("open_issues", 0),
-                    "dependabot_alerts": data.get("dependabot_alerts"),
-                    "secret_alerts": data.get("secret_scanning_alerts"),
-                    "code_scanning_alerts": data.get("code_scanning_alerts"),
-                    "branch_protected": data.get("default_branch_protected"),
-                    "codeowners": data.get("codeowners"),
-                    "flags": data.get("flags", ""),
-                    "pushed_at": data.get("pushed_at", ""),
-                }
-            )
-        except Exception as e:
-            print(f"Error parsing {row['full_name']}: {e}")
-            continue
+    for full_name, data in storage.read_all():
+        repo = data.repo_details
+        alerts = data.alerts
+        branch = data.branch_protection
+        codeowners = data.codeowners
+        rows.append(
+            {
+                "repo": full_name,
+                "private": repo.private if repo else None,
+                "archived": repo.archived if repo else None,
+                "fork": repo.fork if repo else None,
+                "language": repo.language if repo else None,
+                "stars": repo.stargazers_count if repo else 0,
+                "open_issues": repo.open_issues_count if repo else 0,
+                "dependabot_alerts": alerts.dependabot_alerts if alerts else None,
+                "secret_alerts": alerts.secret_scanning_alerts if alerts else None,
+                "code_scanning_alerts": alerts.code_scanning_alerts if alerts else None,
+                "branch_protected": (
+                    branch.default_branch_protected if branch else None
+                ),
+                "codeowners": codeowners.present if codeowners else None,
+                "flags": ", ".join(data.flags) if data.flags else "",
+                "pushed_at": repo.pushed_at if repo else "",
+            }
+        )
 
     return pd.DataFrame(rows)
 
 
-def load_audit_data(full_name: str) -> dict:
-    """Load detailed audit data from the audits table."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT audit_json FROM audits WHERE full_name = ?", (full_name,))
-    row = cursor.fetchone()
-    conn.close()
+def _load_repo_audit_result(full_name: str) -> dict | None:
+    storage = _get_storage()
+    repo_data = storage.read(full_name)
+    if repo_data is None:
+        return None
+    return _repo_data_to_audit_result(repo_data)
 
-    if row:
-        try:
-            return json.loads(row[0])
-        except Exception as e:
-            print(f"There was a problem loading audit data: {e}")
-            return None
-    return None
+
+def _build_flags_from_repo_data(data: RepoData) -> list[str]:
+    repo = data.repo_details
+    alerts = data.alerts
+    branch = data.branch_protection
+    community = data.community
+    workflows = data.workflows
+    fork_template = data.fork_template
+
+    if repo is None:
+        return []
+
+    flags: list[str] = []
+    if repo.archived:
+        flags.append("archived")
+    if fork_template and fork_template.is_fork:
+        flags.append(
+            f"fork_of_{fork_template.fork_source}"
+            if fork_template.fork_source
+            else "fork"
+        )
+    if fork_template and fork_template.is_generated_from_template:
+        flags.append(
+            f"generated_from_template_{fork_template.template_source}"
+            if fork_template.template_source
+            else "generated_from_template"
+        )
+    if repo.license is None:
+        flags.append("no_license")
+    if not repo.private and branch and not branch.default_branch_protected:
+        flags.append("public_unprotected_default_branch")
+    if alerts and alerts.dependabot_alerts > 0:
+        flags.append("dependabot_alerts_present")
+    if alerts and alerts.secret_scanning_alerts > 0:
+        flags.append("secret_alerts_present")
+    if alerts and alerts.code_scanning_alerts > 0:
+        flags.append("code_scanning_alerts_present")
+
+    community_files = (community.files if community else None) or {}
+    if not community_files.get("security_policy"):
+        flags.append("no_security_policy")
+    if not community_files.get("code_of_conduct"):
+        flags.append("no_code_of_conduct")
+
+    workflow_analysis = workflows.analysis if workflows and workflows.analysis else None
+    if not workflows or workflows.count == 0:
+        flags.append("no_actions_workflows")
+    else:
+        if not (workflow_analysis and workflow_analysis.has_tests):
+            flags.append("no_detected_tests")
+        if not (workflow_analysis and workflow_analysis.has_linting):
+            flags.append("no_detected_linting")
+
+    return flags
+
+
+def _repo_data_to_audit_result(data: RepoData) -> dict:
+    repo = data.repo_details.model_dump() if data.repo_details else {}
+    alerts = data.alerts.model_dump() if data.alerts else {}
+    branch_protection = (
+        data.branch_protection.model_dump() if data.branch_protection else {}
+    )
+    community = data.community.model_dump() if data.community else {}
+    codeowners = data.codeowners.model_dump() if data.codeowners else {}
+    workflows = data.workflows
+    fork_template = data.fork_template.model_dump() if data.fork_template else {}
+
+    workflow_analysis = {}
+    workflow_payload = {"count": 0, "list": []}
+    if workflows:
+        workflow_payload = {
+            "count": workflows.count,
+            "list": workflows.workflows,
+        }
+        if workflows.analysis:
+            workflow_analysis = workflows.analysis.model_dump()
+
+    flags = _build_flags_from_repo_data(data)
+
+    return {
+        "repo": repo,
+        "alerts": alerts,
+        "branch_protection": branch_protection,
+        "community": community,
+        "codeowners": codeowners,
+        "workflows": workflow_payload,
+        "workflow_analysis": workflow_analysis,
+        "fork_and_template": fork_template,
+        "flags": flags,
+    }
 
 
 def run_audit(full_name: str) -> dict:
-    """Run audit_repo.py for the given repository."""
+    """Run a single-repo audit via RepoCollector and map it for the dashboard."""
     try:
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "audit_repo.py"
-        )
-        result = subprocess.run(
-            [sys.executable, script_path, full_name, "--db", db_path],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        owner, repo = full_name.split("/", 1)
+    except ValueError:
+        return {"error": f"Invalid repository name: {full_name!r}"}
 
-        if result.returncode == 0:
-            # Extract JSON from stdout (last line should be the JSON)
-            lines = result.stdout.strip().split("\n")
-            for line in reversed(lines):
-                if line.strip().startswith("{"):
-                    try:
-                        return json.loads(line)
-                    except json.JSONDecodeError as e:
-                        return {"error": f"Invalid JSON from audit: {str(e)}"}
-            return {"error": "No JSON output found from audit script"}
-        else:
-            stderr_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            return {"error": f"Audit script failed: {stderr_msg}"}
-    except subprocess.TimeoutExpired:
-        return {"error": "Audit timed out (exceeded 120 seconds)"}
+    try:
+        storage = _get_storage()
+        collector = RepoCollector(
+            storage=storage,
+            endpoints=[
+                RepoDetailsEndpoint,
+                AlertsEndpoint,
+                CommunityProfileEndpoint,
+                CodeownersEndpoint,
+                ForkTemplateEndpoint,
+                WorkflowsEndpoint,
+            ],
+        )
+        collector.collect(owner, repos=[full_name], resume=False)
+
+        repo_data = storage.read(full_name)
+        if repo_data is None:
+            return {"error": f"No collected data found for {full_name}"}
+
+        if repo_data.repo_details is not None:
+            branch = BranchProtectionEndpoint(collector.client).fetch(
+                owner,
+                repo,
+                repo_data.repo_details,
+            )
+            storage.upsert(full_name, RepoData(branch_protection=branch))
+            repo_data = storage.read(full_name) or repo_data
+
+        audit_result = _repo_data_to_audit_result(repo_data)
+        return audit_result
     except Exception as e:
         return {"error": f"Failed to run audit: {str(e)}"}
 
@@ -724,8 +827,8 @@ def update_detail_panel(selected_repo, audit_data):
                 audit_data = None
 
     if not audit_data:
-        # Load audit data from database
-        audit_data = load_audit_data(selected_repo)
+        # Load audit data from core storage
+        audit_data = _load_repo_audit_result(selected_repo)
 
     if audit_data:
         content = format_audit_detail(audit_data)
