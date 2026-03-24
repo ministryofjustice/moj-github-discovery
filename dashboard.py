@@ -29,7 +29,7 @@ from core.github_api import (
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
 )
-from core.models import RepoData
+from core.presenters import repo_data_to_audit_result, repo_data_to_dashboard_row
 from core.storage import SqliteStorage
 
 # Parse arguments
@@ -62,30 +62,7 @@ def load_data():
     storage = _get_storage()
     rows = []
     for full_name, data in storage.read_all():
-        repo = data.repo_details
-        alerts = data.alerts
-        branch = data.branch_protection
-        codeowners = data.codeowners
-        rows.append(
-            {
-                "repo": full_name,
-                "private": repo.private if repo else None,
-                "archived": repo.archived if repo else None,
-                "fork": repo.fork if repo else None,
-                "language": repo.language if repo else None,
-                "stars": repo.stargazers_count if repo else 0,
-                "open_issues": repo.open_issues_count if repo else 0,
-                "dependabot_alerts": alerts.dependabot_alerts if alerts else None,
-                "secret_alerts": alerts.secret_scanning_alerts if alerts else None,
-                "code_scanning_alerts": alerts.code_scanning_alerts if alerts else None,
-                "branch_protected": (
-                    branch.default_branch_protected if branch else None
-                ),
-                "codeowners": codeowners.present if codeowners else None,
-                "flags": ", ".join(data.flags) if data.flags else "",
-                "pushed_at": repo.pushed_at if repo else "",
-            }
-        )
+        rows.append(repo_data_to_dashboard_row(full_name, data))
 
     return pd.DataFrame(rows)
 
@@ -95,98 +72,7 @@ def _load_repo_audit_result(full_name: str) -> dict | None:
     repo_data = storage.read(full_name)
     if repo_data is None:
         return None
-    return _repo_data_to_audit_result(repo_data)
-
-
-def _build_flags_from_repo_data(data: RepoData) -> list[str]:
-    repo = data.repo_details
-    alerts = data.alerts
-    branch = data.branch_protection
-    community = data.community
-    workflows = data.workflows
-    fork_template = data.fork_template
-
-    if repo is None:
-        return []
-
-    flags: list[str] = []
-    if repo.archived:
-        flags.append("archived")
-    if fork_template and fork_template.is_fork:
-        flags.append(
-            f"fork_of_{fork_template.fork_source}"
-            if fork_template.fork_source
-            else "fork"
-        )
-    if fork_template and fork_template.is_generated_from_template:
-        flags.append(
-            f"generated_from_template_{fork_template.template_source}"
-            if fork_template.template_source
-            else "generated_from_template"
-        )
-    if repo.license is None:
-        flags.append("no_license")
-    if not repo.private and branch and not branch.default_branch_protected:
-        flags.append("public_unprotected_default_branch")
-    if alerts and alerts.dependabot_alerts > 0:
-        flags.append("dependabot_alerts_present")
-    if alerts and alerts.secret_scanning_alerts > 0:
-        flags.append("secret_alerts_present")
-    if alerts and alerts.code_scanning_alerts > 0:
-        flags.append("code_scanning_alerts_present")
-
-    community_files = (community.files if community else None) or {}
-    if not community_files.get("security_policy"):
-        flags.append("no_security_policy")
-    if not community_files.get("code_of_conduct"):
-        flags.append("no_code_of_conduct")
-
-    workflow_analysis = workflows.analysis if workflows and workflows.analysis else None
-    if not workflows or workflows.count == 0:
-        flags.append("no_actions_workflows")
-    else:
-        if not (workflow_analysis and workflow_analysis.has_tests):
-            flags.append("no_detected_tests")
-        if not (workflow_analysis and workflow_analysis.has_linting):
-            flags.append("no_detected_linting")
-
-    return flags
-
-
-def _repo_data_to_audit_result(data: RepoData) -> dict:
-    repo = data.repo_details.model_dump() if data.repo_details else {}
-    alerts = data.alerts.model_dump() if data.alerts else {}
-    branch_protection = (
-        data.branch_protection.model_dump() if data.branch_protection else {}
-    )
-    community = data.community.model_dump() if data.community else {}
-    codeowners = data.codeowners.model_dump() if data.codeowners else {}
-    workflows = data.workflows
-    fork_template = data.fork_template.model_dump() if data.fork_template else {}
-
-    workflow_analysis = {}
-    workflow_payload = {"count": 0, "list": []}
-    if workflows:
-        workflow_payload = {
-            "count": workflows.count,
-            "list": workflows.workflows,
-        }
-        if workflows.analysis:
-            workflow_analysis = workflows.analysis.model_dump()
-
-    flags = _build_flags_from_repo_data(data)
-
-    return {
-        "repo": repo,
-        "alerts": alerts,
-        "branch_protection": branch_protection,
-        "community": community,
-        "codeowners": codeowners,
-        "workflows": workflow_payload,
-        "workflow_analysis": workflow_analysis,
-        "fork_and_template": fork_template,
-        "flags": flags,
-    }
+    return repo_data_to_audit_result(repo_data)
 
 
 def run_audit(full_name: str) -> dict:
@@ -202,6 +88,7 @@ def run_audit(full_name: str) -> dict:
             storage=storage,
             endpoints=[
                 RepoDetailsEndpoint,
+                BranchProtectionEndpoint,
                 AlertsEndpoint,
                 CommunityProfileEndpoint,
                 CodeownersEndpoint,
@@ -215,16 +102,7 @@ def run_audit(full_name: str) -> dict:
         if repo_data is None:
             return {"error": f"No collected data found for {full_name}"}
 
-        if repo_data.repo_details is not None:
-            branch = BranchProtectionEndpoint(collector.client).fetch(
-                owner,
-                repo,
-                repo_data.repo_details,
-            )
-            storage.upsert(full_name, RepoData(branch_protection=branch))
-            repo_data = storage.read(full_name) or repo_data
-
-        audit_result = _repo_data_to_audit_result(repo_data)
+        audit_result = repo_data_to_audit_result(repo_data)
         return audit_result
     except Exception as e:
         return {"error": f"Failed to run audit: {str(e)}"}

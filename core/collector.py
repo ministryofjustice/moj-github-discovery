@@ -33,6 +33,7 @@ the legacy single-repo audit script, and ``archive_repos.py``.
 
 from __future__ import annotations
 
+import inspect
 import sys
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -162,6 +163,23 @@ class RepoCollector(BaseCollector):
 
     # ── Internal helpers ──────────────────────────────────────────────
 
+    def _build_fetch_kwargs(
+        self,
+        endpoint: BaseEndpoint,
+        existing: RepoData,
+    ) -> dict[str, object]:
+        """Map endpoint fetch kwargs from fields already present in ``RepoData``.
+
+        Any fetch parameter beyond ``owner`` and ``repo`` that matches a
+        ``RepoData`` field name is passed through (e.g. ``repo_details``).
+        """
+        kwargs: dict[str, object] = {}
+        params = list(inspect.signature(endpoint.fetch).parameters.values())
+        for param in params[2:]:
+            if hasattr(existing, param.name):
+                kwargs[param.name] = getattr(existing, param.name)
+        return kwargs
+
     def _collect_repo(
         self,
         owner: str,
@@ -184,7 +202,8 @@ class RepoCollector(BaseCollector):
                 continue
 
             try:
-                result_model = endpoint.fetch(owner, repo)
+                fetch_kwargs = self._build_fetch_kwargs(endpoint, existing)
+                result_model = endpoint.fetch(owner, repo, **fetch_kwargs)
                 self.storage.upsert(full_name, RepoData(**{key: result_model}))
                 # Refresh local copy so the next endpoint sees the updated state
                 # TODO: This is a bit clunky — ideally the storage layer would handle merging

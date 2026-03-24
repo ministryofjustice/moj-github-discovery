@@ -11,7 +11,12 @@ from core.collector import (
     RepoCollector,
     RepoListCollector,
 )
-from core.github_api import BaseEndpoint, BaseOrgEndpoint
+from core.github_api import (
+    BaseEndpoint,
+    BaseOrgEndpoint,
+    BranchProtectionEndpoint,
+    RepoDetailsEndpoint,
+)
 from core.models import AlertData, CodeownersData, OrgMembersData, RepoData
 from pydantic import BaseModel
 from tests.conftest import MockHttpClient, MockStorage
@@ -36,6 +41,15 @@ class _FakeCodeownersEndpoint(BaseEndpoint):
 
     def fetch(self, owner: str, repo: str) -> CodeownersData:
         return CodeownersData(present=True, path="CODEOWNERS")
+
+
+class _RepoDetailsAwareAlertEndpoint(BaseEndpoint):
+    @property
+    def name(self) -> str:
+        return "alerts"
+
+    def fetch(self, owner: str, repo: str, repo_details: object | None) -> AlertData:
+        return AlertData(dependabot_alerts=1 if repo_details else 0)
 
 
 class _FailingEndpoint(BaseEndpoint):
@@ -195,6 +209,63 @@ class TestRepoCollector:
         assert result.collected_at is not None
         # Should be an ISO-8601 string
         assert "T" in result.collected_at
+
+    def test_branch_protection_reuses_collected_repo_details(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/repo": {
+                    "full_name": "org/repo",
+                    "name": "repo",
+                    "default_branch": "develop",
+                },
+                "/repos/org/repo/branches/develop": {
+                    "protected": True,
+                    "protection": {},
+                },
+            }
+        )
+        storage = MockStorage()
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[RepoDetailsEndpoint, BranchProtectionEndpoint],
+        )
+
+        collector.collect("org", repos=["org/repo"])
+
+        repo_calls = [
+            path for method, path in client.calls if path == "/repos/org/repo"
+        ]
+        assert len(repo_calls) == 1
+
+        result = storage.read("org/repo")
+        assert result is not None
+        assert result.branch_protection is not None
+        assert result.branch_protection.default_branch_protected is True
+
+    def test_collector_injects_repo_details_for_other_endpoints(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/repo": {
+                    "full_name": "org/repo",
+                    "name": "repo",
+                    "default_branch": "main",
+                },
+            }
+        )
+        storage = MockStorage()
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[RepoDetailsEndpoint, _RepoDetailsAwareAlertEndpoint],
+        )
+
+        collector.collect("org", repos=["org/repo"])
+
+        result = storage.read("org/repo")
+        assert result is not None
+        assert result.alerts is not None
+        assert result.alerts.dependabot_alerts == 1
 
 
 # ── OrgEndpointCollector ──────────────────────────────────────────────

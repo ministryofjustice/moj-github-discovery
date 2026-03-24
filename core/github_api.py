@@ -220,7 +220,10 @@ class BranchProtectionEndpoint(BaseEndpoint):
         return "branch_protection"
 
     def fetch(
-        self, owner: str, repo: str, repo_details: RepoDetails
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
     ) -> BranchProtection:
         try:
             default_branch = repo_details.default_branch if repo_details else "main"
