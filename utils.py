@@ -178,10 +178,14 @@ def _request_with_backoff(
 def _get_github_token() -> str:
     """Return a GitHub token, caching the result.
 
-    Tokens are first looked up in the environment variable
-    ``GITHUB_TOKEN`` (or ``GH_TOKEN``); if absent we fall back to the
-    GitHub CLI configuration file.  The value is cached in a module-level
-    variable so repeated calls are cheap.
+    Resolution order:
+
+    1. ``GITHUB_TOKEN`` or ``GH_TOKEN`` from environment variables.
+    2. GitHub App installation token (when GitHub App env vars are set).
+    3. GitHub CLI token from ``~/.config/gh/hosts.yml``.
+
+    The resolved value is cached in a module-level variable so repeated
+    calls are cheap.
     """
     global _TOKEN
     if _TOKEN:
