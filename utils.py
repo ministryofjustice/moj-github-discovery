@@ -15,6 +15,119 @@ _TOKEN: Optional[str] = None
 _SESSION: Optional[requests.Session] = None
 
 
+def _read_github_app_private_key() -> Optional[str]:
+    """Return GitHub App private key from environment variable content."""
+    key_value = os.getenv("GH_APP_PRIVATE_KEY") or os.getenv("GITHUB_APP_PRIVATE_KEY")
+    if key_value:
+        return key_value.replace("\\n", "\n")
+    return None
+
+
+def _resolve_github_app_installation_id(
+    sess: requests.Session, headers: Dict[str, str]
+) -> str:
+    """Resolve GitHub App installation ID from env or org name."""
+    installation_id = os.getenv("GH_APP_INSTALLATION_ID") or os.getenv(
+        "GITHUB_APP_INSTALLATION_ID"
+    )
+    if installation_id:
+        return installation_id
+
+    org_login = (
+        os.getenv("GH_ORG")
+        or os.getenv("GITHUB_ORG")
+        or os.getenv("GITHUB_OWNER")
+    )
+    if not org_login:
+        raise RuntimeError(
+            "GitHub App auth requires GH_APP_INSTALLATION_ID (or GITHUB_APP_INSTALLATION_ID), "
+            "or GH_ORG/GITHUB_ORG to auto-resolve the installation."
+        )
+
+    installation_accounts: List[str] = []
+    for page in range(1, 11):
+        resp = sess.get(
+            f"https://api.github.com/app/installations?per_page=100&page={page}",
+            headers=headers,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        installations = resp.json()
+        if not isinstance(installations, list) or not installations:
+            break
+
+        for installation in installations:
+            account = (installation.get("account") or {}).get("login")
+            if isinstance(account, str):
+                installation_accounts.append(account)
+                if account.lower() == org_login.lower():
+                    return str(installation.get("id"))
+
+        if len(installations) < 100:
+            break
+
+    accounts = ", ".join(sorted(set(installation_accounts)))
+    raise RuntimeError(
+        f"No GitHub App installation found for org '{org_login}'. "
+        f"Visible installations: {accounts or 'none'}."
+    )
+
+
+def _get_github_app_installation_token() -> Optional[str]:
+    """Return a GitHub App installation token when app env vars are configured."""
+    app_id = os.getenv("GH_APP_ID") or os.getenv("GITHUB_APP_ID")
+    if not app_id:
+        return None
+
+    private_key = _read_github_app_private_key()
+    if not private_key:
+        raise RuntimeError(
+            "GitHub App auth requested via GH_APP_ID/GITHUB_APP_ID but no private key was provided. "
+            "Set GH_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY)."
+        )
+
+    try:
+        import jwt
+    except ImportError as exc:
+        raise RuntimeError(
+            "GitHub App authentication requires PyJWT and cryptography. "
+            "Install them with: pip install PyJWT cryptography"
+        ) from exc
+
+    now = int(time.time())
+    app_jwt = jwt.encode(
+        {
+            "iat": now - 60,
+            "exp": now + 540,
+            "iss": str(app_id),
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    headers = {
+        "Authorization": f"Bearer {app_jwt}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    sess = requests.Session()
+    installation_id = _resolve_github_app_installation_id(sess, headers)
+    token_resp = sess.post(
+        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+        headers=headers,
+        timeout=30,
+    )
+    token_resp.raise_for_status()
+    token_data = token_resp.json()
+    token = token_data.get("token")
+    if not token:
+        raise RuntimeError(
+            "GitHub App access token response did not include a token value."
+        )
+    return token
+
+
 def _rate_limit_retry_delay(resp: requests.Response, attempt: int) -> int:
     """Return backoff delay in seconds for a 403 response.
 
@@ -79,6 +192,11 @@ def _get_github_token() -> str:
         _TOKEN = token
         return token
 
+    app_token = _get_github_app_installation_token()
+    if app_token:
+        _TOKEN = app_token
+        return app_token
+
     # gh CLI config fallback
     try:
         gh_config_path = os.path.expanduser("~/.config/gh/hosts.yml")
@@ -96,7 +214,8 @@ def _get_github_token() -> str:
         pass
 
     raise RuntimeError(
-        "No GitHub token found. Set GITHUB_TOKEN or GH_TOKEN env var or configure gh CLI."
+        "No GitHub token found. Set GITHUB_TOKEN/GH_TOKEN, or configure GH_APP_ID with a "
+        "GitHub App private key, or configure gh CLI."
     )
 
 
