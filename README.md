@@ -14,6 +14,40 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 
 [Setup Docs](./docs/setup.md)
 
+## Authentication
+
+Scripts resolve authentication in this order:
+
+1. `GITHUB_TOKEN` or `GH_TOKEN`
+2. GitHub App credentials (`GH_APP_ID` + `GH_APP_PRIVATE_KEY`)
+3. GitHub CLI token from `~/.config/gh/hosts.yml`
+
+### GitHub App setup (recommended)
+
+Set the following environment variables:
+
+- `GH_APP_ID` (or `GITHUB_APP_ID`)
+- `GH_APP_PRIVATE_KEY` (or `GITHUB_APP_PRIVATE_KEY`) with the full PEM key content
+- `GH_APP_INSTALLATION_ID` (or `GITHUB_APP_INSTALLATION_ID`) **or** `GH_ORG` / `GITHUB_ORG` for installation auto-discovery
+
+In CI/CD, map your secrets manager values to these environment variable names.
+
+For local runs, export values individually:
+
+```bash
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
+
+# Optional: set explicitly if you don't want installation auto-discovery
+# export GH_APP_INSTALLATION_ID="<your_installation_id>"
+
+# Optional: force GitHub App path by clearing PAT vars
+unset GH_TOKEN GITHUB_TOKEN
+```
+
+> Note: private-key file path variables are not used; provide the key content in env vars.
+
 ## Scripts
 
 ### 1. `list_repos.py` - List and Audit Organization Repositories
@@ -91,7 +125,6 @@ python audit_repo.py <owner/repo> [options]
 
 ```bash
 # Audit a repository
-export GITHUB_TOKEN=ghp_xxxx
 python audit_repo.py github/cli
 
 # Audit and save to custom database
@@ -182,6 +215,7 @@ python org_security_posture.py <org> [--excel path] [--json] [--repo-limit N] [-
 - JSON to stdout by default
 - Excel workbook output when `--excel` is supplied
 - Cached results stored in `.posture_cache_<org>.pkl` for reuse on later runs
+- `org_rulesets_count` may show `no_access (403)` when the app lacks org rulesets permission
 
 **Examples:**
 
@@ -217,7 +251,6 @@ python dashboard.py [options]
 
 ```bash
 # Start dashboard with default database
-export GITHUB_TOKEN=ghp_xxxx
 python dashboard.py
 
 # Start with custom database
@@ -271,8 +304,11 @@ python testEnv.py
 # In Jupyter cell
 !python testEnv.py
 
-# With custom token
-export GH_TOKEN=ghp_xxxx
+# With GitHub App credentials exported directly
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
+unset GH_TOKEN GITHUB_TOKEN
 python testEnv.py
 ```
 
@@ -318,14 +354,19 @@ Each repo is assigned risk flags:
 ### Single Organization Audit
 
 ```bash
-# 1. Audit all repos in organization
-export GITHUB_TOKEN=ghp_xxxx
+# 1. Load GitHub App credentials
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
+unset GH_TOKEN GITHUB_TOKEN
+
+# 2. Audit all repos in organization
 python list_repos.py myorg --excel audit_results.xlsx
 
-# 2. Launch dashboard to explore results
+# 3. Launch dashboard to explore results
 python dashboard.py
 
-# 3. Click on repos to view details or run deeper audits
+# 4. Click on repos to view details or run deeper audits
 ```
 
 ### Archive Review Workflow
@@ -361,8 +402,13 @@ owner/repo2
 owner/repo3
 EOF
 
+# Load GitHub App credentials
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
+unset GH_TOKEN GITHUB_TOKEN
+
 # Audit them
-export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py owner --repo-file repos.txt --audit-db
 
 # View in dashboard
@@ -372,8 +418,13 @@ python dashboard.py
 ### Continuous Monitoring
 
 ```bash
+# Load GitHub App credentials (once per shell/session)
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
+unset GH_TOKEN GITHUB_TOKEN
+
 # Re-run audit with `--audit-db` to update the dashboard database
-export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py myorg --audit-db
 
 # Dashboard automatically shows updated data
@@ -412,14 +463,12 @@ This will diagnose differences in PATH, HOME, and token availability.
 ### Export audit to XLSX report
 
 ```bash
-export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py github --limit 20 --excel github_audit.xlsx
 ```
 
 ### Audit specific critical repos
 
 ```bash
-export GITHUB_TOKEN=ghp_xxxx
 python audit_repo.py github/cli > cli_audit.json
 python audit_repo.py github/copilot-docs > copilot_audit.json
 ```
@@ -427,7 +476,6 @@ python audit_repo.py github/copilot-docs > copilot_audit.json
 ### Use dashboard to identify high-risk repos
 
 ```bash
-export GITHUB_TOKEN=ghp_xxxx
 python list_repos.py myorg --audit-db
 python dashboard.py
 # Filter by "Show only repos with flags"
