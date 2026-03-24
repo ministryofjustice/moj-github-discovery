@@ -34,9 +34,7 @@ def _resolve_github_app_installation_id(
         return installation_id
 
     org_login = (
-        os.getenv("GH_ORG")
-        or os.getenv("GITHUB_ORG")
-        or os.getenv("GITHUB_OWNER")
+        os.getenv("GH_ORG") or os.getenv("GITHUB_ORG") or os.getenv("GITHUB_OWNER")
     )
     if not org_login:
         raise RuntimeError(
@@ -61,7 +59,15 @@ def _resolve_github_app_installation_id(
             if isinstance(account, str):
                 installation_accounts.append(account)
                 if account.lower() == org_login.lower():
-                    return str(installation.get("id"))
+                    installation_id_value = installation.get("id")
+                    if installation_id_value is None or not isinstance(
+                        installation_id_value, (int, str)
+                    ):
+                        raise RuntimeError(
+                            "GitHub App installation list response did not include a valid "
+                            f"'id' for installation with account '{account}'."
+                        )
+                    return str(installation_id_value)
 
         if len(installations) < 100:
             break

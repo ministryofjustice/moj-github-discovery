@@ -19,22 +19,35 @@ Most of the prerequisites will require `homebrew` and the `brew` utility, this c
 ### Github Setup
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
-- GitHub personal access token (PAT) with appropriate scopes (minimum: `repo`) - [Guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+- GitHub App credentials available for `Developer Experience GitHub Audit`
+  - `GH_APP_ID` (or `GITHUB_APP_ID`)
+  - `GH_APP_PRIVATE_KEY` (or `GITHUB_APP_PRIVATE_KEY`) with full PEM key content
+  - `GH_APP_INSTALLATION_ID` (or `GITHUB_APP_INSTALLATION_ID`) **or** `GH_ORG` / `GITHUB_ORG` for installation auto-discovery
 - Note: If you are contributing to this repository, signed commits are required - guidance is available on how to do this via SSH or GPG keys here: [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 
 ### Environment Variables
 
-Set your GitHub token as an environment variable:
+Set GitHub App credentials as environment variables:
 
 ```bash
-# Using a personal access token
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+export GH_APP_ID="<your_app_id>"
+export GH_ORG="<your_org>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/github-app-private-key.pem)"
 
-# Or if using the GitHub CLI default:
-export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# Optional: set explicitly if you don't want installation auto-discovery
+# export GH_APP_INSTALLATION_ID="<your_installation_id>"
+
+# Optional: force GitHub App path by clearing PAT vars
+unset GH_TOKEN GITHUB_TOKEN
 ```
 
-The tools will automatically use whichever token is available (checks both `GH_TOKEN` and `GITHUB_TOKEN`).
+Authentication resolution order is:
+
+1. `GITHUB_TOKEN` or `GH_TOKEN`
+2. GitHub App credentials (`GH_APP_ID` + `GH_APP_PRIVATE_KEY`)
+3. GitHub CLI token from `~/.config/gh/hosts.yml`
+
+If you want to ensure app-only auth is used, keep PAT variables unset.
 
 ### Compliance Tooling
 
@@ -63,7 +76,7 @@ Optionally, run pre-commit against all files:
 pre-commit run --all-files
 ```
 
-Authenticate to the Github Docker Container Registry with your PAT, providing your username after the `-u` flag and your Github password upon command execution:
+Authenticate to the Github Docker Container Registry using your GitHub CLI auth token, providing your username after the `-u` flag:
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
