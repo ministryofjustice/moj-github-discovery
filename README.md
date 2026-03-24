@@ -32,8 +32,6 @@ Set the following environment variables:
 
 In CI/CD, map your secrets manager values to these environment variable names.
 
-> Internal note: GitHub App credentials are stored as repository secrets and in the 1Password vault item `Developer Experience GitHub Audit`, with fields `GH_APP_ID` and `GH_APP_PRIVATE_KEY`.
-
 For local runs, export values individually:
 
 ```bash
