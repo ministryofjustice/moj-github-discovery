@@ -3,7 +3,7 @@
 Sub-modules
 -----------
 models       — Pydantic data models (RepoData, FieldsConfig, …)
-http_client  — HTTP session, retry, and rate-limit handling
+github_client — HTTP session, retry, and rate-limit handling
 github_api   — GitHub REST API endpoint classes
 storage      — SQLite persistence (BaseStorage, SqliteStorage)
 transforms   — Pure data enrichment and flag generation

@@ -1,6 +1,6 @@
 """Compiler — reads the database and writes output files.
 
-No API calls are made here.  The compiler:
+The compiler:
 
 1. Loads and **validates** ``fields.yaml`` via Pydantic.
 2. Reads all rows from the database via :class:`~core.storage.BaseStorage`.

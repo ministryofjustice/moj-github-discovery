@@ -33,7 +33,9 @@
     "rels",
     "deserialisation",
     "deserialises",
-    "rubocop"
+    "rubocop",
+    "myrepo",
+    "tmpl" 
   ],
   "dictionaries": [
     "en-gb", 
@@ -44,7 +46,8 @@
     "typescript", 
     "node", 
     "bash", 
-    "npm"
+    "npm",
+    "python"
   ],
   "languageSettings": [
     {

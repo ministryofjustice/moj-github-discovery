@@ -8,7 +8,7 @@ Extending
 ---------
 Subclass ``BaseHttpClient`` to swap the transport layer.  The most common
 reason is testing: pass a ``MockHttpClient`` (with canned fixture responses)
-to ``OrgCollector`` so no real API calls are made in unit tests.
+to ``RepoCollector`` so no real API calls are made in unit tests.
 
 See ``CONTRIBUTING.md § 7`` for a walkthrough.
 

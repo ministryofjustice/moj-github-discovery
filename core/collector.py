@@ -6,6 +6,12 @@ persists the result to the database via ``storage.upsert()``.  If the
 process is interrupted (Ctrl-C, quota limit, network error) all data
 collected so far has already been written — nothing is lost.
 
+Collectors
+----------
+* :class:`RepoCollector` — runs repo-scoped endpoints against every repo.
+* :class:`OrgEndpointCollector` — runs org-scoped endpoints once per org.
+* :class:`RepoListCollector` — discovers repos via the list-org-repos API.
+
 Resume support
 --------------
 Pass ``resume=True`` to skip endpoints whose key is already populated in
@@ -30,9 +36,18 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from typing import Literal
 
-from core.github_api import REPO_ENDPOINTS, BaseEndpoint, list_org_repos
-from core.http_client import BaseHttpClient, GitHubHttpClient
+from pydantic import BaseModel
+
+from core.github_api import (
+    ORG_ENDPOINTS,
+    REPO_ENDPOINTS,
+    BaseEndpoint,
+    BaseOrgEndpoint,
+    list_org_repos,
+)
+from core.github_client import BaseHttpClient, GitHubHttpClient
 from core.models import RepoData
 from core.storage import BaseStorage
 
@@ -41,8 +56,8 @@ from core.storage import BaseStorage
 
 
 class BaseCollector(ABC):
-    """Extend to change how repositories are iterated or collection is scheduled.
-
+    """
+    Extend to change how repositories are iterated or collection is scheduled.
     Example (parallel variant)::
 
         class ParallelCollector(BaseCollector):
@@ -57,7 +72,8 @@ class BaseCollector(ABC):
         repos: list[str] | None = None,
         resume: bool = False,
     ) -> None:
-        """Fetch and persist data for all repositories.
+        """
+        Fetch and persist data for all repositories.
 
         Args:
             org:    GitHub organisation name.
@@ -72,8 +88,8 @@ class BaseCollector(ABC):
 # ── Concrete implementation ───────────────────────────────────────────
 
 
-class OrgCollector(BaseCollector):
-    """Iterates an org's repos and calls every registered endpoint in order.
+class RepoCollector(BaseCollector):
+    """Iterates an org's repos and calls every registered repo-scoped endpoint.
 
     After **each** endpoint call the result is immediately merged into the
     database row for that repo via ``storage.upsert()``.  An interruption
@@ -82,7 +98,7 @@ class OrgCollector(BaseCollector):
     Usage::
 
         storage = SqliteStorage("repo_data.db")
-        collector = OrgCollector(storage)
+        collector = RepoCollector(storage)
         collector.collect("ministryofjustice")
 
         # Resume after interruption:
@@ -103,7 +119,7 @@ class OrgCollector(BaseCollector):
             storage:   Initialised storage backend.  The collector calls
                        ``storage.init()`` automatically.
             client:    HTTP client to use.  Defaults to
-                       :class:`~core.http_client.GitHubHttpClient`.
+                       :class:`~core.github_client.GitHubHttpClient`.
             endpoints: List of endpoint classes to run.  Defaults to
                        :data:`~core.github_api.REPO_ENDPOINTS`.
         """
@@ -171,6 +187,7 @@ class OrgCollector(BaseCollector):
                 result_model = endpoint.fetch(owner, repo)
                 self.storage.upsert(full_name, RepoData(**{key: result_model}))
                 # Refresh local copy so the next endpoint sees the updated state
+                # TODO: This is a bit clunky — ideally the storage layer would handle merging
                 existing = self.storage.read(full_name) or existing
                 print(f"  [ok] {key}", file=sys.stderr)
             except Exception as exc:
@@ -182,3 +199,103 @@ class OrgCollector(BaseCollector):
             full_name,
             RepoData(collected_at=datetime.now(timezone.utc).isoformat()),
         )
+
+
+# ── Org-scoped collector ──────────────────────────────────────────────
+
+
+class OrgEndpointCollector:
+    """Runs org-scoped endpoints once per org and returns the results.
+
+    Unlike :class:`RepoCollector` this does **not** iterate repositories.
+    Each registered :class:`~core.github_api.BaseOrgEndpoint` is called
+    once with the organisation name and the result is returned as a dict.
+
+    Usage::
+
+        collector = OrgEndpointCollector()
+        results = collector.collect("ministryofjustice")
+        # results == {"org_members": OrgMembersData(...), ...}
+    """
+
+    def __init__(
+        self,
+        client: BaseHttpClient | None = None,
+        endpoints: list[type[BaseOrgEndpoint]] | None = None,
+    ) -> None:
+        self.client = client or GitHubHttpClient()
+        self.endpoints: list[type[BaseOrgEndpoint]] = endpoints or ORG_ENDPOINTS
+
+    def collect(self, org: str) -> dict[str, BaseModel]:
+        """Run all org-scoped endpoints and return their results.
+
+        Args:
+            org: GitHub organisation login name.
+
+        Returns:
+            Dict mapping endpoint name to its Pydantic model result.
+        """
+        results: dict[str, BaseModel] = {}
+        for endpoint_cls in self.endpoints:
+            endpoint = endpoint_cls(self.client)
+            try:
+                results[endpoint.name] = endpoint.fetch(org)
+                print(f"  [ok] {endpoint.name}", file=sys.stderr)
+            except Exception as exc:
+                print(f"  [error] {endpoint.name}: {exc}", file=sys.stderr)
+        return results
+
+
+# ── Repo-list collector ───────────────────────────────────────────────
+
+
+class RepoListCollector:
+    """Discovers repos in an organisation via the GitHub list-repos API.
+
+    Wraps :func:`~core.github_api.list_org_repos` with all the filtering
+    and sorting controls exposed by the GitHub API.
+
+    Usage::
+
+        collector = RepoListCollector()
+        repos = collector.collect("ministryofjustice")
+        # repos == ["ministryofjustice/repo-a", ...]
+
+        # Only public, sorted by name:
+        repos = collector.collect(
+            "ministryofjustice", type="public", sort="full_name",
+        )
+    """
+
+    def __init__(self, client: BaseHttpClient | None = None) -> None:
+        self.client = client or GitHubHttpClient()
+
+    def collect(
+        self,
+        org: str,
+        *,
+        type: Literal["all", "public", "private", "forks", "sources", "member"] = "all",
+        sort: Literal["created", "updated", "pushed", "full_name"] = "pushed",
+        direction: Literal["asc", "desc"] | None = None,
+    ) -> list[str]:
+        """Return the list of ``owner/repo`` strings for the organisation.
+
+        Args:
+            org:       GitHub organisation login name.
+            type:      Filter by repo type.
+            sort:      Property to sort results by.
+            direction: Sort order.  Defaults to ``"asc"`` when *sort* is
+                       ``"full_name"``, otherwise ``"desc"``.
+        """
+        repos = list_org_repos(
+            org,
+            self.client,
+            type=type,
+            sort=sort,
+            direction=direction,
+        )
+        print(
+            f"Discovered {len(repos)} repo(s) for '{org}' (type={type}, sort={sort})",
+            file=sys.stderr,
+        )
+        return repos

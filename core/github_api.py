@@ -30,10 +30,11 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from typing import Literal
 
 from pydantic import BaseModel
 
-from core.http_client import BaseHttpClient
+from core.github_client import BaseHttpClient
 from core.models import (
     AlertData,
     BranchProtection,
@@ -47,7 +48,7 @@ from core.models import (
     OrgWebhooksData,
     ReferenceData,
     ReferenceItem,
-    RepoMeta,
+    RepoDetails,
     WorkflowAnalysis,
     WorkflowData,
 )
@@ -56,9 +57,28 @@ from core.models import (
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
-def list_org_repos(org: str, client: BaseHttpClient) -> list[str]:
-    """Return a list of ``owner/repo`` strings for all repos in an organisation."""
-    items = client.get_paginated(f"/orgs/{org}/repos?sort=pushed&direction=desc")
+def list_org_repos(
+    org: str,
+    client: BaseHttpClient,
+    *,
+    type: Literal["all", "public", "private", "forks", "sources", "member"] = "all",
+    sort: Literal["created", "updated", "pushed", "full_name"] = "pushed",
+    direction: Literal["asc", "desc"] | None = None,
+) -> list[str]:
+    """Return a list of ``owner/repo`` strings for all repos in an organisation.
+
+    Args:
+        org:       GitHub organisation login name.
+        client:    HTTP client to use for the request.
+        type:      Filter by repo type.  ``"all"`` returns every repo.
+        sort:      Property to sort results by.
+        direction: Sort order.  Defaults to ``"asc"`` when *sort* is
+                   ``"full_name"``, otherwise ``"desc"`` (GitHub API default).
+    """
+    params = f"type={type}&sort={sort}"
+    if direction is not None:
+        params += f"&direction={direction}"
+    items = client.get_paginated(f"/orgs/{org}/repos?{params}")
     return [r["full_name"] for r in items if isinstance(r, dict) and "full_name" in r]
 
 
@@ -144,7 +164,7 @@ class BaseOrgEndpoint(ABC):
 # ── Repo-scoped endpoints ─────────────────────────────────────────────
 
 
-class RepoMetaEndpoint(BaseEndpoint):
+class RepoDetailsEndpoint(BaseEndpoint):
     """Core repository metadata from ``/repos/{owner}/{repo}``.
 
     Migrated from ``audit_repo.repo_info`` and ``utils.gh_api``.
@@ -154,10 +174,10 @@ class RepoMetaEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "repo_meta"
 
-    def fetch(self, owner: str, repo: str) -> RepoMeta:
+    def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")
         data["org"] = owner
-        return RepoMeta.model_validate(data)
+        return RepoDetails.model_validate(data)
 
 
 class AlertsEndpoint(BaseEndpoint):
@@ -199,10 +219,11 @@ class BranchProtectionEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "branch_protection"
 
-    def fetch(self, owner: str, repo: str) -> BranchProtection:
+    def fetch(
+        self, owner: str, repo: str, repo_details: RepoDetails
+    ) -> BranchProtection:
         try:
-            repo_data = self.client.get(f"/repos/{owner}/{repo}")
-            default_branch = repo_data.get("default_branch", "main")
+            default_branch = repo_details.default_branch if repo_details else "main"
             branch = self.client.get(f"/repos/{owner}/{repo}/branches/{default_branch}")
             protected = bool(branch.get("protected", False))
             settings: list[str] = []
@@ -510,7 +531,7 @@ class OrgRulesetsEndpoint(BaseOrgEndpoint):
 # Add new endpoint classes here — no changes to collector.py are needed.
 
 REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
-    RepoMetaEndpoint,
+    RepoDetailsEndpoint,
     AlertsEndpoint,
     BranchProtectionEndpoint,
     CommunityProfileEndpoint,

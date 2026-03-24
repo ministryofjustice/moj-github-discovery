@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that hit the real GitHub API (require a valid token)",
+]

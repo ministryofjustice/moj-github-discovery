@@ -67,7 +67,7 @@ class FieldsConfig(BaseModel):
 # ── Repo-level API response models ───────────────────────────────────
 
 
-class RepoMeta(BaseModel):
+class RepoDetails(BaseModel):
     """Core repository metadata from ``/repos/{owner}/{repo}``.
 
     ``extra="ignore"`` means unknown GitHub API fields are silently dropped,
@@ -236,7 +236,7 @@ class RepoData(BaseModel):
     """
 
     # Endpoint-populated fields
-    repo_meta: Optional[RepoMeta] = None
+    repo_meta: Optional[RepoDetails] = None
     alerts: Optional[AlertData] = None
     branch_protection: Optional[BranchProtection] = None
     community: Optional[CommunityProfile] = None
