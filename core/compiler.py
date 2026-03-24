@@ -211,7 +211,7 @@ class BaseCompiler(ABC):
 class ExcelCompiler(BaseCompiler):
     """Write audit data to an Excel (``.xlsx``) workbook.
 
-    Requires the ``openpyxl`` package (already in ``requirements-dashboard.txt``).
+    Requires the ``openpyxl`` package (already in ``requirements.txt``).
     """
 
     @property

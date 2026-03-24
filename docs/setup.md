@@ -74,5 +74,5 @@ gh auth token | docker login ghcr.io -u <github username> --password-stdin
 The requirements can now be installed for the python scripts, and development can be carried out.
 
 ```bash
-pip install -r requirements-dashboard.txt
+pip install -r requirements.txt
 ```
