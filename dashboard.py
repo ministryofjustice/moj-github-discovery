@@ -13,13 +13,24 @@ To run with a custom database path:
 
 import json
 import os
-import sqlite3
-import subprocess
 import sys
 
 import dash
 from dash import dcc, html, callback, Input, Output, State, ALL, callback_context
 import pandas as pd
+
+from core.collector import RepoCollector
+from core.github_api import (
+    AlertsEndpoint,
+    BranchProtectionEndpoint,
+    CodeownersEndpoint,
+    CommunityProfileEndpoint,
+    ForkTemplateEndpoint,
+    RepoDetailsEndpoint,
+    WorkflowsEndpoint,
+)
+from core.presenters import repo_data_to_audit_result, repo_data_to_dashboard_row
+from core.storage import SqliteStorage
 
 # Parse arguments
 db_path = "repo_audit.db"
@@ -40,89 +51,59 @@ if not os.path.exists(db_path):
 print(f"Loading data from {db_path}")
 
 
+def _get_storage() -> SqliteStorage:
+    storage = SqliteStorage(db_path)
+    storage.init()
+    return storage
+
+
 def load_data():
-    """Load repo audit data from SQLite."""
-    conn = sqlite3.connect(db_path)
-    query = "SELECT full_name, audit_json FROM repo_rows"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-
-    # Parse JSON - repo_rows has flat structure (not nested)
+    """Load repo summary data from core storage."""
+    storage = _get_storage()
     rows = []
-    for _, row in df.iterrows():
-        try:
-            data = json.loads(row["audit_json"])
-
-            rows.append(
-                {
-                    "repo": data.get("full_name", row["full_name"]),
-                    "private": data.get("private"),
-                    "archived": data.get("archived"),
-                    "fork": data.get("fork"),
-                    "language": data.get("language"),
-                    "stars": data.get("stargazers", 0),
-                    "open_issues": data.get("open_issues", 0),
-                    "dependabot_alerts": data.get("dependabot_alerts"),
-                    "secret_alerts": data.get("secret_scanning_alerts"),
-                    "code_scanning_alerts": data.get("code_scanning_alerts"),
-                    "branch_protected": data.get("default_branch_protected"),
-                    "codeowners": data.get("codeowners"),
-                    "flags": data.get("flags", ""),
-                    "pushed_at": data.get("pushed_at", ""),
-                }
-            )
-        except Exception as e:
-            print(f"Error parsing {row['full_name']}: {e}")
-            continue
+    for full_name, data in storage.read_all():
+        rows.append(repo_data_to_dashboard_row(full_name, data))
 
     return pd.DataFrame(rows)
 
 
-def load_audit_data(full_name: str) -> dict:
-    """Load detailed audit data from the audits table."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT audit_json FROM audits WHERE full_name = ?", (full_name,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row:
-        try:
-            return json.loads(row[0])
-        except Exception as e:
-            print(f"There was a problem loading audit data: {e}")
-            return None
-    return None
+def _load_repo_audit_result(full_name: str) -> dict | None:
+    storage = _get_storage()
+    repo_data = storage.read(full_name)
+    if repo_data is None:
+        return None
+    return repo_data_to_audit_result(repo_data)
 
 
 def run_audit(full_name: str) -> dict:
-    """Run audit_repo.py for the given repository."""
+    """Run a single-repo audit via RepoCollector and map it for the dashboard."""
     try:
-        script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "audit_repo.py"
-        )
-        result = subprocess.run(
-            [sys.executable, script_path, full_name, "--db", db_path],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        owner, repo = full_name.split("/", 1)
+    except ValueError:
+        return {"error": f"Invalid repository name: {full_name!r}"}
 
-        if result.returncode == 0:
-            # Extract JSON from stdout (last line should be the JSON)
-            lines = result.stdout.strip().split("\n")
-            for line in reversed(lines):
-                if line.strip().startswith("{"):
-                    try:
-                        return json.loads(line)
-                    except json.JSONDecodeError as e:
-                        return {"error": f"Invalid JSON from audit: {str(e)}"}
-            return {"error": "No JSON output found from audit script"}
-        else:
-            stderr_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            return {"error": f"Audit script failed: {stderr_msg}"}
-    except subprocess.TimeoutExpired:
-        return {"error": "Audit timed out (exceeded 120 seconds)"}
+    try:
+        storage = _get_storage()
+        collector = RepoCollector(
+            storage=storage,
+            endpoints=[
+                RepoDetailsEndpoint,
+                BranchProtectionEndpoint,
+                AlertsEndpoint,
+                CommunityProfileEndpoint,
+                CodeownersEndpoint,
+                ForkTemplateEndpoint,
+                WorkflowsEndpoint,
+            ],
+        )
+        collector.collect(owner, repos=[full_name], resume=False)
+
+        repo_data = storage.read(full_name)
+        if repo_data is None:
+            return {"error": f"No collected data found for {full_name}"}
+
+        audit_result = repo_data_to_audit_result(repo_data)
+        return audit_result
     except Exception as e:
         return {"error": f"Failed to run audit: {str(e)}"}
 
@@ -724,8 +705,8 @@ def update_detail_panel(selected_repo, audit_data):
                 audit_data = None
 
     if not audit_data:
-        # Load audit data from database
-        audit_data = load_audit_data(selected_repo)
+        # Load audit data from core storage
+        audit_data = _load_repo_audit_result(selected_repo)
 
     if audit_data:
         content = format_audit_detail(audit_data)

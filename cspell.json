@@ -1,5 +1,5 @@
 {
-  "ignorePaths": ["dist/", "**/node_modules/**", "**/*.drawio", "**/*.svg", "**/package*.json", "**/*.xml", "**/*.csv", "repo_list.txt"],
+  "ignorePaths": ["dist/", "**/node_modules/**", "**/*.drawio", "**/*.svg", "**/package*.json", "**/*.xml", "**/*.csv", "repo_list.yaml"],
   "language": "en",
   "noConfigSearch": true,
   "allowCompoundWords": true,
@@ -13,7 +13,7 @@
     "govuk",
     "hmpps",
     "jgoz",
-    "ministryofsound",
+    "ministryofjustice",
     "mojdt",
     "myorg",
     "nomis",
@@ -23,10 +23,16 @@
     "sess",
     "sonarqube",
     "restr",
-    "pyyaml",
     "xlink",
     "GHAS",
-    "gmtime"
+    "gmtime",
+    "deserialise",
+    "rels",
+    "deserialisation",
+    "deserialises",
+    "rubocop",
+    "myrepo",
+    "tmpl" 
   ],
   "dictionaries": [
     "en-gb", 
@@ -37,7 +43,8 @@
     "typescript", 
     "node", 
     "bash", 
-    "npm"
+    "npm",
+    "python"
   ],
   "languageSettings": [
     {
