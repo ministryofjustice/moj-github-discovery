@@ -7,17 +7,17 @@ This repository is organized around a reusable `core/` module, with root scripts
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                                CLI entry points                            │
-│  list_repos.py  archive_repos.py  org_security_posture.py                 │
-│  dashboard.py / dashboard_cli.py (UI layers)                              │
+│  list_repos.py  archive_repos.py  org_security_posture.py                  │
+│  dashboard.py / dashboard_cli.py (UI layers)                               │
 └───────────────────────────────┬────────────────────┬───────────────────────┘
                                 │                    │
-                        ┌───────▼───────┐    ┌──────▼────────┐
+                        ┌───────▼────────┐    ┌──────▼─────────┐
                         │  collector.py  │    │  compiler.py   │
                         │ (fetch + store │    │ (read SQLite → │
                         │  immediately)  │    │  Excel/CSV)    │
-                        └──┬────┬────┬───┘    └──────┬────────┘
-                           │    │    │               │
-                   ┌───────▼┐ ┌▼────▼──┐     ┌───────▼────────┐
+                        └──┬───┬────┬────┘    └──────┬─────────┘
+                           │   │    │                │
+                   ┌───────▼┐ ┌▼────▼───┐     ┌──────▼─────────┐
                    │github_ │ │storage  │     │ transforms.py  │
                    │api.py  │ │.py      │     │ (flags, age,   │
                    │(all EP │ │(SQLite  │     │ derived fields)│
@@ -35,17 +35,6 @@ This repository is organized around a reusable `core/` module, with root scripts
 ## Development Setup
 
 1. Follow setup instructions in [setup.md](setup.md).
-2. Install dependencies.
-
-```bash
-pip install -r requirements.txt
-```
-
-3. Install hooks.
-
-```bash
-pre-commit install
-```
 
 ## Testing
 
@@ -55,7 +44,7 @@ Regular test runs exclude integration tests by default.
 pytest -q
 ```
 
-Run integration tests explicitly when needed.
+Run integration tests explicitly when needed (requires owner level permissions to `ministryofjustice-test`).
 
 ```bash
 pytest tests/test_integration.py -m integration -o addopts='' -v
