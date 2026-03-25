@@ -96,6 +96,8 @@ class RepoDetails(BaseModel):
     watchers_count: int = 0
     forks_count: int = 0
     security_and_analysis: Optional[dict[str, Any]] = None
+    license: Optional[dict[str, Any]] = None
+    """Repository license information from the GitHub API (e.g., SPDX key, name)."""
 
 
 class AlertData(BaseModel):
