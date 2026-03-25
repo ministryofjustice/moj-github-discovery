@@ -43,8 +43,14 @@ from core.models import (
     DependencyGraphData,
     ForkTemplateData,
     OrgActionsData,
+    OrgAuditLogData,
+    OrgCodeScanningAlertsData,
     OrgMembersData,
+    OrgOutsideCollaboratorsData,
+    OrgOverviewData,
     OrgRulesetsData,
+    OrgSecretScanningAlertsData,
+    OrgTeamsData,
     OrgWebhooksData,
     ReferenceData,
     ReferenceItem,
@@ -80,6 +86,60 @@ def list_org_repos(
         params += f"&direction={direction}"
     items = client.get_paginated(f"/orgs/{org}/repos?{params}")
     return [r["full_name"] for r in items if isinstance(r, dict) and "full_name" in r]
+
+
+def dependency_supply_chain_summary(
+    org: str,
+    client: BaseHttpClient,
+    repo_limit: int = 100,
+) -> dict[str, object]:
+    """Return org-level supply-chain summary by sampling recently-pushed repos."""
+    cap = max(1, min(repo_limit, 100))
+    try:
+        repos = client.get_paginated(f"/orgs/{org}/repos?sort=pushed&direction=desc")
+    except Exception:
+        repos = []
+
+    details: list[dict[str, object]] = []
+    for repo in repos[:cap]:
+        owner = (repo.get("owner") or {}).get("login", "")
+        name = repo.get("name", "")
+        full_name = f"{owner}/{name}"
+        default_branch = repo.get("default_branch", "main")
+
+        try:
+            client.get(f"/repos/{owner}/{name}/dependency-graph/sbom")
+            sbom_available = True
+        except Exception:
+            sbom_available = False
+
+        try:
+            branch = client.get(f"/repos/{owner}/{name}/branches/{default_branch}")
+            branch_protected = bool(branch.get("protected", False))
+        except Exception:
+            branch_protected = False
+
+        details.append(
+            {
+                "repo": full_name,
+                "visibility": repo.get("visibility", ""),
+                "archived": bool(repo.get("archived", False)),
+                "default_branch": default_branch,
+                "license": ((repo.get("license") or {}).get("spdx_id") or "none"),
+                "topics": ", ".join(repo.get("topics") or []),
+                "sbom_available": sbom_available,
+                "default_branch_protected": branch_protected,
+            }
+        )
+
+    return {
+        "repos_checked": len(details),
+        "sbom_available": sum(1 for d in details if d["sbom_available"]),
+        "default_branch_protected": sum(
+            1 for d in details if d["default_branch_protected"]
+        ),
+        "details": details,
+    }
 
 
 # ── Abstract bases ────────────────────────────────────────────────────
@@ -445,6 +505,174 @@ class OrgMembersEndpoint(BaseOrgEndpoint):
             )
         except Exception:
             return OrgMembersData()
+
+
+class OrgOverviewEndpoint(BaseOrgEndpoint):
+    """Organisation overview and selected security posture settings."""
+
+    @property
+    def name(self) -> str:
+        return "org_overview"
+
+    def fetch(self, org: str) -> OrgOverviewData:
+        try:
+            data = self.client.get(f"/orgs/{org}")
+
+            def _get(key: str, admin_only: bool = False) -> object:
+                if key in data:
+                    return data[key]
+                return "requires_admin_token" if admin_only else None
+
+            return OrgOverviewData(
+                access="ok",
+                data={
+                    "name": _get("name"),
+                    "description": _get("description"),
+                    "public_repos": _get("public_repos"),
+                    "total_private_repos": _get("total_private_repos"),
+                    "created_at": _get("created_at"),
+                    "updated_at": _get("updated_at"),
+                    "two_factor_requirement_enabled": _get(
+                        "two_factor_requirement_enabled", admin_only=True
+                    ),
+                    "default_repository_permission": _get(
+                        "default_repository_permission", admin_only=True
+                    ),
+                    "default_repository_branch": _get("default_repository_branch"),
+                    "web_commit_signoff_required": _get("web_commit_signoff_required"),
+                },
+            )
+        except Exception as exc:
+            return OrgOverviewData(access=str(exc))
+
+
+class OrgOutsideCollaboratorsEndpoint(BaseOrgEndpoint):
+    """Outside collaborators listing for an organisation."""
+
+    @property
+    def name(self) -> str:
+        return "org_outside_collaborators"
+
+    def fetch(self, org: str) -> OrgOutsideCollaboratorsData:
+        try:
+            collabs = self.client.get_paginated(f"/orgs/{org}/outside_collaborators")
+            return OrgOutsideCollaboratorsData(
+                access="ok",
+                collaborators=[
+                    {"login": c.get("login"), "id": c.get("id")} for c in collabs
+                ],
+            )
+        except Exception as exc:
+            return OrgOutsideCollaboratorsData(access=str(exc))
+
+
+class OrgTeamsEndpoint(BaseOrgEndpoint):
+    """Organisation teams metadata."""
+
+    @property
+    def name(self) -> str:
+        return "org_teams"
+
+    def fetch(self, org: str) -> OrgTeamsData:
+        try:
+            teams = self.client.get_paginated(f"/orgs/{org}/teams")
+            return OrgTeamsData(
+                access="ok",
+                teams=[
+                    {
+                        "name": t.get("name"),
+                        "slug": t.get("slug"),
+                        "description": t.get("description"),
+                        "privacy": t.get("privacy"),
+                        "notification_setting": t.get("notification_setting"),
+                        "permission": t.get("permission"),
+                        "parent": t.get("parent", {}).get("name")
+                        if t.get("parent")
+                        else None,
+                    }
+                    for t in teams
+                ],
+            )
+        except Exception as exc:
+            return OrgTeamsData(access=str(exc))
+
+
+class OrgAuditLogEndpoint(BaseOrgEndpoint):
+    """Recent org audit log entries."""
+
+    @property
+    def name(self) -> str:
+        return "org_audit_log"
+
+    def fetch(self, org: str) -> OrgAuditLogData:
+        try:
+            entries = self.client.get(f"/orgs/{org}/audit-log?per_page=100&include=all")
+            if isinstance(entries, list):
+                return OrgAuditLogData(access="ok", entries=entries)
+            return OrgAuditLogData(access="ok")
+        except Exception as exc:
+            return OrgAuditLogData(access=str(exc))
+
+
+class OrgCodeScanningAlertsEndpoint(BaseOrgEndpoint):
+    """Organisation code scanning alerts summary."""
+
+    @property
+    def name(self) -> str:
+        return "org_code_scanning_alerts"
+
+    def fetch(self, org: str) -> OrgCodeScanningAlertsData:
+        try:
+            alerts = self.client.get_paginated(
+                f"/orgs/{org}/code-scanning/alerts?state=open"
+            )
+            return OrgCodeScanningAlertsData(
+                access="ok",
+                open_count=len(alerts),
+                alerts=[
+                    {
+                        "rule_id": a.get("rule", {}).get("id"),
+                        "severity": a.get("rule", {}).get("severity"),
+                        "repo": a.get("repository", {}).get("full_name"),
+                        "state": a.get("state"),
+                    }
+                    for a in alerts
+                ],
+                truncated=False,
+            )
+        except Exception as exc:
+            return OrgCodeScanningAlertsData(access=str(exc), open_count=0, alerts=[])
+
+
+class OrgSecretScanningAlertsEndpoint(BaseOrgEndpoint):
+    """Organisation secret scanning alerts summary."""
+
+    @property
+    def name(self) -> str:
+        return "org_secret_scanning_alerts"
+
+    def fetch(self, org: str) -> OrgSecretScanningAlertsData:
+        try:
+            alerts = self.client.get_paginated(
+                f"/orgs/{org}/secret-scanning/alerts?state=open"
+            )
+            return OrgSecretScanningAlertsData(
+                access="ok",
+                open_count=len(alerts),
+                alerts=[
+                    {
+                        "secret_type": a.get("secret_type_display_name")
+                        or a.get("secret_type"),
+                        "repo": a.get("repository", {}).get("full_name"),
+                        "state": a.get("state"),
+                        "created_at": a.get("created_at"),
+                    }
+                    for a in alerts
+                ],
+                truncated=False,
+            )
+        except Exception as exc:
+            return OrgSecretScanningAlertsData(access=str(exc), open_count=0, alerts=[])
 
 
 class OrgActionsEndpoint(BaseOrgEndpoint):

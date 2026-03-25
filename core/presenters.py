@@ -230,3 +230,82 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
             "value": values,
         }
     )
+
+
+def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
+    """Build a high-level summary dict from an org security posture report."""
+    overview = report.get("org_overview", {})
+    org_settings = report.get("1_org_settings", {})
+    ghas = report.get("2_ghas_alerts", {})
+    deps = report.get("3_dependency_supply_chain", {}).get("summary", {})
+    actions = report.get("4_actions_posture", {}).get("details", {})
+    webhooks = report.get("5_webhooks_integrations", {}).get("details", {})
+    rulesets = report.get("6_rulesets", {}).get("details", {})
+
+    def val_or_no_access(data: dict[str, Any], key: str) -> Any:
+        access = data.get("access")
+        if access and access != "ok":
+            return f"no_access ({access})"
+        val = data.get(key)
+        return val if val is not None else 0
+
+    summary: dict[str, Any] = {}
+    summary["org_name"] = overview.get("name", "")
+    summary["public_repos"] = overview.get("public_repos")
+    summary["total_private_repos"] = overview.get("total_private_repos", "no_access")
+    summary["2fa_requirement_enabled"] = overview.get("two_factor_requirement_enabled")
+    summary["default_repo_permission"] = overview.get("default_repository_permission")
+    summary["default_branch"] = overview.get("default_repository_branch")
+
+    total_members = org_settings.get("total_members", {})
+    summary["total_members"] = (
+        val_or_no_access(total_members, "total_members")
+        if isinstance(total_members, dict)
+        else "no_access"
+    )
+    mfa_data = org_settings.get("members_without_2fa", {})
+    summary["members_without_2fa"] = (
+        len(mfa_data.get("members", [])) if isinstance(mfa_data, dict) else "no_access"
+    )
+
+    collabs_data = org_settings.get("outside_collaborators", {})
+    summary["outside_collaborators"] = (
+        len(collabs_data.get("collaborators", []))
+        if isinstance(collabs_data, dict)
+        else "no_access"
+    )
+    teams = org_settings.get("teams", [])
+    summary["teams_count"] = len(teams) if isinstance(teams, list) else "no_access"
+
+    summary["code_scanning_open_alerts"] = val_or_no_access(
+        ghas.get("code_scanning", {}), "open_count"
+    )
+    summary["secret_scanning_open_alerts"] = val_or_no_access(
+        ghas.get("secret_scanning", {}), "open_count"
+    )
+
+    summary["repos_checked_for_supply_chain"] = deps.get("repos_checked", 0)
+    summary["repos_with_sbom"] = deps.get("sbom_available", 0)
+    summary["repos_with_branch_protection"] = deps.get("default_branch_protected", 0)
+
+    summary["self_hosted_runners"] = val_or_no_access(
+        actions.get("runners", {}), "total_count"
+    )
+    summary["allowed_actions_policy"] = val_or_no_access(
+        actions.get("actions_permissions", {}), "allowed_actions"
+    )
+    summary["org_secrets_count"] = val_or_no_access(
+        actions.get("secrets", {}), "total_count"
+    )
+    summary["default_workflow_permissions"] = val_or_no_access(
+        actions.get("default_workflow_permissions", {}), "default_workflow_permissions"
+    )
+
+    summary["org_webhooks_count"] = val_or_no_access(
+        webhooks.get("webhooks", {}), "count"
+    )
+    summary["installed_github_apps"] = val_or_no_access(
+        webhooks.get("github_apps", {}), "total_count"
+    )
+    summary["org_rulesets_count"] = val_or_no_access(rulesets, "count")
+    return summary

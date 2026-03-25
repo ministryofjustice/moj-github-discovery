@@ -215,6 +215,52 @@ class OrgRulesetsData(BaseModel):
     rulesets: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class OrgOverviewData(BaseModel):
+    """Organisation overview plus selected security posture settings."""
+
+    access: str = "ok"
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class OrgOutsideCollaboratorsData(BaseModel):
+    """Outside collaborators in the organisation."""
+
+    access: str = "ok"
+    collaborators: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OrgTeamsData(BaseModel):
+    """Organisation teams metadata."""
+
+    access: str = "ok"
+    teams: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OrgAuditLogData(BaseModel):
+    """Recent org audit log entries."""
+
+    access: str = "ok"
+    entries: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OrgCodeScanningAlertsData(BaseModel):
+    """Organisation code scanning alert summary."""
+
+    access: str = "ok"
+    open_count: int = 0
+    alerts: list[dict[str, Any]] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class OrgSecretScanningAlertsData(BaseModel):
+    """Organisation secret scanning alert summary."""
+
+    access: str = "ok"
+    open_count: int = 0
+    alerts: list[dict[str, Any]] = Field(default_factory=list)
+    truncated: bool = False
+
+
 # ── Top-level repo data aggregate ────────────────────────────────────
 
 
