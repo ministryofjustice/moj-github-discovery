@@ -66,7 +66,8 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
             if fork_template.template_source
             else "generated_from_template"
         )
-    if repo.license is None:
+    license_info = getattr(repo, "license", None)
+    if license_info is None:
         flags.append("no_license")
     if not repo.private and branch and not branch.default_branch_protected:
         flags.append("public_unprotected_default_branch")
