@@ -15,7 +15,7 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 [Setup Docs](./docs/setup.md)
 
 For guidance on extending the core module and contributing changes, see
-[CONTRIBUTING.md](./CONTRIBUTING.md).
+[CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 
 ## Core Architecture
 
