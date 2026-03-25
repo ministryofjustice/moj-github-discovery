@@ -34,7 +34,7 @@ This repository is organized around a reusable `core/` module, with root scripts
 
 ## Development Setup
 
-1. Follow setup instructions in [docs/setup.md](docs/setup.md).
+1. Follow setup instructions in [setup.md](setup.md).
 2. Install dependencies.
 
 ```bash
