@@ -26,7 +26,8 @@
     "pyyaml",
     "xlink",
     "GHAS",
-    "gmtime"
+    "gmtime",
+    "remediator"
   ],
   "dictionaries": [
     "en-gb", 

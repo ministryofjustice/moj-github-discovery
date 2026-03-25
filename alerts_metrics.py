@@ -17,26 +17,31 @@ from utils import (
     check_codeowners_exists,
     fork_and_template_info,
     init_db,
-    save_to_db,
     _get_session,
     _extract_link_rel,
 )
 
+
 def now_utc() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
+
 def parse_dt(value: Optional[str]) -> Optional[dt.datetime]:
     if not value:
-         return None
+        return None
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
-def age_days(start: Optional[dt.datetime], end: Optional[dt.datetime] = None) -> Optional[int]:
+
+def age_days(
+    start: Optional[dt.datetime], end: Optional[dt.datetime] = None
+) -> Optional[int]:
     if not start:
         return None
     end = end or now_utc()
     return max((end - start).days, 0)
 
-def safe_get(obj:  Any, *keys: Any, default: Any = "") -> Any:
+
+def safe_get(obj: Any, *keys: Any, default: Any = "") -> Any:
     cur = obj
     for key in keys:
         if isinstance(cur, dict):
@@ -49,6 +54,7 @@ def safe_get(obj:  Any, *keys: Any, default: Any = "") -> Any:
             return default
     return cur
 
+
 def remediation_date(alert: Dict[str, Any]) -> Optional[dt.datetime]:
     for field in ("fixed_at", "resolved_at", "dismissed_at"):
         parsed = parse_dt(alert.get(field))
@@ -56,11 +62,13 @@ def remediation_date(alert: Dict[str, Any]) -> Optional[dt.datetime]:
             return parsed
     return None
 
+
 def extract_logins(users: Any) -> str:
     if not isinstance(users, list):
         return ""
     logins = [u.get("login") for u in users if isinstance(u, dict) and u.get("login")]
     return ",".join(sorted(set(logins)))
+
 
 def derive_remediator(alert: Dict[str, Any], assignees: str = "") -> str:
     for path in [
@@ -74,9 +82,10 @@ def derive_remediator(alert: Dict[str, Any], assignees: str = "") -> str:
             return value
     return assignees or ""
 
+
 def severity_weight(severity: str) -> int:
     weights = {
-        "critical":10,
+        "critical": 10,
         "high": 5,
         "medium": 3,
         "moderate": 3,
@@ -87,15 +96,17 @@ def severity_weight(severity: str) -> int:
     }
     return weights.get((severity or "").lower(), 1 if severity else 0)
 
+
 def status_group(state: str) -> str:
     return "open" if (state or "").lower() == "open" else "closed"
 
+
 def csv_write(path: str, rows: List[Dict[str, Any]]) -> None:
     if not rows:
-            with open(path, "w", encoding="utf-8") as f:
-                pass
-            print(f"No rows to write for {path}")
-            return
+        with open(path, "w", encoding="utf-8") as f:
+            pass
+        print(f"No rows to write for {path}")
+        return
 
     fieldnames: List[str] = []
     seen = set()
@@ -110,11 +121,13 @@ def csv_write(path: str, rows: List[Dict[str, Any]]) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
+
 def parse_repo_full_name(value: str) -> Tuple[str, str]:
     parts = value.strip().split("/", 1)
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise ValueError(f"Expected owner/repo format, got: {value}")
     return parts[0], parts[1]
+
 
 def load_targets_from_repo_file(path: str) -> List[str]:
     repos: List[str] = []
@@ -125,6 +138,7 @@ def load_targets_from_repo_file(path: str) -> List[str]:
                 continue
             repos.append(line)
     return repos
+
 
 def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
     if args.repos:
@@ -144,7 +158,7 @@ def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 f"Unable to list repos for org '{args.org}' (HTTP {code}). "
                 f"Use --repos owner/repo ... or --repo-file repos.txt with repos you can access."
             )
-        
+
         if not isinstance(repos, list):
             raise SystemExit("Repo listing did not return a list.")
         repo_infos = repos
@@ -166,15 +180,17 @@ def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
         repo_infos = [r for r in repo_infos if not r.get("archived")]
     return repo_infos
 
-def normalize_code_scanning(alert: Dict[str, Any], repo_full: str, sla_days: int) -> Dict[str, Any]:
+
+def normalize_code_scanning(
+    alert: Dict[str, Any], repo_full: str, sla_days: int
+) -> Dict[str, Any]:
     created = parse_dt(alert.get("created_at"))
     remediated = remediation_date(alert)
     state = alert.get("state", "")
     assignees = extract_logins(alert.get("assignees") or [])
-    severity = (
-        safe_get(alert, "rule", "security_severity_level", default="")
-        or safe_get(alert, "rule", "severity", default="")
-    )
+    severity = safe_get(
+        alert, "rule", "security_severity_level", default=""
+    ) or safe_get(alert, "rule", "severity", default="")
 
     return {
         "id": alert.get("number") or alert.get("id"),
@@ -185,44 +201,49 @@ def normalize_code_scanning(alert: Dict[str, Any], repo_full: str, sla_days: int
         "state": state,
         "status_group": status_group(state),
         "severity": severity,
-        "title": safe_get(alert, "rule", "name", default="") or safe_get(alert, "rule", "id", default=""),
+        "title": safe_get(alert, "rule", "name", default="")
+        or safe_get(alert, "rule", "id", default=""),
         "package": "",
         "ecosystem": "",
         "manifest": "",
-        "location": safe_get(alert, "most_recent_instance", "location", "path", default=""),
+        "location": safe_get(
+            alert, "most_recent_instance", "location", "path", default=""
+        ),
         "created_at": created.isoformat() if created else "",
         "updated_at": alert.get("updated_at", ""),
         "remediated_at": remediated.isoformat() if remediated else "",
-        "age_days": age_days(created, remediated or now_utc()), 
-        "ttr_days": age_days(created, remediated) if remediated else None, 
+        "age_days": age_days(created, remediated or now_utc()),
+        "ttr_days": age_days(created, remediated) if remediated else None,
         "sla_days": sla_days,
-        "overdue": status_group(state) == "open" and (age_days(created) or 0) > sla_days,
+        "overdue": status_group(state) == "open"
+        and (age_days(created) or 0) > sla_days,
         "stale": status_group(state) == "open" and (age_days(created) or 0) >= 180,
-        "remediator": derive_remediator(alert, assignees),
+        "remediate": derive_remediator(alert, assignees),
         "assignees": assignees,
-        "resolution": alert.get("dismissed_reason") or ("fixed" if alert.get("fixed_at") else ""),
+        "resolution": alert.get("dismissed_reason")
+        or ("fixed" if alert.get("fixed_at") else ""),
         "html_url": alert.get("html_url", ""),
-        "api_url": alert.get("url", ""),   
+        "api_url": alert.get("url", ""),
     }
 
-def normalize_dependabot(alert: Dict[str, Any], repo_full: str, sla_days: int) -> Dict[str, Any]:
+
+def normalize_dependabot(
+    alert: Dict[str, Any], repo_full: str, sla_days: int
+) -> Dict[str, Any]:
     created = parse_dt(alert.get("created_at"))
     remediated = remediation_date(alert)
     state = alert.get("state", "")
-    assignees = extract_logins(alert.get("assignees") or []) 
+    assignees = extract_logins(alert.get("assignees") or [])
 
-    package_name = (
-        safe_get(alert, "dependency", "package", "name", default="")
-        or safe_get(alert, "security_vulnerability", "package", "name", default="")
-    )
-    ecosystem = (
-        safe_get(alert, "dependency", "package", "ecosystem", default="")
-        or safe_get(alert, "security_vulnerability", "package", "ecosystem", default="")
-    )
+    package_name = safe_get(
+        alert, "dependency", "package", "name", default=""
+    ) or safe_get(alert, "security_vulnerability", "package", "name", default="")
+    ecosystem = safe_get(
+        alert, "dependency", "package", "ecosystem", default=""
+    ) or safe_get(alert, "security_vulnerability", "package", "ecosystem", default="")
 
-    severity = (
-        safe_get(alert, "security_advisory", "severity", default="") 
-        or safe_get(alert, "security_vulnerability", "severity", default="")
+    severity = safe_get(alert, "security_advisory", "severity", default="") or safe_get(
+        alert, "security_vulnerability", "severity", default=""
     )
 
     return {
@@ -234,32 +255,40 @@ def normalize_dependabot(alert: Dict[str, Any], repo_full: str, sla_days: int) -
         "state": state,
         "status_group": status_group(state),
         "severity": severity,
-        "title": safe_get(alert, "security_advisory", "summary",  default="") or package_name,
+        "title": safe_get(alert, "security_advisory", "summary", default="")
+        or package_name,
         "package": package_name,
         "ecosystem": ecosystem,
-        "manifest": safe_get(alert, "dependency", "manifest_path",  default=""),
+        "manifest": safe_get(alert, "dependency", "manifest_path", default=""),
         "location": "",
         "created_at": created.isoformat() if created else "",
         "updated_at": alert.get("updated_at", ""),
         "remediated_at": remediated.isoformat() if remediated else "",
-        "age_days": age_days(created, remediated or now_utc()), 
-        "ttr_days": age_days(created, remediated) if remediated else None, 
+        "age_days": age_days(created, remediated or now_utc()),
+        "ttr_days": age_days(created, remediated) if remediated else None,
         "sla_days": sla_days,
-        "overdue": status_group(state) == "open" and (age_days(created) or 0) > sla_days,
+        "overdue": status_group(state) == "open"
+        and (age_days(created) or 0) > sla_days,
         "stale": status_group(state) == "open" and (age_days(created) or 0) >= 180,
-        "remediator": derive_remediator(alert, assignees),
+        "remediate": derive_remediator(alert, assignees),
         "assignees": assignees,
-        "resolution": alert.get("dismissed_reason") or ("fixed" if alert.get("fixed_at") else ""),
+        "resolution": alert.get("dismissed_reason")
+        or ("fixed" if alert.get("fixed_at") else ""),
         "html_url": alert.get("html_url", ""),
-        "api_url": alert.get("url", ""),   
+        "api_url": alert.get("url", ""),
     }
 
-def normalize_secret_scanning(alert: Dict[str, Any], repo_full: str, sla_days: int) -> Dict[str, Any]:
+
+def normalize_secret_scanning(
+    alert: Dict[str, Any], repo_full: str, sla_days: int
+) -> Dict[str, Any]:
     created = parse_dt(alert.get("created_at"))
     remediated = remediation_date(alert)
     state = alert.get("state", "")
-    assignees = extract_logins(alert.get("assignees") or []) 
-    severity = alert.get("severity") or ("high" if alert.get("is_publicly_leaked") else "")
+    assignees = extract_logins(alert.get("assignees") or [])
+    severity = alert.get("severity") or (
+        "high" if alert.get("is_publicly_leaked") else ""
+    )
 
     return {
         "id": alert.get("number") or alert.get("id"),
@@ -278,17 +307,19 @@ def normalize_secret_scanning(alert: Dict[str, Any], repo_full: str, sla_days: i
         "created_at": created.isoformat() if created else "",
         "updated_at": alert.get("updated_at", ""),
         "remediated_at": remediated.isoformat() if remediated else "",
-        "age_days": age_days(created, remediated or now_utc()), 
-        "ttr_days": age_days(created, remediated) if remediated else None, 
+        "age_days": age_days(created, remediated or now_utc()),
+        "ttr_days": age_days(created, remediated) if remediated else None,
         "sla_days": sla_days,
-        "overdue": status_group(state) == "open" and (age_days(created) or 0) > sla_days,
+        "overdue": status_group(state) == "open"
+        and (age_days(created) or 0) > sla_days,
         "stale": status_group(state) == "open" and (age_days(created) or 0) >= 180,
-        "remediator": derive_remediator(alert, assignees),
+        "remediate": derive_remediator(alert, assignees),
         "assignees": assignees,
         "resolution": alert.get("resolution", ""),
         "html_url": alert.get("html_url", ""),
-        "api_url": alert.get("url", ""),   
+        "api_url": alert.get("url", ""),
     }
+
 
 def fetch_code_scanning_alerts(owner: str, repo: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -308,6 +339,7 @@ def fetch_code_scanning_alerts(owner: str, repo: str) -> List[Dict[str, Any]]:
             raise
         except Exception:
             return rows
+
 
 def fetch_secret_scanning_alerts(owner: str, repo: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -343,7 +375,7 @@ def fetch_dependabot_alerts(owner: str, repo: str) -> List[Dict[str, Any]]:
                     resp.raise_for_status()
                     data = resp.json()
                     if not isinstance(data, list):
-                        break             
+                        break
                     for item in data:
                         ident = item.get("number") or item.get("id")
                         if ident not in seen:
@@ -356,25 +388,30 @@ def fetch_dependabot_alerts(owner: str, repo: str) -> List[Dict[str, Any]]:
     except Exception:
         return []
 
+
 def build_repo_summary(
     repo_info: Dict[str, Any],
     alert_count_info: Dict[str, Any],
     detail_rows: List[Dict[str, Any]],
     stale_days: int,
 ) -> Dict[str, Any]:
-    owner = safe_get(repo_info, " owner", "login", default="") or (repo_info.get("owner") or {}).get("login", "")
+    owner = safe_get(repo_info, " owner", "login", default="") or (
+        repo_info.get("owner") or {}
+    ).get("login", "")
     repo = (
-        repo_info.get("name", "") 
-        or repo_info.get("repo_name", "") 
+        repo_info.get("name", "")
+        or repo_info.get("repo_name", "")
         or repo_info.get("repo", "")
     )
-    full_name = repo_info.get("full_name", "") or (f"{owner}/{repo}" if owner and repo else "")
+    full_name = repo_info.get("full_name", "") or (
+        f"{owner}/{repo}" if owner and repo else ""
+    )
     default_branch = repo_info.get("default_branch", "") or "main"
 
     if (not owner or not repo) and "/" in full_name:
         owner, repo = full_name.split("/", 1)
 
-    protection = {} 
+    protection = {}
     if owner and repo and default_branch:
         try:
             protection = branch_protection(owner, repo, default_branch)
@@ -383,8 +420,8 @@ def build_repo_summary(
 
     codeowners = {"present": False, "path": None}
     if owner and repo and default_branch:
-        try: 
-            codeowners = check_codeowners_exists(owner, repo, default_branch) 
+        try:
+            codeowners = check_codeowners_exists(owner, repo, default_branch)
         except Exception:
             codeowners = {"present": False, "path": None}
 
@@ -400,48 +437,51 @@ def build_repo_summary(
 
     open_rows = [r for r in detail_rows if r.get("status_group") == "open"]
     closed_rows = [r for r in detail_rows if r.get("status_group") == "closed"]
-    overdue_rows = [ r for r in open_rows if r.get("overdue")]
-    stale_rows = [r for r in open_rows if(r.get("age_days") or 0) >= stale_days]
+    overdue_rows = [r for r in open_rows if r.get("overdue")]
+    stale_rows = [r for r in open_rows if (r.get("age_days") or 0) >= stale_days]
     risk_score = sum(severity_weight(r.get("severity", "")) for r in open_rows)
 
     protection_settings = protection.get("protection_settings") or []
     if not isinstance(protection_settings, list):
-            protection_settings = [str(protection_settings)]
+        protection_settings = [str(protection_settings)]
 
     return {
-            "repo": full_name,
-            "owner": owner,
-            "repo_name": repo,
-            "visibility": "private" if repo_info.get("private") else "public",
-            "archived": repo_info.get("archived", False),
-            "default_branch": default_branch,
-            "default_branch_protected": protection.get("default_branch_protected"),
-            "protect_settings": "|".join(protection.get("protection_settings") or []),
-            "codeowners_present": codeowners.get("present"),
-            "codeowners_path": codeowners.get("path"),
-            "is_fork": fork_template.get("is_fork"),
-            "fork_source": fork_template.get("fork_source"),
-            "is_generated_from_template": fork_template.get("is_generated_from_template"),
-            "template_source": fork_template.get("template_source"),
-            "code_scanning_access": alert_count_info.get("code_scanning_access"),
-            "code_scanning_alerts": alert_count_info.get("code_scanning_alerts"),
-            "dependabot_access": alert_count_info.get("dependabot_access"),
-            "dependabot_alerts": alert_count_info.get("dependabot_alerts"),
-            "secret_scanning_access": alert_count_info.get("secret_scanning_access"),
-            "secret_scanning_alerts": alert_count_info.get("secret_scanning_alerts"),
-            "open_alert_rows": len(open_rows),
-            "closed_alert_rows": len(closed_rows),
-            "overdue_open_alerts": len(overdue_rows),
-            "stale_open_alerts": len(stale_rows),
-            "risk_score": risk_score,
+        "repo": full_name,
+        "owner": owner,
+        "repo_name": repo,
+        "visibility": "private" if repo_info.get("private") else "public",
+        "archived": repo_info.get("archived", False),
+        "default_branch": default_branch,
+        "default_branch_protected": protection.get("default_branch_protected"),
+        "protect_settings": "|".join(protection.get("protection_settings") or []),
+        "codeowners_present": codeowners.get("present"),
+        "codeowners_path": codeowners.get("path"),
+        "is_fork": fork_template.get("is_fork"),
+        "fork_source": fork_template.get("fork_source"),
+        "is_generated_from_template": fork_template.get("is_generated_from_template"),
+        "template_source": fork_template.get("template_source"),
+        "code_scanning_access": alert_count_info.get("code_scanning_access"),
+        "code_scanning_alerts": alert_count_info.get("code_scanning_alerts"),
+        "dependabot_access": alert_count_info.get("dependabot_access"),
+        "dependabot_alerts": alert_count_info.get("dependabot_alerts"),
+        "secret_scanning_access": alert_count_info.get("secret_scanning_access"),
+        "secret_scanning_alerts": alert_count_info.get("secret_scanning_alerts"),
+        "open_alert_rows": len(open_rows),
+        "closed_alert_rows": len(closed_rows),
+        "overdue_open_alerts": len(overdue_rows),
+        "stale_open_alerts": len(stale_rows),
+        "risk_score": risk_score,
     }
 
-def build_owner_summary(rows: List[Dict[str, Any]], stale_days: int) -> List[Dict[str, Any]]:
-    summary: Dict[str, Dict[str, Any]] = defaultdict (
+
+def build_owner_summary(
+    rows: List[Dict[str, Any]], stale_days: int
+) -> List[Dict[str, Any]]:
+    summary: Dict[str, Dict[str, Any]] = defaultdict(
         lambda: {
-            "owner": "", 
-            "open_alerts": 0, 
-            "closed_alerts": 0, 
+            "owner": "",
+            "open_alerts": 0,
+            "closed_alerts": 0,
             "overdue_open_alerts": 0,
             "stale_open_alerts": 0,
             "remediated_alerts": 0,
@@ -450,7 +490,7 @@ def build_owner_summary(rows: List[Dict[str, Any]], stale_days: int) -> List[Dic
     )
 
     for row in rows:
-        actor = row.get("remediator") or row.get("assignees") or "unassigned"
+        actor = row.get("remediate") or row.get("assignees") or "unassigned"
         entry = summary[actor]
         entry["owner"] = actor
 
@@ -469,18 +509,23 @@ def build_owner_summary(rows: List[Dict[str, Any]], stale_days: int) -> List[Dic
     result: List[Dict[str, Any]] = []
     for actor, item in summary.items():
         ttr_values = item.pop("ttr_values")
-        item["avg_ttr_days"] = round(sum(ttr_values) / len(ttr_values), 2) if ttr_values else None
+        item["avg_ttr_days"] = (
+            round(sum(ttr_values) / len(ttr_values), 2) if ttr_values else None
+        )
         result.append(item)
 
     return sorted(result, key=lambda x: (-x["open_alerts"], x["owner"]))
-    
-    
- 
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="MOJ GitHub alert metric discover")
     parser.add_argument("--org", default=os.getenv("GITHUB_ORG", "ministryofjustice"))
-    parser.add_argument("--repos", nargs="*", help="Specific repos to scan, e.g owner/repo owner/repo")
-    parser.add_argument("--repo-file", help="Text file containing owner/repo entries, one per line")
+    parser.add_argument(
+        "--repos", nargs="*", help="Specific repos to scan, e.g owner/repo owner/repo"
+    )
+    parser.add_argument(
+        "--repo-file", help="Text file containing owner/repo entries, one per line"
+    )
     parser.add_argument("--limit", type=int, default=400)
     parser.add_argument("--include-archived", action="store_true")
     parser.add_argument("--out-prefix", default="github_alerts")
@@ -488,7 +533,9 @@ def main() -> None:
     parser.add_argument("--dependabot-sla", type=int, default=30)
     parser.add_argument("--secret-scanning-sla", type=int, default=7)
     parser.add_argument("--stale-days", type=int, default=180)
-    parser.add_argument("--db", help="optional SQLite DB path to persist per-repo alert summaries")
+    parser.add_argument(
+        "--db", help="optional SQLite DB path to persist per-repo alert summaries"
+    )
     args = parser.parse_args()
 
     repo_infos = list_target_repos(args)
@@ -532,12 +579,14 @@ def main() -> None:
                 for alert in code_alerts
             )
         except Exception as exc:
-            print(f"Code scanning detail skipped for {full_name}: {exc}", file=sys.stderr)
-        
+            print(
+                f"Code scanning detail skipped for {full_name}: {exc}", file=sys.stderr
+            )
+
         try:
             dependabot_alerts = fetch_dependabot_alerts(owner, repo)
             detail_rows.extend(
-                normalize_dependabot(alert, full_name, args.code_scanni_sla)
+                normalize_dependabot(alert, full_name, args.code_scanning_sla)
                 for alert in dependabot_alerts
             )
         except Exception as exc:
@@ -550,21 +599,30 @@ def main() -> None:
                 for alert in secret_alerts
             )
         except Exception as exc:
-            print(f"Secret scanning detail skipped for {full_name}: {exc}", file=sys.stderr)
+            print(
+                f"Secret scanning detail skipped for {full_name}: {exc}",
+                file=sys.stderr,
+            )
 
         all_rows.extend(detail_rows)
-        
+
         try:
-            repo_summary = build_repo_summary(repo_info, counts, detail_rows, args.stale_days)
+            repo_summary = build_repo_summary(
+                repo_info, counts, detail_rows, args.stale_days
+            )
         except Exception as exc:
             print(f"Repo summary skipped for {full_name}: {exc}", file=sys.stderr)
             repo_summary = {
                 "repo": full_name,
                 "owner": owner,
                 "repo_name": repo,
-                "open_alert_rows":len([r for r in detail_rows if r.get("status_group") == "open"]),
-                "closed_alert_rows": len([r for r in detail_rows if r.get("status_group") == "closed"]),
-                "risk_score":0,
+                "open_alert_rows": len(
+                    [r for r in detail_rows if r.get("status_group") == "open"]
+                ),
+                "closed_alert_rows": len(
+                    [r for r in detail_rows if r.get("status_group") == "closed"]
+                ),
+                "risk_score": 0,
             }
         repo_summaries.append(repo_summary)
 
@@ -587,6 +645,7 @@ def main() -> None:
     print(f"Wrote {owner_csv}")
     if args.db:
         print(f"Wrote/updated SQLite data in {args.db}")
+
 
 if __name__ == "__main__":
     main()

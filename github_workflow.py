@@ -4,26 +4,29 @@ import csv
 import datetime as dt
 import os
 import sys
+import re
+import time
 import requests
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from collections import Counter
 
 
 from utils import (
     gh_api,
-    _get_session,
-    _extract_link_rel,
 )
+
 
 def now_utc() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
+
 
 def parse_repo_full_name(value: str) -> Tuple[str, str]:
     parts = value.strip().split("/", 1)
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise ValueError(f"Expected owner/repo format, got: {value}")
     return parts[0], parts[1]
+
 
 def load_targets_from_repo_file(path: str) -> List[str]:
     repos: List[str] = []
@@ -35,9 +38,11 @@ def load_targets_from_repo_file(path: str) -> List[str]:
             repos.append(line)
     return repos
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Github API calls
 # ----------------------------------------------------------------------------------------------------------------------
+
 
 def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
     if args.repos:
@@ -57,12 +62,12 @@ def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 f"Unable to list repos for org '{args.org}' (HTTP {code}). "
                 f"Use --repos owner/repo ... or --repo-file repos.txt with repos you can access."
             )
-        
+
         if not isinstance(repos, list):
             raise SystemExit("Repo listing did not return a list.")
         repo_infos = repos
         return repo_infos[: args.limit]
-    
+
     repo_infos: List[Dict[str, Any]] = []
     for full_name in repo_names[: args.limit]:
         owner, repo = parse_repo_full_name(full_name)
@@ -77,7 +82,53 @@ def list_target_repos(args: argparse.Namespace) -> List[Dict[str, Any]]:
         repo_infos = [r for r in repo_infos if not r.get("archived")]
     return repo_infos
 
-def fetch_workflow_files(owner: str, repo: str)-> List[Dict[str, Any]]:
+
+def parse_actions_from_workflow(org, repo_name, workflow_path):
+    """Fetch a workflow file and extract all uses: references."""
+    token = os.getenv("GITHUB_TOKEN", "")
+    url = f"https://api.github.com/repos/{org}/{repo_name}/contents/{workflow_path}"
+    resp = requests.get(
+        url,
+        headers={
+            "Authorization": "token " + os.getenv("GITHUB_TOKEN", ""),
+            "Accept": "application/vnd.github.raw+json",
+        },
+    )
+    if resp.status_code != 200:
+        print(f" Skipped {repo_name}/{workflow_path}: {resp.status_code}")
+        return []
+
+    content = resp.text
+    actions = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("uses:") or line.startswith("- uses:"):
+            match = re.search(r'uses:\s*["\']?([^"\'#\s]+)', line)
+            if match:
+                ref = match.group(1)
+                # Skip local workflow references like ./.github/actions/...
+                if ref.startswith("./"):
+                    continue
+                # Split into action name and version
+                if "@" in ref:
+                    action_name, version = ref.rsplit("@", 1)
+                else:
+                    action_name, version = ref, "none"
+                actions.append(
+                    {
+                        "repo": repo_name,
+                        "workflow_path": workflow_path,
+                        "action_name": action_name,
+                        "version": version,
+                        "owner": action_name.split("/")[0]
+                        if "/" in action_name
+                        else action_name,
+                    }
+                )
+    return actions
+
+
+def fetch_workflow_files(owner: str, repo: str) -> List[Dict[str, Any]]:
     """
     Fetch the list of files in .github/workflows/ for a repo.
     Returns a list of file objects from the github contents api.
@@ -86,11 +137,18 @@ def fetch_workflow_files(owner: str, repo: str)-> List[Dict[str, Any]]:
     try:
         data = gh_api(f"/repos/{owner}/{repo}/contents/.github/workflows")
         if isinstance(data, list):
-            return [f for f in data if isinstance(f, dict) and f.get("name", "").endswith((".yml", ".yaml"))]
+            return [
+                f
+                for f in data
+                if isinstance(f, dict) and f.get("name", "").endswith((".yml", ".yaml"))
+            ]
         return []
     except Exception as exc:
-        print(f" DEBUG workflow fetch failed for {owner}/{repo}: {exc}", file=sys.stderr)
+        print(
+            f" DEBUG workflow fetch failed for {owner}/{repo}: {exc}", file=sys.stderr
+        )
         return []
+
 
 def fetch_repo_actions_permissions(owner: str, repo: str) -> Dict[str, Any]:
     """
@@ -130,12 +188,13 @@ def fetch_latest_workflow_run(owner: str, repo: str) -> Optional[str]:
 # Build rows
 # ----------------------------------------------------------------------------------------------------------------------
 
+
 def build_repo_row(
     repo_info: Dict[str, Any],
     workflow_files: List[Dict[str, Any]],
     actions_permissions: Dict[str, Any],
     latest_run_date: Optional[str],
-)->  Dict[str, Any]:
+) -> Dict[str, Any]:
     """Build a summary row for one repository."""
     owner = ""
     if isinstance(repo_info.get("owner"), dict):
@@ -165,11 +224,10 @@ def build_repo_row(
         posture = "active_with_workflows"
     else:
         posture = "active_no_workflows"
-    
+
     # Flag: candidate for disabling Actions
-    disable_candidate = (
-        (archived and has_workflows)
-        or (not has_workflows and actions_enabled is True)
+    disable_candidate = (archived and has_workflows) or (
+        not has_workflows and actions_enabled is True
     )
 
     return {
@@ -178,7 +236,7 @@ def build_repo_row(
         "repo_name": repo_name,
         "visibility": visibility,
         "archived": archived,
-        "default_branch":default_branch,
+        "default_branch": default_branch,
         "actions_enabled": actions_enabled,
         "allowed_actions": allowed_actions,
         "has_workflows": has_workflows,
@@ -195,31 +253,35 @@ def build_workflow_detail_rows(
     owner: str,
     repo_name: str,
     workflow_files: List[Dict[str, Any]],
-)->  List[Dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """Build one details row per workflow file found."""
     rows = []
     for wf in workflow_files:
-        rows.append({
-            "repo": repo_full_name,
-            "owner": owner,
-            "repo_name": repo_name,
-            "workflow_file": wf.get("name", ""),
-            "path": wf.get("path", ""),
-            "sha": wf.get("sha", ""),
-            "download_url": wf.get("download_url", ""),   
-        })
+        rows.append(
+            {
+                "repo": repo_full_name,
+                "owner": owner,
+                "repo_name": repo_name,
+                "workflow_file": wf.get("name", ""),
+                "path": wf.get("path", ""),
+                "sha": wf.get("sha", ""),
+                "download_url": wf.get("download_url", ""),
+            }
+        )
     return rows
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # CSV writer
 # ----------------------------------------------------------------------------------------------------------------------
 
+
 def csv_write(path: str, rows: List[Dict[str, Any]]) -> None:
     if not rows:
-            with open(path, "w", encoding="utf-8") as f:
-                pass
-            print(f"No rows to write for {path}")
-            return
+        with open(path, "w", encoding="utf-8") as f:
+            pass
+        print(f"No rows to write for {path}")
+        return
 
     fieldnames: List[str] = []
     seen = set()
@@ -240,6 +302,7 @@ def csv_write(path: str, rows: List[Dict[str, Any]]) -> None:
 # Summary report
 # ----------------------------------------------------------------------------------------------------------------------
 
+
 def write_summary(
     path: str,
     repo_rows: List[Dict[str, Any]],
@@ -249,13 +312,21 @@ def write_summary(
     total = len(repo_rows)
     with_workflows = [r for r in repo_rows if r.get("has_workflows")]
     without_workflows = [r for r in repo_rows if not r.get("has_workflows")]
-    archived_with = [r for r in repo_rows if r.get("archived") and r.get("has_workflows")]
-    archived_without = [r for r in repo_rows if r.get("archived") and not r.get("has_workflows")]
-    active_with = [r for r in repo_rows if not r.get("archived") and r.get("has_workflows")]
-    active_without = [r for r in repo_rows if not r.get("archived") and not r.get("has_workflows")]
+    archived_with = [
+        r for r in repo_rows if r.get("archived") and r.get("has_workflows")
+    ]
+    archived_without = [
+        r for r in repo_rows if r.get("archived") and not r.get("has_workflows")
+    ]
+    active_with = [
+        r for r in repo_rows if not r.get("archived") and r.get("has_workflows")
+    ]
+    active_without = [
+        r for r in repo_rows if not r.get("archived") and not r.get("has_workflows")
+    ]
     disable_candidates = [r for r in repo_rows if r.get("disable_candidate")]
 
-    now =  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
         "=" * 70,
@@ -266,8 +337,8 @@ def write_summary(
         "OVERVIEW",
         "_" * 40,
         f"  Total repositories scanned:       {total}",
-        f"  Repos using GITHUB Actions:        {len(with_workflows)} ({len(with_workflows)/max(total,1)*100:.1f}%)",
-        f"  Repos NOT using GITHUB Actions:    {len(without_workflows)} ({len(without_workflows)/max(total,1)*100:.1f}%)",
+        f"  Repos using GITHUB Actions:        {len(with_workflows)} ({len(with_workflows) / max(total, 1) * 100:.1f}%)",
+        f"  Repos NOT using GITHUB Actions:    {len(without_workflows)} ({len(without_workflows) / max(total, 1) * 100:.1f}%)",
         f"  Total workflow files found:        {len(detail_rows)}",
         "",
         "BREAKDOWN",
@@ -288,24 +359,22 @@ def write_summary(
         lines.append("TOP REPOSITORIES BY WORKFLOW COUNT")
         lines.append("-" * 40)
         for r in top_repos:
-            lines.append(
-                f" {r['repo']:<55} workflows={r.get('workflow_count', 0):>3} "   
-            )
+            lines.append(f" {r['repo']:<55} workflows={r.get('workflow_count', 0):>3} ")
         lines.append("")
 
     # Archived repo with workflows (security concern)
     if archived_with:
         lines.append("ARCHIVED REPOS WITH WORKFLOWS (DISABLE CANDIDATES)")
         lines.append("-" * 40)
-        lines.append(" (Actions should be disabled on archived repo to reduce attack surface)")
+        lines.append(
+            " (Actions should be disabled on archived repo to reduce attack surface)"
+        )
         lines.append("")
         for r in archived_with:
-            lines.append(
-                f" {r['repo']:<55} workflows={r.get('workflow_count', 0):>3} "              
-            )
+            lines.append(f" {r['repo']:<55} workflows={r.get('workflow_count', 0):>3} ")
         lines.append("")
-    
-    # Achived repos with no workflows but Actions enabled
+
+    # Archived repos with no workflows but Actions enabled
     actions_enabled_no_wf = [
         r for r in active_without if r.get("actions_enabled") is True
     ]
@@ -332,33 +401,39 @@ def write_summary(
     print()
     print(report)
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Identify repositories using Github Actions across the MoJ estate"
     )
     parser.add_argument(
-        "--org", 
-        default=os.getenv("GITHUB_ORG", "ministryofjustice"), 
+        "--org",
+        default=os.getenv("GITHUB_ORG", "ministryofjustice"),
         help="GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)",
     )
     parser.add_argument(
-        "--repos", nargs="*", 
+        "--repos",
+        nargs="*",
         help="Specific repos to scan, e.g owner/repo owner/repo",
     )
     parser.add_argument(
-        "--repo-file", 
+        "--repo-file",
         help="Text file containing owner/repo entries, one per line",
     )
     parser.add_argument(
-        "--limit", type=int, default=500,
+        "--limit",
+        type=int,
+        default=500,
         help="Max repos to scan (default: 500)",
     )
     parser.add_argument(
-        "--out-prefix", default="github_workflow_posture",
+        "--out-prefix",
+        default="github_workflow_posture",
         help="Prefix for output files (default: github_workflow_posture)",
     )
     args = parser.parse_args()
@@ -393,13 +468,17 @@ def main() -> None:
         latest_run = None
         if workflow_files:
             latest_run = fetch_latest_workflow_run(owner, repo_name)
-        
+
         # Build rows
-        repo_row = build_repo_row(repo_info, workflow_files, actions_permissions, latest_run)
+        repo_row = build_repo_row(
+            repo_info, workflow_files, actions_permissions, latest_run
+        )
         repo_rows.append(repo_row)
 
         # Build detail rows for each workflows file
-        wf_details = build_workflow_detail_rows(full_name, owner, repo_name, workflow_files)
+        wf_details = build_workflow_detail_rows(
+            full_name, owner, repo_name, workflow_files
+        )
         detail_rows.extend(wf_details)
 
     # 3. Write outputs
@@ -408,13 +487,46 @@ def main() -> None:
     csv_write(f"{prefix}_workflow_details.csv", detail_rows)
     write_summary(f"{prefix}_summary.txt", repo_rows, detail_rows)
 
-
     print(
         f"\nDone. Scanned {total} repos, "
         f"found {len([r for r in repo_rows if r.get('has_workflows')])} using GitHub Actions "
         f"with {len(detail_rows)} total workflow files.",
         file=sys.stderr,
     )
+
+    # Analyse most common github actions used
+    print("\n--- Analysing actions used across workflows ---")
+
+    all_actions = []
+    for i, row in enumerate(detail_rows):
+        actions = parse_actions_from_workflow(args.org, row["repo_name"], row["path"])
+        all_actions.extend(actions)
+        if (i + 1) % 100 == 0:
+            print(f" Parsed {i + 1} / {len(detail_rows)} workflow files")
+        time.sleep(0.1)
+
+    print(f"Total action references found: {len(all_actions)}")
+
+    csv_write("github_actions_usage_detail.csv", all_actions)
+
+    action_counts = Counter(a["action_name"] for a in all_actions)
+    usage_summary = [
+        {"action_name": name, "times_used": count}
+        for name, count in action_counts.most_common()
+    ]
+    csv_write("github_actions_usage_summary.csv", usage_summary)
+
+    owner_counts = Counter(a["owner"] for a in all_actions)
+    owner_summary = [
+        {"owner": owner, "actions_referenced": count}
+        for owner, count in owner_counts.most_common()
+    ]
+    csv_write("github_actions_owner_summary.csv", owner_summary)
+
+    print(f"Unique actions: {len(usage_summary)}")
+    print(f"Unique owners: {len(owner_summary)}")
+    print("--- #35 complete ---")
+
 
 if __name__ == "__main__":
     main()
