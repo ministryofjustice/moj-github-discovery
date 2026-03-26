@@ -15,7 +15,7 @@ assignees: ''
 **so that**
 
 ## 💡 Value / Purpose
-<!-- Describe the business or user value of delivering this story -->
+<!-- Describe the value of delivering this story. Does this link to our OKRs? -->
 
 - 
 
@@ -32,6 +32,7 @@ assignees: ''
 ## ✅ Definition of Done
 <!-- What conditions must be met before this story is considered complete -->
 
+- [ ] Document work completed in Developer Experience Team SharePoint
 - [ ] 
 
 ## ❓ Additional Information
