@@ -267,6 +267,37 @@ class TestRepoCollector:
         assert result.alerts is not None
         assert result.alerts.dependabot_alerts == 1
 
+    def test_collects_with_threads(self):
+        storage = MockStorage()
+        client = MockHttpClient()
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[_FakeAlertEndpoint, _FakeCodeownersEndpoint],
+            max_workers=3,
+        )
+
+        collector.collect(
+            "org",
+            repos=["org/repo-a", "org/repo-b", "org/repo-c"],
+            resume=False,
+        )
+
+        for full_name in ["org/repo-a", "org/repo-b", "org/repo-c"]:
+            result = storage.read(full_name)
+            assert result is not None
+            assert result.alerts is not None
+            assert result.codeowners is not None
+
+    def test_rejects_invalid_worker_count(self):
+        with pytest.raises(ValueError, match="max_workers must be >= 1"):
+            RepoCollector(
+                storage=MockStorage(),
+                client=MockHttpClient(),
+                endpoints=[_FakeAlertEndpoint],
+                max_workers=0,
+            )
+
 
 # ── OrgEndpointCollector ──────────────────────────────────────────────
 
