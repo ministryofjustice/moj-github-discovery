@@ -7,7 +7,6 @@ import argparse
 import atexit
 import json
 import os
-import pickle
 import sys
 import time
 from typing import Any
@@ -30,8 +29,10 @@ from core.github_api import (
 )
 from core.github_client import GitHubHttpClient
 from core.presenters import build_org_security_summary
+from core.storage import SqliteOrgStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ORG_CACHE_DB_PATH = os.path.join(SCRIPT_DIR, "org_posture_cache.db")
 __start_time: float | None = None
 
 
@@ -65,30 +66,27 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _cache_path(org: str) -> str:
-    return os.path.join(SCRIPT_DIR, f".posture_cache_{org}.pkl")
+def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
+    try:
+        cached = storage.read_cache(org)
+        if cached is None:
+            return {}
+        cache, updated_at = cached
+        age_min = (time.time() - updated_at) / 60
+        print(
+            f"  Loaded cache ({age_min:.0f} min old): {ORG_CACHE_DB_PATH}",
+            file=sys.stderr,
+        )
+        return cache
+    except Exception as exc:
+        print(f"  Cache load failed: {exc}", file=sys.stderr)
+        return {}
 
 
-def _load_cache(org: str) -> dict[str, Any]:
-    path = _cache_path(org)
-    if os.path.exists(path):
-        try:
-            with open(path, "rb") as handle:
-                cache = pickle.load(handle)
-            age_min = (time.time() - cache.get("_ts", 0)) / 60
-            print(f"  Loaded cache ({age_min:.0f} min old): {path}", file=sys.stderr)
-            return cache
-        except Exception as exc:
-            print(f"  Cache load failed: {exc}", file=sys.stderr)
-    return {}
-
-
-def _save_cache(org: str, cache: dict[str, Any]) -> None:
-    cache["_ts"] = time.time()
-    path = _cache_path(org)
-    with open(path, "wb") as handle:
-        pickle.dump(cache, handle)
-    print(f"  Saved cache: {path}", file=sys.stderr)
+def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage) -> None:
+    updated_at = time.time()
+    storage.upsert_cache(org, cache, updated_at)
+    print(f"  Saved cache: {ORG_CACHE_DB_PATH}", file=sys.stderr)
 
 
 def run_full_audit(
@@ -96,7 +94,9 @@ def run_full_audit(
     repo_sample_limit: int = 100,
     use_cache: bool = True,
 ) -> dict[str, Any]:
-    cache = _load_cache(org) if use_cache else {}
+    cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
+    cache_storage.init()
+    cache = _load_cache(org, cache_storage) if use_cache else {}
     client = GitHubHttpClient()
 
     report: dict[str, Any] = {
@@ -170,7 +170,7 @@ def run_full_audit(
         }
         print(f"  done ({time.monotonic() - t0:.1f}s)", file=sys.stderr)
         cache[section3_col_name] = report[section3_col_name]
-        _save_cache(org, cache)
+        _save_cache(org, cache, cache_storage)
 
     report["4_actions_posture"] = {
         "details": {

@@ -292,7 +292,7 @@ class TestRepoData:
     def test_model_copy_merge(self):
         """model_copy + JSON round-trip should merge fields without discarding others.
 
-        This mirrors how SqliteStorage.upsert works: model_copy merges at the
+        This mirrors how SqliteRepoStorage.upsert works: model_copy merges at the
         field level, and the JSON round-trip re-validates nested dicts back
         into proper Pydantic model instances.
         """
@@ -306,7 +306,7 @@ class TestRepoData:
         merged_raw = existing.model_copy(
             update=update.model_dump(exclude_none=True),
         )
-        # Round-trip through JSON (as SqliteStorage does)
+        # Round-trip through JSON (as SqliteRepoStorage does)
         merged = RepoData.model_validate_json(merged_raw.model_dump_json())
         assert merged.alerts.dependabot_alerts == 3  # preserved
         assert merged.codeowners.present is True  # added

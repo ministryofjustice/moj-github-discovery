@@ -98,7 +98,7 @@ class RepoCollector(BaseCollector):
 
     Usage::
 
-        storage = SqliteStorage("repo_data.db")
+        storage = SqliteRepoStorage("repo_data.db")
         collector = RepoCollector(storage)
         collector.collect("ministryofjustice")
 

@@ -173,7 +173,7 @@ python org_security_posture.py <org> [--excel path] [--json] [--repo-limit N] [-
 - A summary printed to stderr
 - JSON to stdout by default
 - Excel workbook output when `--excel` is supplied
-- Cached results stored in `.posture_cache_<org>.pkl` for reuse on later runs
+- Cached results stored in `org_posture_cache.db` for reuse on later runs
 
 **Examples:**
 

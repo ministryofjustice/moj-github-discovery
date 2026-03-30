@@ -69,7 +69,7 @@ class MockStorage(BaseStorage):
         merged = existing.model_copy(
             update=update.model_dump(exclude_none=True),
         )
-        # Round-trip through JSON like SqliteStorage to ensure nested dicts
+        # Round-trip through JSON like SqliteRepoStorage to ensure nested dicts
         # are re-validated into proper Pydantic model instances.
         self._data[full_name] = RepoData.model_validate_json(
             merged.model_dump_json(),
