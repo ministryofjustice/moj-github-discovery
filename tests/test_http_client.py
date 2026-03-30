@@ -172,8 +172,7 @@ class TestRequestRetry:
 
         assert result == {"id": 1}
 
-    @patch("core.github_client.time.sleep")
-    def test_retry_on_403(self, mock_sleep):
+    def test_retry_on_403(self):
         client = GitHubHttpClient(token="t", max_attempts=3)
 
         fail_resp = MagicMock()
@@ -188,10 +187,11 @@ class TestRequestRetry:
 
         with patch.object(client, "_get_session") as mock_sess:
             mock_sess.return_value.request.side_effect = [fail_resp, ok_resp]
-            result = client.get("/test")
+            with patch.object(client, "_sleep_with_progress") as mock_wait:
+                result = client.get("/test")
 
         assert result == {"ok": True}
-        mock_sleep.assert_called_once()
+        mock_wait.assert_called_once()
 
     @patch("core.github_client.time.sleep")
     def test_exhausted_retries_raises(self, mock_sleep):

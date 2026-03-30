@@ -35,7 +35,9 @@ from __future__ import annotations
 
 import inspect
 import sys
+import threading
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -114,6 +116,7 @@ class RepoCollector(BaseCollector):
         storage: BaseStorage,
         client: BaseHttpClient | None = None,
         endpoints: list[type[BaseEndpoint]] | None = None,
+        max_workers: int = 8,
     ) -> None:
         """
         Args:
@@ -123,10 +126,17 @@ class RepoCollector(BaseCollector):
                        :class:`~core.github_client.GitHubHttpClient`.
             endpoints: List of endpoint classes to run.  Defaults to
                        :data:`~core.github_api.REPO_ENDPOINTS`.
+            max_workers: Number of worker threads for repo collection.
+                        Use ``1`` for sequential collection.
         """
+        if max_workers < 1:
+            raise ValueError("max_workers must be >= 1")
+
         self.storage = storage
         self.client = client or GitHubHttpClient()
         self.endpoints: list[type[BaseEndpoint]] = endpoints or REPO_ENDPOINTS
+        self.max_workers = max_workers
+        self._storage_lock = threading.Lock()
 
     # ── Public interface ──────────────────────────────────────────────
 
@@ -142,24 +152,37 @@ class RepoCollector(BaseCollector):
         total = len(repo_list)
         print(
             f"Collecting {total} repo(s) for '{org}' "
-            f"({'resume mode' if resume else 'full run'})",
+            f"({'resume mode' if resume else 'full run'}, workers={self.max_workers})",
             file=sys.stderr,
         )
 
-        for idx, full_name in enumerate(repo_list, start=1):
-            parts = full_name.split("/", 1)
-            if len(parts) != 2:
+        if self.max_workers == 1 or total <= 1:
+            for idx, full_name in enumerate(repo_list, start=1):
                 print(
-                    f"[skip] Invalid repo name: {full_name!r}",
+                    f"[{idx}/{total}] {full_name}",
                     file=sys.stderr,
                 )
-                continue
-            owner, repo = parts
-            print(
-                f"[{idx}/{total}] {full_name}",
-                file=sys.stderr,
-            )
-            self._collect_repo(owner, repo, full_name, resume=resume)
+                self._collect_full_name(full_name, resume=resume)
+            return
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {}
+            for idx, full_name in enumerate(repo_list, start=1):
+                print(
+                    f"[{idx}/{total}] queue {full_name}",
+                    file=sys.stderr,
+                )
+                futures[executor.submit(self._collect_full_name, full_name, resume)] = (
+                    full_name
+                )
+
+            for future in as_completed(futures):
+                full_name = futures[future]
+                try:
+                    future.result()
+                    print(f"  [done] {full_name}", file=sys.stderr)
+                except Exception as exc:
+                    print(f"  [error] {full_name}: {exc}", file=sys.stderr)
 
     # ── Internal helpers ──────────────────────────────────────────────
 
@@ -188,7 +211,7 @@ class RepoCollector(BaseCollector):
         resume: bool,
     ) -> None:
         """Run all endpoints for a single repository."""
-        existing = self.storage.read(full_name) or RepoData()
+        existing = self._storage_read(full_name) or RepoData()
 
         for endpoint_cls in self.endpoints:
             endpoint = endpoint_cls(self.client)
@@ -204,20 +227,42 @@ class RepoCollector(BaseCollector):
             try:
                 fetch_kwargs = self._build_fetch_kwargs(endpoint, existing)
                 result_model = endpoint.fetch(owner, repo, **fetch_kwargs)
-                self.storage.upsert(full_name, RepoData(**{key: result_model}))
+                self._storage_upsert(full_name, RepoData(**{key: result_model}))
                 # Refresh local copy so the next endpoint sees the updated state
                 # TODO: This is a bit clunky — ideally the storage layer would handle merging
-                existing = self.storage.read(full_name) or existing
+                existing = self._storage_read(full_name) or existing
                 print(f"  [ok] {key}", file=sys.stderr)
             except Exception as exc:
                 print(f"  [error] {key}: {exc}", file=sys.stderr)
                 # Continue to the next endpoint — never abort the whole repo
 
         # Stamp the collection timestamp
-        self.storage.upsert(
+        self._storage_upsert(
             full_name,
             RepoData(collected_at=datetime.now(timezone.utc).isoformat()),
         )
+
+    def _collect_full_name(self, full_name: str, resume: bool) -> None:
+        """Parse and collect a single ``owner/repo`` identifier."""
+        parts = full_name.split("/", 1)
+        if len(parts) != 2:
+            print(
+                f"[skip] Invalid repo name: {full_name!r}",
+                file=sys.stderr,
+            )
+            return
+        owner, repo = parts
+        self._collect_repo(owner, repo, full_name, resume=resume)
+
+    def _storage_read(self, full_name: str) -> RepoData | None:
+        """Thread-safe storage read."""
+        with self._storage_lock:
+            return self.storage.read(full_name)
+
+    def _storage_upsert(self, full_name: str, update: RepoData) -> None:
+        """Thread-safe storage upsert."""
+        with self._storage_lock:
+            self.storage.upsert(full_name, update)
 
 
 # ── Org-scoped collector ──────────────────────────────────────────────

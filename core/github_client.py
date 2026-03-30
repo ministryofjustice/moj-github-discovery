@@ -23,6 +23,7 @@ Consolidates ``utils._get_github_token``, ``utils._get_session``,
 from __future__ import annotations
 
 import os
+import sys
 import time
 from abc import ABC, abstractmethod
 from typing import Any
@@ -184,6 +185,46 @@ class GitHubHttpClient(BaseHttpClient):
         # Bounded exponential backoff
         return min(300, 15 * (2 ** (attempt - 1)))
 
+    @staticmethod
+    def _format_wait(seconds: int) -> str:
+        """Render a short human-readable duration string."""
+        minutes, secs = divmod(max(0, int(seconds)), 60)
+        if minutes:
+            return f"{minutes}m {secs:02d}s"
+        return f"{secs}s"
+
+    @staticmethod
+    def _rate_limit_reason(resp: requests.Response) -> str:
+        """Summarise why the request is being delayed."""
+        retry_after = resp.headers.get("Retry-After")
+        if retry_after:
+            return f"retry-after={retry_after}s"
+
+        remaining = resp.headers.get("X-RateLimit-Remaining")
+        if remaining == "0":
+            return "primary quota exhausted"
+
+        return "403 rate limit"
+
+    @staticmethod
+    def _sleep_with_progress(delay_seconds: int, prefix: str) -> None:
+        """Sleep while printing a live countdown on stderr."""
+        remaining = max(1, int(delay_seconds))
+        while remaining > 0:
+            print(
+                f"\r{prefix}: waiting {GitHubHttpClient._format_wait(remaining)}",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+            # Keep updates frequent without spamming too much on long waits.
+            sleep_for = 1 if remaining <= 60 else min(5, remaining)
+            time.sleep(sleep_for)
+            remaining -= sleep_for
+
+        print("\r" + " " * 100, end="\r", file=sys.stderr, flush=True)
+        print(f"{prefix}: retrying now", file=sys.stderr, flush=True)
+
     def _request(self, method: str, url: str) -> requests.Response:
         """Send a request and retry on rate-limit 403s."""
         sess = self._get_session()
@@ -196,7 +237,12 @@ class GitHubHttpClient(BaseHttpClient):
                 status = exc.response.status_code if exc.response is not None else None
                 if status != 403 or attempt >= self._max_attempts:
                     raise
-                time.sleep(self._rate_limit_delay(resp, attempt))
+                delay = self._rate_limit_delay(resp, attempt)
+                reason = self._rate_limit_reason(resp)
+                self._sleep_with_progress(
+                    delay,
+                    prefix=f"[rate-limit] {reason} (attempt {attempt}/{self._max_attempts})",
+                )
 
         raise RuntimeError("Unexpected retry exhaustion")  # defensive
 
