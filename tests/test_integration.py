@@ -48,7 +48,7 @@ from core.models import (
     RepoDetails,
     WorkflowData,
 )
-from core.storage import SqliteStorage
+from core.storage import SqliteRepoStorage
 
 # ── Constants ─────────────────────────────────────────────────────────
 
@@ -240,7 +240,7 @@ class TestRepoCollectorIntegration:
         Uses a subset of endpoints to keep the test fast.
         """
         db_path = str(tmp_path / "integration.db")
-        storage = SqliteStorage(db_path)
+        storage = SqliteRepoStorage(db_path)
         collector = RepoCollector(
             storage=storage,
             client=client,
@@ -258,7 +258,7 @@ class TestRepoCollectorIntegration:
     def test_resume_idempotent(self, client, tmp_path):
         """Running with resume=True after a full run should not error."""
         db_path = str(tmp_path / "resume.db")
-        storage = SqliteStorage(db_path)
+        storage = SqliteRepoStorage(db_path)
         collector = RepoCollector(
             storage=storage,
             client=client,

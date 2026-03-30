@@ -28,9 +28,10 @@ the legacy single-repo audit script (``repo_info``, ``community_profile``, ``lis
 
 from __future__ import annotations
 
+import base64
 import time
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -92,13 +93,30 @@ def dependency_supply_chain_summary(
     org: str,
     client: BaseHttpClient,
     repo_limit: int = 100,
+    repo_full_names: list[str] | None = None,
 ) -> dict[str, object]:
-    """Return org-level supply-chain summary by sampling recently-pushed repos."""
+    """Return org-level supply-chain summary by sampling/pinning repositories."""
     cap = max(1, min(repo_limit, 100))
-    try:
-        repos = client.get_paginated(f"/orgs/{org}/repos?sort=pushed&direction=desc")
-    except Exception:
-        repos = []
+    repos: list[dict[str, object]] = []
+    if repo_full_names is not None:
+        for full_name in repo_full_names:
+            owner, sep, name = full_name.partition("/")
+            if sep != "/" or not owner or not name:
+                continue
+            try:
+                repo_data = client.get(f"/repos/{owner}/{name}")
+            except Exception:
+                continue
+            if isinstance(repo_data, dict):
+                repos.append(repo_data)
+        cap = len(repos)
+    else:
+        try:
+            repos = client.get_paginated(
+                f"/orgs/{org}/repos?sort=pushed&direction=desc"
+            )
+        except Exception:
+            repos = []
 
     details: list[dict[str, object]] = []
     for repo in repos[:cap]:
@@ -140,6 +158,74 @@ def dependency_supply_chain_summary(
         ),
         "details": details,
     }
+
+
+def fetch_repo_actions_permissions(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+) -> dict[str, Any]:
+    """Return repo-level Actions permissions from the GitHub API."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/actions/permissions")
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def fetch_latest_workflow_run_created_at(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+) -> str | None:
+    """Return created_at of the most recent workflow run for a repo."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/actions/runs?per_page=1")
+        if isinstance(data, dict):
+            runs = data.get("workflow_runs", [])
+            if runs:
+                first = runs[0]
+                if isinstance(first, dict):
+                    return first.get("created_at")
+        return None
+    except Exception:
+        return None
+
+
+def fetch_repo_file_text(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+    path: str,
+) -> str | None:
+    """Return UTF-8 file text for a repository path via contents API."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/contents/{path}")
+        if not (isinstance(data, dict) and data.get("encoding") == "base64"):
+            return None
+        content = data.get("content")
+        if not isinstance(content, str):
+            return None
+        return base64.b64decode(content).decode("utf-8")
+    except Exception:
+        return None
+
+
+def fetch_repo_alerts(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+    kind: Literal["dependabot", "code_scanning", "secret_scanning"],
+) -> list[dict[str, Any]]:
+    """Return raw alert rows for one alert kind on a repository."""
+    endpoint_map = {
+        "dependabot": "dependabot/alerts",
+        "code_scanning": "code-scanning/alerts",
+        "secret_scanning": "secret-scanning/alerts",
+    }
+    endpoint = endpoint_map[kind]
+    items = client.get_paginated(f"/repos/{owner}/{repo}/{endpoint}")
+    return [item for item in items if isinstance(item, dict)]
 
 
 # ── Abstract bases ────────────────────────────────────────────────────
@@ -771,6 +857,16 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
     WorkflowsEndpoint,
     DependencyGraphEndpoint,
     CodeSearchEndpoint,
+]
+
+STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
+    RepoDetailsEndpoint,
+    BranchProtectionEndpoint,
+    AlertsEndpoint,
+    CommunityProfileEndpoint,
+    CodeownersEndpoint,
+    ForkTemplateEndpoint,
+    WorkflowsEndpoint,
 ]
 
 ORG_ENDPOINTS: list[type[BaseOrgEndpoint]] = [

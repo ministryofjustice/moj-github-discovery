@@ -24,15 +24,16 @@ See ``CONTRIBUTING.md § 3`` for a walkthrough.
 
 Migration notes
 ---------------
-Replaces the dual-table schema (``audits`` + ``repo_rows``) and all four
-pickle cache files across the existing scripts.
+Replaces the dual-table schema (``audits`` + ``repo_rows``) and legacy
+ad-hoc cache files used by older scripts.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from core.models import RepoData
 
@@ -43,6 +44,14 @@ _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS repo_data (
     full_name TEXT PRIMARY KEY,
     data      TEXT NOT NULL
+);
+"""
+
+_CREATE_ORG_CACHE_TABLE = """
+CREATE TABLE IF NOT EXISTS org_cache (
+    org        TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,
+    updated_at REAL NOT NULL
 );
 """
 
@@ -104,7 +113,7 @@ class BaseStorage(ABC):
 # ── Concrete implementation ───────────────────────────────────────────
 
 
-class SqliteStorage(BaseStorage):
+class SqliteRepoStorage(BaseStorage):
     """Single-table SQLite storage backend.
 
     Serialises ``RepoData`` via Pydantic's ``model_dump_json()`` and
@@ -172,4 +181,47 @@ class SqliteStorage(BaseStorage):
             conn.execute(
                 "DELETE FROM repo_data WHERE full_name = ?",
                 (full_name,),
+            )
+
+
+class SqliteOrgStorage:
+    """SQLite storage for organisation-level posture cache data."""
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init(self) -> None:
+        with self._connect() as conn:
+            conn.execute(_CREATE_ORG_CACHE_TABLE)
+
+    def read_cache(self, org: str) -> tuple[dict[str, Any], float] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT data, updated_at FROM org_cache WHERE org = ?",
+                (org,),
+            ).fetchone()
+        if row is None:
+            return None
+
+        data = json.loads(row["data"])
+        if not isinstance(data, dict):
+            return {}, float(row["updated_at"])
+        return data, float(row["updated_at"])
+
+    def upsert_cache(self, org: str, cache: dict[str, Any], updated_at: float) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO org_cache (org, data, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(org) DO UPDATE SET
+                    data = excluded.data,
+                    updated_at = excluded.updated_at
+                """,
+                (org, json.dumps(cache, default=str), updated_at),
             )

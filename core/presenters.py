@@ -11,6 +11,7 @@ from typing import Any
 import pandas as pd
 
 from core.models import RepoData
+from core.storage import BaseStorage
 
 
 def flags_for_list(data: RepoData) -> list[str]:
@@ -165,6 +166,15 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
     }
 
 
+def build_dashboard_dataframe(storage: BaseStorage) -> pd.DataFrame:
+    """Build the dashboard row dataframe from storage contents."""
+    rows = [
+        repo_data_to_dashboard_row(full_name, data)
+        for full_name, data in storage.read_all()
+    ]
+    return pd.DataFrame(rows)
+
+
 def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
     """Map RepoData into dashboard detail-panel audit payload."""
     repo = data.repo_details.model_dump() if data.repo_details else {}
@@ -281,7 +291,7 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     summary["code_scanning_open_alerts"] = val_or_no_access(
         ghas.get("code_scanning", {}), "open_count"
     )
-    summary["secret_scanning_open_alerts"] = val_or_no_access(
+    summary["credential_scanning_open_alerts"] = val_or_no_access(
         ghas.get("secret_scanning", {}), "open_count"
     )
 
@@ -295,8 +305,8 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     summary["allowed_actions_policy"] = val_or_no_access(
         actions.get("actions_permissions", {}), "allowed_actions"
     )
-    summary["org_secrets_count"] = val_or_no_access(
-        actions.get("secrets", {}), "total_count"
+    summary["org_credential_count"] = val_or_no_access(
+        actions.get("credential_inventory", {}), "total_count"
     )
     summary["default_workflow_permissions"] = val_or_no_access(
         actions.get("default_workflow_permissions", {}), "default_workflow_permissions"

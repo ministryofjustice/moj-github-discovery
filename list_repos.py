@@ -14,17 +14,11 @@ import pandas as pd
 
 from core.collector import RepoCollector
 from core.github_api import (
-    AlertsEndpoint,
-    BranchProtectionEndpoint,
-    CodeownersEndpoint,
-    CommunityProfileEndpoint,
-    ForkTemplateEndpoint,
-    RepoDetailsEndpoint,
-    WorkflowsEndpoint,
+    STANDARD_REPO_AUDIT_ENDPOINTS,
 )
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
-from core.storage import SqliteStorage
+from core.storage import SqliteRepoStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB_PATH = os.path.join(SCRIPT_DIR, "repo_audit.db")
@@ -109,18 +103,10 @@ def main() -> None:
         print("No repositories found in repo file after applying --limit.")
         return
 
-    storage = SqliteStorage(args.db)
+    storage = SqliteRepoStorage(args.db)
     collector = RepoCollector(
         storage=storage,
-        endpoints=[
-            RepoDetailsEndpoint,
-            BranchProtectionEndpoint,
-            AlertsEndpoint,
-            CommunityProfileEndpoint,
-            CodeownersEndpoint,
-            ForkTemplateEndpoint,
-            WorkflowsEndpoint,
-        ],
+        endpoints=STANDARD_REPO_AUDIT_ENDPOINTS,
     )
 
     primary_org = repo_list[0].split("/", 1)[0]

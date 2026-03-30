@@ -27,6 +27,7 @@ Replaces the DataFrame-to-Excel / DataFrame-to-CSV logic spread across
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from abc import ABC, abstractmethod
@@ -246,6 +247,35 @@ class CsvCompiler(BaseCompiler):
         df = build_dataframe(storage, config)
         df.to_csv(output_path, index=False)
         print(f"Wrote {output_path}", file=sys.stderr)
+
+    @staticmethod
+    def write_rows(
+        output_path: str | Path,
+        rows: list[dict[str, Any]],
+    ) -> int:
+        """Write dict rows to CSV preserving first-seen key order.
+
+        Returns:
+            Number of rows written. If *rows* is empty, an empty file is created.
+        """
+        path = Path(output_path)
+        if not rows:
+            path.write_text("", encoding="utf-8")
+            return 0
+
+        fieldnames: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    fieldnames.append(key)
+                    seen.add(key)
+
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        return len(rows)
 
 
 # ── Compiler registry ─────────────────────────────────────────────────

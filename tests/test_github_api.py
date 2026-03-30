@@ -23,6 +23,11 @@ from core.github_api import (
     OrgWebhooksEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
+    dependency_supply_chain_summary,
+    fetch_latest_workflow_run_created_at,
+    fetch_repo_actions_permissions,
+    fetch_repo_alerts,
+    fetch_repo_file_text,
     list_org_repos,
 )
 from core.models import (
@@ -97,6 +102,107 @@ class TestListOrgRepos:
         )
         list_org_repos("myorg", client)
         assert any("direction" not in call[1] for call in client.calls)
+
+
+class TestDependencySupplyChainSummary:
+    def test_empty_repo_scope_does_not_fallback_to_org(self):
+        client = MockHttpClient()
+        result = dependency_supply_chain_summary(
+            "myorg",
+            client,
+            repo_full_names=[],
+        )
+
+        assert result["repos_checked"] == 0
+        assert result["details"] == []
+        # Explicit empty scope should not trigger org-wide listing.
+        assert not any(
+            call[0] == "GET_PAGINATED" and "/orgs/myorg/repos" in call[1]
+            for call in client.calls
+        )
+
+    def test_none_repo_scope_uses_org_listing(self):
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?sort=pushed&direction=desc": [
+                    {
+                        "owner": {"login": "myorg"},
+                        "name": "repo-a",
+                        "visibility": "private",
+                        "archived": False,
+                        "default_branch": "main",
+                        "license": {"spdx_id": "MIT"},
+                        "topics": ["one", "two"],
+                    }
+                ],
+                "/repos/myorg/repo-a/dependency-graph/sbom": {},
+                "/repos/myorg/repo-a/branches/main": {"protected": True},
+            }
+        )
+
+        result = dependency_supply_chain_summary("myorg", client, repo_full_names=None)
+
+        assert result["repos_checked"] == 1
+        assert any(
+            call[0] == "GET_PAGINATED" and "/orgs/myorg/repos" in call[1]
+            for call in client.calls
+        )
+
+
+# ── script-helper functions ──────────────────────────────────────────
+
+
+class TestWorkflowAndAlertHelpers:
+    def test_fetch_repo_actions_permissions(self):
+        client = MockHttpClient(
+            {
+                "/repos/o/r/actions/permissions": {
+                    "enabled": True,
+                    "allowed_actions": "selected",
+                }
+            }
+        )
+        result = fetch_repo_actions_permissions(client, "o", "r")
+        assert result["enabled"] is True
+
+    def test_fetch_latest_workflow_run_created_at(self):
+        client = MockHttpClient(
+            {
+                "/repos/o/r/actions/runs?per_page=1": {
+                    "workflow_runs": [{"created_at": "2026-01-01T10:00:00Z"}],
+                }
+            }
+        )
+        result = fetch_latest_workflow_run_created_at(client, "o", "r")
+        assert result == "2026-01-01T10:00:00Z"
+
+    def test_fetch_latest_workflow_run_created_at_missing(self):
+        client = MockHttpClient(
+            {"/repos/o/r/actions/runs?per_page=1": {"workflow_runs": []}}
+        )
+        result = fetch_latest_workflow_run_created_at(client, "o", "r")
+        assert result is None
+
+    def test_fetch_repo_file_text(self):
+        client = MockHttpClient(
+            {
+                "/repos/o/r/contents/.github/workflows/ci.yml": {
+                    "encoding": "base64",
+                    "content": "bmFtZTogQ0kK",
+                }
+            }
+        )
+        text = fetch_repo_file_text(client, "o", "r", ".github/workflows/ci.yml")
+        assert text == "name: CI\n"
+
+    def test_fetch_repo_alerts(self):
+        client = MockHttpClient(
+            {
+                "/repos/o/r/code-scanning/alerts": [{"id": 1}, {"id": 2}],
+            }
+        )
+        alerts = fetch_repo_alerts(client, "o", "r", "code_scanning")
+        assert alerts == [{"id": 1}, {"id": 2}]
 
 
 # ── Endpoint registries ──────────────────────────────────────────────

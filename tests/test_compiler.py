@@ -292,6 +292,26 @@ class TestCsvCompiler:
     def test_format_name(self):
         assert CsvCompiler().format_name == "csv"
 
+    def test_write_rows_empty_creates_empty_file(self, tmp_path):
+        output = tmp_path / "rows.csv"
+        written = CsvCompiler.write_rows(output, [])
+
+        assert written == 0
+        assert output.exists()
+        assert output.read_text(encoding="utf-8") == ""
+
+    def test_write_rows_preserves_first_seen_columns(self, tmp_path):
+        output = tmp_path / "rows.csv"
+        rows = [{"a": 1, "b": 2}, {"b": 3, "c": 4}]
+
+        written = CsvCompiler.write_rows(output, rows)
+        content = output.read_text(encoding="utf-8").splitlines()
+
+        assert written == 2
+        assert content[0] == "a,b,c"
+        assert content[1] == "1,2,"
+        assert content[2] == ",3,4"
+
 
 # ── ExcelCompiler ────────────────────────────────────────────────────
 
