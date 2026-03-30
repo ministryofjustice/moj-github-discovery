@@ -186,7 +186,7 @@ def run_full_audit(
                 "access": "ok",
                 "allowed_actions": org_data["org_actions"].allowed_actions_policy,
             },
-            "secrets": {
+            "credential_inventory": {
                 "access": "ok",
                 "total_count": org_data["org_actions"].org_secrets_count,
                 "names": [],
@@ -257,8 +257,8 @@ def write_excel(report: dict[str, Any], path: str) -> None:
 
     actions = report.get("4_actions_posture", {}).get("details", {})
     runners_df = pd.DataFrame(actions.get("runners", {}).get("runners", []))
-    secrets_df = pd.DataFrame(
-        {"secret_name": actions.get("secrets", {}).get("names", [])}
+    credentials_df = pd.DataFrame(
+        {"credential_name": actions.get("credential_inventory", {}).get("names", [])}
     )
 
     webhooks = report.get("5_webhooks_integrations", {}).get("details", {})
@@ -287,8 +287,8 @@ def write_excel(report: dict[str, Any], path: str) -> None:
             deps_df.to_excel(writer, index=False, sheet_name="Supply Chain")
         if not runners_df.empty:
             runners_df.to_excel(writer, index=False, sheet_name="Runners")
-        if not secrets_df.empty:
-            secrets_df.to_excel(writer, index=False, sheet_name="Org Secrets")
+        if not credentials_df.empty:
+            credentials_df.to_excel(writer, index=False, sheet_name="Org Credentials")
         if not hooks_df.empty:
             hooks_df.to_excel(writer, index=False, sheet_name="Webhooks")
         if not apps_df.empty:
@@ -328,9 +328,34 @@ def main() -> None:
     )
 
     summary = build_org_security_summary(report)
+    _SAFE_SUMMARY_KEYS = (
+        "org_name",
+        "public_repos",
+        "total_private_repos",
+        "2fa_requirement_enabled",
+        "default_repo_permission",
+        "default_branch",
+        "total_members",
+        "members_without_2fa",
+        "outside_collaborators",
+        "teams_count",
+        "code_scanning_open_alerts",
+        "credential_scanning_open_alerts",
+        "repos_checked_for_supply_chain",
+        "repos_with_sbom",
+        "repos_with_branch_protection",
+        "self_hosted_runners",
+        "allowed_actions_policy",
+        "org_credential_count",
+        "default_workflow_permissions",
+        "org_webhooks_count",
+        "installed_github_apps",
+        "org_rulesets_count",
+    )
     print("\n=== SECURITY POSTURE SUMMARY ===", file=sys.stderr)
-    for key, value in summary.items():
-        print(f"  {key}: {value}", file=sys.stderr)
+    for key in _SAFE_SUMMARY_KEYS:
+        if key in summary:
+            print(f"  {key}: {summary[key]}", file=sys.stderr)
 
     if args.excel:
         write_excel(report, args.excel)

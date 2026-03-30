@@ -281,7 +281,7 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     summary["code_scanning_open_alerts"] = val_or_no_access(
         ghas.get("code_scanning", {}), "open_count"
     )
-    summary["secret_scanning_open_alerts"] = val_or_no_access(
+    summary["credential_scanning_open_alerts"] = val_or_no_access(
         ghas.get("secret_scanning", {}), "open_count"
     )
 
@@ -295,8 +295,8 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     summary["allowed_actions_policy"] = val_or_no_access(
         actions.get("actions_permissions", {}), "allowed_actions"
     )
-    summary["org_secrets_count"] = val_or_no_access(
-        actions.get("secrets", {}), "total_count"
+    summary["org_credential_count"] = val_or_no_access(
+        actions.get("credential_inventory", {}), "total_count"
     )
     summary["default_workflow_permissions"] = val_or_no_access(
         actions.get("default_workflow_permissions", {}), "default_workflow_permissions"
