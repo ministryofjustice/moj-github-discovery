@@ -158,34 +158,32 @@ Performs an organisation-level audit that complements the per-repo scripts. It c
 **Usage:**
 
 ```bash
-python org_security_posture.py <org> [--excel path] [--json] [--repo-limit N] [--no-cache]
+python org_security_posture.py <org> [--excel path] [--repo-file [path]] [--no-cache]
 ```
 
 **Options:**
 
 - `--excel <path>` - Write the report to a multi-sheet Excel workbook.
-- `--json` - Also print the full report as JSON.
-- `--repo-limit <N>` - Limit how many repositories are sampled for repo-level posture checks. Default is `100`.
+- `--repo-file [path]` - Limit repo-level supply-chain checks to repos in a list file. If passed without a value, defaults to `repo_list.yaml`.
 - `--no-cache` - Ignore the saved posture cache and fetch fresh data.
 
 **Output:**
 
 - A summary printed to stderr
-- JSON to stdout by default
 - Excel workbook output when `--excel` is supplied
 - Cached results stored in `org_posture_cache.db` for reuse on later runs
 
 **Examples:**
 
 ```bash
-# Print the full organisation posture report as JSON
-python org_security_posture.py ministryofjustice
-
 # Export a workbook for review
 python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
 
-# Export Excel and JSON using a smaller repo sample
-python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --json --repo-limit 50
+# Limit supply-chain checks to repos from repo_list.yaml
+python org_security_posture.py ministryofjustice --repo-file
+
+# Limit supply-chain checks to repos from a custom list file
+python org_security_posture.py ministryofjustice --repo-file custom_repos.yaml --excel moj-security-posture.xlsx
 
 # Force a fresh pull instead of using the local cache
 python org_security_posture.py ministryofjustice --no-cache
@@ -331,7 +329,10 @@ python archive_repos.py ministryofjustice --audit-db /tmp/archive-audit.db
 python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
 
 # 2. Re-run without cache when you need fresh data
-python org_security_posture.py ministryofjustice --no-cache --json
+python org_security_posture.py ministryofjustice --no-cache
+
+# 3. Limit supply-chain checks to repos listed in repo_list.yaml
+python org_security_posture.py ministryofjustice --repo-file --excel moj-security-posture.xlsx
 ```
 
 ### Batch Audit Using File
@@ -432,7 +433,7 @@ python archive_repos.py ministryofjustice --cache-only --sort -days_since_push
 
 ```bash
 python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-python org_security_posture.py ministryofjustice --json --repo-limit 50
+python org_security_posture.py ministryofjustice --repo-file
 ```
 
 ## License

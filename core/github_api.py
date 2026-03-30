@@ -92,13 +92,30 @@ def dependency_supply_chain_summary(
     org: str,
     client: BaseHttpClient,
     repo_limit: int = 100,
+    repo_full_names: list[str] | None = None,
 ) -> dict[str, object]:
-    """Return org-level supply-chain summary by sampling recently-pushed repos."""
+    """Return org-level supply-chain summary by sampling/pinning repositories."""
     cap = max(1, min(repo_limit, 100))
-    try:
-        repos = client.get_paginated(f"/orgs/{org}/repos?sort=pushed&direction=desc")
-    except Exception:
-        repos = []
+    repos: list[dict[str, object]] = []
+    if repo_full_names:
+        for full_name in repo_full_names:
+            owner, sep, name = full_name.partition("/")
+            if sep != "/" or not owner or not name:
+                continue
+            try:
+                repo_data = client.get(f"/repos/{owner}/{name}")
+            except Exception:
+                continue
+            if isinstance(repo_data, dict):
+                repos.append(repo_data)
+        cap = len(repos)
+    else:
+        try:
+            repos = client.get_paginated(
+                f"/orgs/{org}/repos?sort=pushed&direction=desc"
+            )
+        except Exception:
+            repos = []
 
     details: list[dict[str, object]] = []
     for repo in repos[:cap]:

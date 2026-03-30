@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import atexit
-import json
 import os
 import sys
 import time
@@ -29,10 +28,12 @@ from core.github_api import (
 )
 from core.github_client import GitHubHttpClient
 from core.presenters import build_org_security_summary
+from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ORG_CACHE_DB_PATH = os.path.join(SCRIPT_DIR, "org_posture_cache.db")
+DEFAULT_REPO_FILE = os.path.join(SCRIPT_DIR, "repo_list.yaml")
 __start_time: float | None = None
 
 
@@ -51,12 +52,14 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("org", help="GitHub organisation login.")
     parser.add_argument("--excel", help="Write Excel workbook output.")
-    parser.add_argument("--json", action="store_true", help="Also print JSON report.")
     parser.add_argument(
-        "--repo-limit",
-        type=int,
-        default=100,
-        help="Max repos sampled for repo-level supply-chain checks (default: 100).",
+        "--repo-file",
+        nargs="?",
+        const=DEFAULT_REPO_FILE,
+        help=(
+            "Limit supply-chain checks to repos in a file. "
+            "Pass a path, or use --repo-file without a value to default to repo_list.yaml."
+        ),
     )
     parser.add_argument(
         "--no-cache",
@@ -91,7 +94,7 @@ def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage) -> N
 
 def run_full_audit(
     org: str,
-    repo_sample_limit: int = 100,
+    repo_full_names: list[str] | None = None,
     use_cache: bool = True,
 ) -> dict[str, Any]:
     cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
@@ -165,7 +168,7 @@ def run_full_audit(
             "summary": dependency_supply_chain_summary(
                 org,
                 client,
-                repo_limit=repo_sample_limit,
+                repo_full_names=repo_full_names,
             )
         }
         print(f"  done ({time.monotonic() - t0:.1f}s)", file=sys.stderr)
@@ -301,14 +304,26 @@ def main() -> None:
     __start_time = time.monotonic()
 
     args = _parse_args()
-    if args.repo_limit < 1:
-        print("--repo-limit must be >= 1", file=sys.stderr)
-        sys.exit(2)
+
+    repo_scope: list[str] | None = None
+    if args.repo_file:
+        try:
+            repo_scope = load_repo_list_file(args.repo_file)
+        except Exception as exc:
+            print(f"Failed to read repo file: {exc}", file=sys.stderr)
+            sys.exit(2)
+
+        org_prefix = f"{args.org}/"
+        repo_scope = [name for name in repo_scope if name.startswith(org_prefix)]
+        print(
+            f"Using {len(repo_scope)} repos from {args.repo_file} for supply-chain checks",
+            file=sys.stderr,
+        )
 
     print(f"Running org security posture audit for: {args.org}", file=sys.stderr)
     report = run_full_audit(
         args.org,
-        repo_sample_limit=args.repo_limit,
+        repo_full_names=repo_scope,
         use_cache=not args.no_cache,
     )
 
@@ -319,9 +334,6 @@ def main() -> None:
 
     if args.excel:
         write_excel(report, args.excel)
-
-    if args.json or not args.excel:
-        print(json.dumps(report, indent=2, default=str))
 
 
 if __name__ == "__main__":
