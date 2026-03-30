@@ -23,6 +23,7 @@ from core.github_api import (
     OrgWebhooksEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
+    dependency_supply_chain_summary,
     fetch_latest_workflow_run_created_at,
     fetch_repo_actions_permissions,
     fetch_repo_alerts,
@@ -101,6 +102,51 @@ class TestListOrgRepos:
         )
         list_org_repos("myorg", client)
         assert any("direction" not in call[1] for call in client.calls)
+
+
+class TestDependencySupplyChainSummary:
+    def test_empty_repo_scope_does_not_fallback_to_org(self):
+        client = MockHttpClient()
+        result = dependency_supply_chain_summary(
+            "myorg",
+            client,
+            repo_full_names=[],
+        )
+
+        assert result["repos_checked"] == 0
+        assert result["details"] == []
+        # Explicit empty scope should not trigger org-wide listing.
+        assert not any(
+            call[0] == "GET_PAGINATED" and "/orgs/myorg/repos" in call[1]
+            for call in client.calls
+        )
+
+    def test_none_repo_scope_uses_org_listing(self):
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?sort=pushed&direction=desc": [
+                    {
+                        "owner": {"login": "myorg"},
+                        "name": "repo-a",
+                        "visibility": "private",
+                        "archived": False,
+                        "default_branch": "main",
+                        "license": {"spdx_id": "MIT"},
+                        "topics": ["one", "two"],
+                    }
+                ],
+                "/repos/myorg/repo-a/dependency-graph/sbom": {},
+                "/repos/myorg/repo-a/branches/main": {"protected": True},
+            }
+        )
+
+        result = dependency_supply_chain_summary("myorg", client, repo_full_names=None)
+
+        assert result["repos_checked"] == 1
+        assert any(
+            call[0] == "GET_PAGINATED" and "/orgs/myorg/repos" in call[1]
+            for call in client.calls
+        )
 
 
 # ── script-helper functions ──────────────────────────────────────────

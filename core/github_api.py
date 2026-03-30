@@ -98,7 +98,7 @@ def dependency_supply_chain_summary(
     """Return org-level supply-chain summary by sampling/pinning repositories."""
     cap = max(1, min(repo_limit, 100))
     repos: list[dict[str, object]] = []
-    if repo_full_names:
+    if repo_full_names is not None:
         for full_name in repo_full_names:
             owner, sep, name = full_name.partition("/")
             if sep != "/" or not owner or not name:
