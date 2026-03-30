@@ -5,19 +5,19 @@ from __future__ import annotations
 import pytest
 
 from core.models import AlertData, CodeownersData, RepoData, RepoDetails
-from core.storage import SqliteStorage
+from core.storage import SqliteRepoStorage
 
 
 @pytest.fixture
-def storage(tmp_path) -> SqliteStorage:
-    db = SqliteStorage(str(tmp_path / "test.db"))
+def storage(tmp_path) -> SqliteRepoStorage:
+    db = SqliteRepoStorage(str(tmp_path / "test.db"))
     db.init()
     return db
 
 
 class TestSqliteStorageInit:
     def test_creates_table(self, tmp_path):
-        db = SqliteStorage(str(tmp_path / "new.db"))
+        db = SqliteRepoStorage(str(tmp_path / "new.db"))
         db.init()
         # Should not raise on second init (IF NOT EXISTS)
         db.init()

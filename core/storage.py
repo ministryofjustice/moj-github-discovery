@@ -104,7 +104,7 @@ class BaseStorage(ABC):
 # ── Concrete implementation ───────────────────────────────────────────
 
 
-class SqliteStorage(BaseStorage):
+class SqliteRepoStorage(BaseStorage):
     """Single-table SQLite storage backend.
 
     Serialises ``RepoData`` via Pydantic's ``model_dump_json()`` and

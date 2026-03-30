@@ -25,7 +25,7 @@ from core.github_api import (
     RepoDetailsEndpoint,
 )
 from core.models import RepoData
-from core.storage import SqliteStorage
+from core.storage import SqliteRepoStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB_PATH = os.path.join(SCRIPT_DIR, "repo_audit.db")
@@ -94,7 +94,7 @@ def _derive_sort(raw_sort: str | None) -> tuple[str, bool]:
     return raw_sort, True
 
 
-def _list_repos_from_storage(org: str, storage: SqliteStorage) -> list[str]:
+def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
     repo_rows = [
         (full_name, data)
         for full_name, data in storage.read_all()
@@ -219,7 +219,7 @@ def main() -> None:
         sys.exit(2)
 
     storage_db_path = args.audit_db or DEFAULT_DB_PATH
-    storage = SqliteStorage(storage_db_path)
+    storage = SqliteRepoStorage(storage_db_path)
     storage.init()
 
     if args.cache_only:

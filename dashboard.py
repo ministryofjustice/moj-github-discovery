@@ -30,7 +30,7 @@ from core.github_api import (
     WorkflowsEndpoint,
 )
 from core.presenters import repo_data_to_audit_result, repo_data_to_dashboard_row
-from core.storage import SqliteStorage
+from core.storage import SqliteRepoStorage
 
 # Parse arguments
 db_path = "repo_audit.db"
@@ -51,8 +51,8 @@ if not os.path.exists(db_path):
 print(f"Loading data from {db_path}")
 
 
-def _get_storage() -> SqliteStorage:
-    storage = SqliteStorage(db_path)
+def _get_storage() -> SqliteRepoStorage:
+    storage = SqliteRepoStorage(db_path)
     storage.init()
     return storage
 
