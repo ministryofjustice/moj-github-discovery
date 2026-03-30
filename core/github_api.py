@@ -859,6 +859,16 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
     CodeSearchEndpoint,
 ]
 
+STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
+    RepoDetailsEndpoint,
+    BranchProtectionEndpoint,
+    AlertsEndpoint,
+    CommunityProfileEndpoint,
+    CodeownersEndpoint,
+    ForkTemplateEndpoint,
+    WorkflowsEndpoint,
+]
+
 ORG_ENDPOINTS: list[type[BaseOrgEndpoint]] = [
     OrgMembersEndpoint,
     OrgActionsEndpoint,

@@ -11,6 +11,7 @@ from typing import Any
 import pandas as pd
 
 from core.models import RepoData
+from core.storage import BaseStorage
 
 
 def flags_for_list(data: RepoData) -> list[str]:
@@ -163,6 +164,15 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
         "flags": ", ".join(dashboard_flags),
         "pushed_at": repo.pushed_at if repo else "",
     }
+
+
+def build_dashboard_dataframe(storage: BaseStorage) -> pd.DataFrame:
+    """Build the dashboard row dataframe from storage contents."""
+    rows = [
+        repo_data_to_dashboard_row(full_name, data)
+        for full_name, data in storage.read_all()
+    ]
+    return pd.DataFrame(rows)
 
 
 def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:

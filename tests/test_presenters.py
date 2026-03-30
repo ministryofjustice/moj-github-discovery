@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from core.presenters import build_repo_summary_table
+from core.models import RepoData, RepoDetails
+from core.presenters import build_dashboard_dataframe, build_repo_summary_table
+from tests.conftest import MockStorage
 
 
 class TestBuildRepoSummaryTable:
@@ -57,3 +59,17 @@ class TestBuildRepoSummaryTable:
         assert metrics["repos_with_secret_alerts"] == 1
         assert metrics["repos_with_code_scanning_alerts"] == 1
         assert metrics["repos_unprotected_default_branch"] == 1
+
+
+class TestBuildDashboardDataframe:
+    def test_maps_storage_rows(self):
+        storage = MockStorage()
+        storage.upsert(
+            "org/repo",
+            RepoData(repo_details=RepoDetails(full_name="org/repo", name="repo")),
+        )
+
+        df = build_dashboard_dataframe(storage)
+
+        assert len(df) == 1
+        assert df.iloc[0]["repo"] == "org/repo"

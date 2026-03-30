@@ -1,57 +1,31 @@
 #!/usr/bin/env python3
-"""
-Pandas-based viewer for repo audit data.
+"""Pandas-based viewer for repo audit data backed by core storage."""
 
-Usage:
-  python dashboard.py [--db path] [--filter column:value] [--sort column] [--html output.html]
-
-Examples:
-  python dashboard.py                              # Display all repos
-  python dashboard.py --filter private:False      # Show only public repos
-  python dashboard.py --sort stars --html out.html # Export to HTML sorted by stars
-"""
-
-import json
+import argparse
 import os
-import sqlite3
 import sys
 
 import pandas as pd
 
+from core.presenters import build_dashboard_dataframe
+from core.storage import SqliteRepoStorage
+
 
 def load_data(db_path: str) -> pd.DataFrame:
-    """Load repo audit data from SQLite."""
-    conn = sqlite3.connect(db_path)
-    query = "SELECT full_name, audit_json FROM repo_rows"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-
-    rows = []
-    for _, row in df.iterrows():
-        try:
-            data = json.loads(row["audit_json"])
-            rows.append(
-                {
-                    "repo": data.get("full_name", row["full_name"]),
-                    "private": data.get("private"),
-                    "archived": data.get("archived"),
-                    "fork": data.get("fork"),
-                    "language": data.get("language"),
-                    "stars": data.get("stargazers", 0),
-                    "open_issues": data.get("open_issues", 0),
-                    "dependabot": data.get("dependabot_alerts"),
-                    "secrets": data.get("secret_scanning_alerts"),
-                    "code_scan": data.get("code_scanning_alerts"),
-                    "branch_protected": data.get("default_branch_protected"),
-                    "flags": data.get("flags", ""),
-                    "pushed_at": data.get("pushed_at", ""),
-                }
-            )
-        except Exception as e:
-            print(f"Error parsing {row['full_name']}: {e}", file=sys.stderr)
-            continue
-
-    return pd.DataFrame(rows)
+    """Load repo audit data from core storage and map it for CLI viewing."""
+    storage = SqliteRepoStorage(db_path)
+    storage.init()
+    df = build_dashboard_dataframe(storage)
+    if df.empty:
+        return df
+    return df.rename(
+        columns={
+            "secret_alerts": "secrets",
+            "code_scanning_alerts": "code_scan",
+            "dependabot_alerts": "dependabot",
+            "branch_protected": "branch_protected",
+        }
+    )
 
 
 def parse_filter(filter_str: str) -> tuple:
@@ -74,9 +48,9 @@ def apply_filters(df: pd.DataFrame, filters: list) -> pd.DataFrame:
 
         # Handle boolean values
         if value.lower() in ("true", "yes"):
-            df = df[df[column]]
+            df = df[df[column].fillna(False)]
         elif value.lower() in ("false", "no"):
-            df = df[not df[column]]
+            df = df[~df[column].fillna(False)]
         else:
             # Try numeric comparison
             try:
@@ -92,30 +66,24 @@ def apply_filters(df: pd.DataFrame, filters: list) -> pd.DataFrame:
 
 
 def main():
-    # Parse arguments
-    db_path = "repo_audit.db"
-    filters = []
-    sort_column = None
-    html_output = None
+    parser = argparse.ArgumentParser(
+        description="View repo audit data from core storage."
+    )
+    parser.add_argument("--db", default="repo_audit.db", help="SQLite database path.")
+    parser.add_argument(
+        "--filter",
+        action="append",
+        default=[],
+        help="Filter in the form column:value. May be passed multiple times.",
+    )
+    parser.add_argument("--sort", help="Column to sort by descending.")
+    parser.add_argument("--html", help="Optional HTML output path.")
+    args = parser.parse_args()
 
-    i = 1
-    while i < len(sys.argv):
-        arg = sys.argv[i]
-        if arg == "--db" and i + 1 < len(sys.argv):
-            db_path = sys.argv[i + 1]
-            i += 2
-        elif arg == "--filter" and i + 1 < len(sys.argv):
-            filters.append(parse_filter(sys.argv[i + 1]))
-            i += 2
-        elif arg == "--sort" and i + 1 < len(sys.argv):
-            sort_column = sys.argv[i + 1]
-            i += 2
-        elif arg == "--html" and i + 1 < len(sys.argv):
-            html_output = sys.argv[i + 1]
-            i += 2
-        else:
-            print(f"Unknown argument: {arg}")
-            sys.exit(1)
+    db_path = args.db
+    filters = [parse_filter(raw) for raw in args.filter]
+    sort_column = args.sort
+    html_output = args.html
 
     # Use default location if not specified
     if not os.path.exists(db_path):
@@ -148,9 +116,9 @@ def main():
 
     # Display summary
     print(f"\nTotal repositories: {len(df)}", file=sys.stderr)
-    print(f"Public: {(not df['private']).sum()}", file=sys.stderr)
+    print(f"Public: {(~df['private'].fillna(False)).sum()}", file=sys.stderr)
     print(f"Private: {(df['private']).sum()}", file=sys.stderr)
-    print(f"Archived: {df['archived'].sum()}", file=sys.stderr)
+    print(f"Archived: {df['archived'].fillna(False).sum()}", file=sys.stderr)
     print(
         f"With flagged issues: {((df['flags'] != '') & (df['flags'].notna())).sum()}\n",
         file=sys.stderr,
@@ -230,7 +198,7 @@ def main():
     <h1>Repository Audit Dashboard</h1>
     <div class="summary">
         <p><strong>Total repositories:</strong> {len(df)}</p>
-        <p><strong>Public:</strong> {(not df["private"]).sum()} | <strong>Private:</strong> {(df["private"]).sum()} | <strong>Archived:</strong> {df["archived"].sum()}</p>
+        <p><strong>Public:</strong> {(~df["private"].fillna(False)).sum()} | <strong>Private:</strong> {(df["private"].fillna(False)).sum()} | <strong>Archived:</strong> {df["archived"].fillna(False).sum()}</p>
     </div>
     {html_content}
 </body>

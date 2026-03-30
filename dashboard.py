@@ -21,15 +21,12 @@ import pandas as pd
 
 from core.collector import RepoCollector
 from core.github_api import (
-    AlertsEndpoint,
-    BranchProtectionEndpoint,
-    CodeownersEndpoint,
-    CommunityProfileEndpoint,
-    ForkTemplateEndpoint,
-    RepoDetailsEndpoint,
-    WorkflowsEndpoint,
+    STANDARD_REPO_AUDIT_ENDPOINTS,
 )
-from core.presenters import repo_data_to_audit_result, repo_data_to_dashboard_row
+from core.presenters import (
+    build_dashboard_dataframe,
+    repo_data_to_audit_result,
+)
 from core.storage import SqliteRepoStorage
 
 # Parse arguments
@@ -60,11 +57,7 @@ def _get_storage() -> SqliteRepoStorage:
 def load_data():
     """Load repo summary data from core storage."""
     storage = _get_storage()
-    rows = []
-    for full_name, data in storage.read_all():
-        rows.append(repo_data_to_dashboard_row(full_name, data))
-
-    return pd.DataFrame(rows)
+    return build_dashboard_dataframe(storage)
 
 
 def _load_repo_audit_result(full_name: str) -> dict | None:
@@ -86,15 +79,7 @@ def run_audit(full_name: str) -> dict:
         storage = _get_storage()
         collector = RepoCollector(
             storage=storage,
-            endpoints=[
-                RepoDetailsEndpoint,
-                BranchProtectionEndpoint,
-                AlertsEndpoint,
-                CommunityProfileEndpoint,
-                CodeownersEndpoint,
-                ForkTemplateEndpoint,
-                WorkflowsEndpoint,
-            ],
+            endpoints=STANDARD_REPO_AUDIT_ENDPOINTS,
         )
         collector.collect(owner, repos=[full_name], resume=False)
 
