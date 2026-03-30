@@ -1,176 +1,120 @@
-import os
-import csv
-import time
-import requests
-import datetime
-import json
+#!/usr/bin/env python3
 
-TOKEN = os.getenv("GITHUB_TOKEN")
-HEADERS = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github+json"}
+from __future__ import annotations
 
-ORG = "ministryofjustice"
-BASE = "https://api.github.com"
-MAX_ALERTS = 400  # limit total alerts collected
+import argparse
+import datetime as dt
+import sys
+from typing import Any, Callable
 
+from core.compiler import CsvCompiler
+from core.github_api import fetch_repo_alerts, list_org_repos
+from core.github_client import GitHubHttpClient
 
-def paged_get(url, params=None):
-    params = params or {}
-    results = []
+DEFAULT_ORG = "ministryofjustice"
+DEFAULT_MAX_ALERTS = 400
+DEFAULT_OUTPUT = "github_alerts_limited.csv"
 
-    while url:
-        r = requests.get(url, headers=HEADERS, params=params)
-        if r.status_code == 403:
-            print(f"[403] Forbidden: {url}")
-            return []
-        if r.status_code == 404:
-            print(f"[404] Not Found: {url}")
-            return []
-        r.raise_for_status()
-
-        results.extend(r.json())
-
-        if len(results) >= MAX_ALERTS:
-            return results[:MAX_ALERTS]
-
-        url = r.links.get("next", {}).get("url")
-        params = None
-
-    return results
+AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
+ALERT_SPECS: list[AlertSpec] = [
+    (
+        "code_scanning",
+        lambda a: (a.get("rule") or {}).get("security_severity_level", "not_found"),
+    ),
+    (
+        "dependabot",
+        lambda a: (a.get("security_advisory") or {}).get("severity", "not_found"),
+    ),
+    ("secret_scanning", lambda _: "critical"),
+]
 
 
-def list_repos(org):
-    return paged_get(f"{BASE}/orgs/{org}/repos", {"per_page": 100})
-
-
-def fetch_code_scanning_alerts(owner, repo):
-    return paged_get(
-        f"{BASE}/repos/{owner}/{repo}/code-scanning/alerts", {"per_page": 100}
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Export repository-level alert metrics via core GitHub modules."
     )
-
-
-def fetch_dependabot_alerts(owner, repo):
-    return paged_get(
-        f"{BASE}/repos/{owner}/{repo}/dependabot/alerts", {"per_page": 100}
+    parser.add_argument("--org", default=DEFAULT_ORG, help="GitHub organisation login.")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="CSV output path.")
+    parser.add_argument(
+        "--max-alerts",
+        type=int,
+        default=DEFAULT_MAX_ALERTS,
+        help="Maximum number of alert rows to export.",
     )
+    parser.add_argument("--repo-limit", type=int, help="Limit scanned repositories.")
+    return parser.parse_args()
 
 
-def fetch_secret_scanning_alerts(owner, repo):
-    return paged_get(
-        f"{BASE}/repos/{owner}/{repo}/secret-scanning/alerts", {"per_page": 100}
-    )
+def parse_iso(value: str | None) -> dt.datetime | None:
+    return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
 
-def iso_to_dt(s):
-    return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+def main() -> None:
+    args = parse_args()
+    if args.max_alerts <= 0:
+        print("--max-alerts must be > 0", file=sys.stderr)
+        sys.exit(2)
+    if args.repo_limit is not None and args.repo_limit <= 0:
+        print("--repo-limit must be > 0", file=sys.stderr)
+        sys.exit(2)
 
+    client = GitHubHttpClient()
+    repos = list_org_repos(args.org, client)
+    if args.repo_limit:
+        repos = repos[: args.repo_limit]
 
-def get_severity(a, kind):
-    if kind == "dependabot":
-        return a.get("security_advisory", {"severity": "not_found"}).get(
-            "severity", "not_found"
-        )
-    elif kind == "code_scanning":
-        return a.get("rule", {"security_severity_level": "not_found"}).get(
-            "security_severity_level", "not_found"
-        )
-    elif kind == "secret_scanning":
-        return "critical"
-    else:
-        raise ValueError(f"Unknown alert kind: {kind}")
+    rows: list[dict[str, Any]] = []
+    repos_with_alerts: set[str] = set()
 
-
-def process_alerts(alerts, repo, kind):
-    rows = []
-    for a in alerts:
-        created = iso_to_dt(a.get("created_at"))
-        dismissed = iso_to_dt(a.get("dismissed_at"))
-        fixed = iso_to_dt(a.get("fixed_at"))
-        remediation_date = fixed or dismissed
-
-        ttr = None
-        if created and remediation_date:
-            ttr = (remediation_date - created).days
-        with open(f"data_{kind}.json", "w") as f:
-            json.dump(a, f)
-            BREAK_NOW = True
-
-        rows.append(
-            {
-                "id": a.get("number") or a.get("id"),
-                "type": kind,
-                "repo": repo,
-                "created_at": created.isoformat() if created else "",
-                "remediated_at": remediation_date.isoformat()
-                if remediation_date
-                else "",
-                "state": a.get("state"),
-                "severity": get_severity(a, kind),
-                "ttr_days": ttr,
-            }
-        )
-
-        if len(rows) >= MAX_ALERTS:
+    for repo_full in repos:
+        if len(rows) >= args.max_alerts:
             break
 
-    return rows
+        owner, repo = repo_full.split("/", 1)
+        print(f"Scanning {repo_full}...", file=sys.stderr)
 
+        for kind, severity_of in ALERT_SPECS:
+            if len(rows) >= args.max_alerts:
+                break
+            try:
+                alerts = fetch_repo_alerts(client, owner, repo, kind)
+            except Exception as exc:
+                print(f"  [warn] {kind} failed: {exc}", file=sys.stderr)
+                continue
 
-def main():
-    repos = list_repos(ORG)
+            for alert in alerts:
+                if len(rows) >= args.max_alerts:
+                    break
+                if not isinstance(alert, dict):
+                    continue
 
-    grouped = {}  # NEW: alerts grouped by repository
-    total_count = 0
+                created = parse_iso(alert.get("created_at"))
+                remediated = parse_iso(alert.get("fixed_at")) or parse_iso(
+                    alert.get("dismissed_at")
+                )
+                ttr_days = (
+                    (remediated - created).days if created and remediated else None
+                )
 
-    for r in repos:
-        if total_count >= MAX_ALERTS:
-            break
+                rows.append(
+                    {
+                        "id": alert.get("number") or alert.get("id"),
+                        "type": kind,
+                        "repo": repo_full,
+                        "created_at": created.isoformat() if created else "",
+                        "remediated_at": remediated.isoformat() if remediated else "",
+                        "state": alert.get("state"),
+                        "severity": severity_of(alert),
+                        "ttr_days": ttr_days,
+                    }
+                )
+                repos_with_alerts.add(repo_full)
 
-        owner = r["owner"]["login"]
-        name = r["name"]
-        repo_full = f"{owner}/{name}"
+    if rows:
+        CsvCompiler.write_rows(args.output, rows)
 
-        print(f"Scanning {repo_full}...")
-
-        grouped.setdefault(repo_full, [])
-
-        try:
-            alerts = []
-            alerts += process_alerts(
-                fetch_code_scanning_alerts(owner, name), repo_full, "code_scanning"
-            )
-            alerts += process_alerts(
-                fetch_dependabot_alerts(owner, name), repo_full, "dependabot"
-            )
-            alerts += process_alerts(
-                fetch_secret_scanning_alerts(owner, name), repo_full, "secret_scanning"
-            )
-
-            # Trim if adding these would exceed MAX_ALERTS
-            remaining = MAX_ALERTS - total_count
-            alerts = alerts[:remaining]
-
-            grouped[repo_full].extend(alerts)
-            total_count += len(alerts)
-
-        except Exception as e:
-            print(f"Skipping {repo_full} due to error: {e}")
-
-        time.sleep(0.3)
-
-    # Flatten grouped structure for CSV output
-    flat = []
-    for repo, alerts in grouped.items():
-        flat.extend(alerts)
-
-    # Write CSV
-    if flat:
-        with open("github_alerts_limited.csv", "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(flat[0].keys()))
-            writer.writeheader()
-            writer.writerows(flat)
-
-    print(f"\nDone! Wrote {len(flat)} alerts to github_alerts_limited.csv")
-    print(f"Grouped by {len(grouped)} repositories.")
+    print(f"Done! Wrote {len(rows)} alerts to {args.output}")
+    print(f"Repos with alerts: {len(repos_with_alerts)}")
 
 
 if __name__ == "__main__":

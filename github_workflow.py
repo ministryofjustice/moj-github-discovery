@@ -13,8 +13,6 @@ Not yet in core (local implementations retained):
 """
 
 import argparse
-import base64
-import csv
 import os
 import re
 import sys
@@ -24,7 +22,15 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from core.collector import RepoCollector
-from core.github_api import RepoDetailsEndpoint, WorkflowsEndpoint, list_org_repos
+from core.compiler import CsvCompiler
+from core.github_api import (
+    RepoDetailsEndpoint,
+    WorkflowsEndpoint,
+    fetch_latest_workflow_run_created_at,
+    fetch_repo_actions_permissions,
+    fetch_repo_file_text,
+    list_org_repos,
+)
 from core.github_client import GitHubHttpClient
 from core.models import RepoData
 from core.repo_list import load_repo_list_file
@@ -34,35 +40,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(SCRIPT_DIR, "github_workflow_posture.db")
 
 
-# ── Local-only helpers (no core equivalent yet) ──────────────────────
-
-
-def fetch_repo_actions_permissions(
-    client: GitHubHttpClient, owner: str, repo: str
-) -> Dict[str, Any]:
-    """Repo-level Actions permissions. TODO: add RepoActionsPermissionsEndpoint to core."""
-    try:
-        data = client.get(f"/repos/{owner}/{repo}/actions/permissions")
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def fetch_latest_workflow_run(
-    client: GitHubHttpClient, owner: str, repo: str
-) -> Optional[str]:
-    """Most recent workflow run timestamp. TODO: add endpoint to core."""
-    try:
-        data = client.get(f"/repos/{owner}/{repo}/actions/runs?per_page=1")
-        if isinstance(data, dict):
-            runs = data.get("workflow_runs", [])
-            if runs:
-                return runs[0].get("created_at", "")
-        return None
-    except Exception:
-        return None
-
-
 def parse_actions_from_workflow(
     client: GitHubHttpClient,
     owner: str,
@@ -70,13 +47,12 @@ def parse_actions_from_workflow(
     workflow_path: str,
 ) -> List[Dict[str, Any]]:
     """Fetch a workflow file and extract all ``uses:`` references."""
-    try:
-        data = client.get(f"/repos/{owner}/{repo_name}/contents/{workflow_path}")
-        if not (isinstance(data, dict) and data.get("encoding") == "base64"):
-            return []
-        content = base64.b64decode(data["content"]).decode("utf-8")
-    except Exception as exc:
-        print(f"  Skipped {repo_name}/{workflow_path}: {exc}", file=sys.stderr)
+    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
+    if content is None:
+        print(
+            f"  Skipped {repo_name}/{workflow_path}: could not load file",
+            file=sys.stderr,
+        )
         return []
 
     actions = []
@@ -183,31 +159,6 @@ def build_workflow_detail_rows(
             }
         )
     return rows
-
-
-# ── CSV writer ────────────────────────────────────────────────────────
-
-
-def csv_write(path: str, rows: List[Dict[str, Any]]) -> None:
-    if not rows:
-        with open(path, "w", encoding="utf-8") as f:
-            pass
-        print(f"No rows to write for {path}")
-        return
-
-    fieldnames: List[str] = []
-    seen: set = set()
-    for row in rows:
-        for key in row:
-            if key not in seen:
-                fieldnames.append(key)
-                seen.add(key)
-
-    with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"Wrote {path} ({len(rows)} rows)")
 
 
 # ── Summary report ────────────────────────────────────────────────────
@@ -385,7 +336,7 @@ def main() -> None:
         data = storage.read(full_name) or RepoData()
         actions_permissions = fetch_repo_actions_permissions(client, owner, repo_name)
         latest_run = (
-            fetch_latest_workflow_run(client, owner, repo_name)
+            fetch_latest_workflow_run_created_at(client, owner, repo_name)
             if data.workflows and data.workflows.count > 0
             else None
         )
@@ -397,8 +348,12 @@ def main() -> None:
 
     # 4. Write posture outputs
     prefix = args.out_prefix
-    csv_write(f"{prefix}_repo_summary.csv", repo_rows)
-    csv_write(f"{prefix}_workflow_details.csv", detail_rows)
+    repo_count = CsvCompiler.write_rows(f"{prefix}_repo_summary.csv", repo_rows)
+    details_count = CsvCompiler.write_rows(
+        f"{prefix}_workflow_details.csv", detail_rows
+    )
+    print(f"Wrote {prefix}_repo_summary.csv ({repo_count} rows)")
+    print(f"Wrote {prefix}_workflow_details.csv ({details_count} rows)")
     write_summary(f"{prefix}_summary.txt", repo_rows, detail_rows)
 
     print(
@@ -423,21 +378,30 @@ def main() -> None:
 
     print(f"Total action references found: {len(all_actions)}")
 
-    csv_write("github_actions_usage_detail.csv", all_actions)
+    usage_detail_count = CsvCompiler.write_rows(
+        "github_actions_usage_detail.csv", all_actions
+    )
+    print(f"Wrote github_actions_usage_detail.csv ({usage_detail_count} rows)")
 
     action_counts = Counter(a["action_name"] for a in all_actions)
     usage_summary = [
         {"action_name": name, "times_used": count}
         for name, count in action_counts.most_common()
     ]
-    csv_write("github_actions_usage_summary.csv", usage_summary)
+    usage_summary_count = CsvCompiler.write_rows(
+        "github_actions_usage_summary.csv", usage_summary
+    )
+    print(f"Wrote github_actions_usage_summary.csv ({usage_summary_count} rows)")
 
     owner_counts = Counter(a["owner"] for a in all_actions)
     owner_summary = [
         {"owner": o, "actions_referenced": count}
         for o, count in owner_counts.most_common()
     ]
-    csv_write("github_actions_owner_summary.csv", owner_summary)
+    owner_summary_count = CsvCompiler.write_rows(
+        "github_actions_owner_summary.csv", owner_summary
+    )
+    print(f"Wrote github_actions_owner_summary.csv ({owner_summary_count} rows)")
 
     print(f"Unique actions: {len(usage_summary)}")
     print(f"Unique owners: {len(owner_summary)}")

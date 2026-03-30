@@ -28,9 +28,10 @@ the legacy single-repo audit script (``repo_info``, ``community_profile``, ``lis
 
 from __future__ import annotations
 
+import base64
 import time
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -157,6 +158,74 @@ def dependency_supply_chain_summary(
         ),
         "details": details,
     }
+
+
+def fetch_repo_actions_permissions(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+) -> dict[str, Any]:
+    """Return repo-level Actions permissions from the GitHub API."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/actions/permissions")
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def fetch_latest_workflow_run_created_at(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+) -> str | None:
+    """Return created_at of the most recent workflow run for a repo."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/actions/runs?per_page=1")
+        if isinstance(data, dict):
+            runs = data.get("workflow_runs", [])
+            if runs:
+                first = runs[0]
+                if isinstance(first, dict):
+                    return first.get("created_at")
+        return None
+    except Exception:
+        return None
+
+
+def fetch_repo_file_text(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+    path: str,
+) -> str | None:
+    """Return UTF-8 file text for a repository path via contents API."""
+    try:
+        data = client.get(f"/repos/{owner}/{repo}/contents/{path}")
+        if not (isinstance(data, dict) and data.get("encoding") == "base64"):
+            return None
+        content = data.get("content")
+        if not isinstance(content, str):
+            return None
+        return base64.b64decode(content).decode("utf-8")
+    except Exception:
+        return None
+
+
+def fetch_repo_alerts(
+    client: BaseHttpClient,
+    owner: str,
+    repo: str,
+    kind: Literal["dependabot", "code_scanning", "secret_scanning"],
+) -> list[dict[str, Any]]:
+    """Return raw alert rows for one alert kind on a repository."""
+    endpoint_map = {
+        "dependabot": "dependabot/alerts",
+        "code_scanning": "code-scanning/alerts",
+        "secret_scanning": "secret-scanning/alerts",
+    }
+    endpoint = endpoint_map[kind]
+    items = client.get_paginated(f"/repos/{owner}/{repo}/{endpoint}")
+    return [item for item in items if isinstance(item, dict)]
 
 
 # ── Abstract bases ────────────────────────────────────────────────────
