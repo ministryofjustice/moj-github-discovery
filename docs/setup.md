@@ -16,6 +16,16 @@ Most of the prerequisites will require `homebrew` and the `brew` utility, this c
 
 - Follow the instructions post-install before continuing.
 
+### uv
+
+[UV](https://docs.astral.sh/uv/) has been chosen for package management to align with standard MoJ usage, and its high performance in comparison to `requirements.txt`.
+
+It can be installed via `brew` : `brew install uv`
+
+Verify via `uv --version`
+
+Install dependencies (including local dev dependencies) via `uv sync --extra dev`
+
 ### Github Setup
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
@@ -67,12 +77,4 @@ Authenticate to the Github Docker Container Registry with your PAT, providing yo
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
-```
-
-### Installation
-
-The requirements can now be installed for the python scripts, and development can be carried out.
-
-```bash
-pip install -r requirements.txt
 ```

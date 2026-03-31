@@ -107,7 +107,8 @@ python list_repos.py --repo-file repo_list.yaml --sort +stargazers
 
 ### 2. `archive_repos.py` - Find Archive Candidates
 
-Builds a repository inventory focused on age, inactivity, archival state, and whether archived repositories still appear to have ongoing interest or references. The script caches repo metadata and code-search results locally so repeated runs can be much faster.
+Builds a repository inventory focused on age, inactivity, archival state, and whether archived repositories still appear to have ongoing interest or references.
+The script caches repo metadata and code-search results locally so repeated runs can be much faster.
 
 **Usage:**
 
@@ -121,7 +122,8 @@ python archive_repos.py <org> [options]
 - `--limit <N>` - Limit the number of repositories loaded from the organisation.
 - `--page-num <N>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed).
 - `--sort [-]column` - Sort by a result column. Default is `days_since_push` ascending. Prefix with `-` for descending.
-- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script. If provided without a path, it also defaults to `repo_audit.db`.
+- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script.
+  - If provided without a path, it also defaults to `repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
 
 **Output:**
@@ -155,7 +157,19 @@ python archive_repos.py ministryofjustice --sort days_since_push
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
 
-Performs an organisation-level audit that complements the per-repo scripts. It collects high-level security and operational controls such as 2FA enforcement, outside collaborators, teams, audit-log activity, code-scanning and secret-scanning alerts, Actions posture, secrets, webhooks, installed apps, rulesets, and supply-chain signals.
+Performs an organisation-level audit that complements the per-repo scripts. It collects high-level security and operational controls such as:
+
+- 2FA enforcement
+- outside collaborators
+- teams
+- audit-log activity
+- code-scanning and secret-scanning alerts
+- Actions posture
+- secrets
+- webhooks
+- installed apps
+- rulesets
+- supply-chain signals
 
 **Usage:**
 
