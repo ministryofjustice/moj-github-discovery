@@ -94,7 +94,7 @@ jobs:
           enable-cache: true
 
       - name: Install Dependencies
-        run: uv sync --extra dev
+        run: uv sync --group dev
       
       - name: Run ruff format check
         run: uv run ruff format --check .

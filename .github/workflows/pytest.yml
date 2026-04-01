@@ -27,7 +27,7 @@ jobs:
           enable-cache: true
 
       - name: Install Dependencies
-        run: uv sync --extra dev
+        run: uv sync --group dev
 
       - name: Run pytest (exclude integration)
         run: uv run pytest -m "not integration" -q

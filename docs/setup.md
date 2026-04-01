@@ -24,7 +24,7 @@ It can be installed via `brew` : `brew install uv`
 
 Verify via `uv --version`
 
-Install dependencies (including local dev dependencies) via `uv sync --extra dev`
+Install dependencies (including local dev dependencies) via `uv sync --group dev`
 
 ### Github Setup
 
