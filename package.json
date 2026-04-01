@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "validate:all": "npm run validate:md && npm run validate:yml && npm run lint && npm run validate:ts",
-    "validate:md": "markdownlint '**/*.md' --ignore node_modules --ignore dist --config .markdownlint.json --ignore .markdownlintignore CHANGELOG.md",
+    "validate:md": "markdownlint '**/*.md' --ignore node_modules --ignore dist --config .markdownlint.json --ignore .markdownlintignore",
     "validate:yml": "yamllint -c .yamllint.yml '**/*.{yml,yaml}' || echo 'yamllint not configured yet'",
     "lint": "echo 'TS/JS linting placeholder'",
     "validate:ts": "echo 'TS validation placeholder'",
