@@ -28,5 +28,5 @@ repo_audit.db
 # Node Modules
 node_modules
 
-#
+# Misc
 .DS_Store
