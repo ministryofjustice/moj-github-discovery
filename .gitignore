@@ -27,3 +27,6 @@ repo_audit.db
 
 # Node Modules
 node_modules
+
+#
+.DS_Store
