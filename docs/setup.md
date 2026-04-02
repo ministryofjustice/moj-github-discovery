@@ -52,13 +52,19 @@ To align with MOJ standards, the following tools are required:
 
 - **Pre-commit**
   - **NPM**
-  - **Markdownlint CLI**
+  - **Markdownlint CLI 2**
   - **Docker-Desktop** (to allow pre-commit hook to run)
 
-All can be installed via `brew`:
+Install the key dependencies via `brew`:
 
 ```shell
-brew install pre-commit npm markdownlint-cli docker-desktop
+brew install pre-commit npm docker-desktop
+```
+
+And the `npm` dependencies:
+
+```shell
+npm install --ignore-scripts
 ```
 
 Verify pre-commit and install:
