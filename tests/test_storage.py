@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import time
+import warnings
 
 import pytest
 
-from core.models import AlertData, CodeownersData, RepoData, RepoDetails
+from core.models import (
+    AlertData,
+    BranchProtection,
+    CodeownersData,
+    CommunityProfile,
+    RepoData,
+    RepoDetails,
+)
 from core.storage import SqliteOrgStorage, SqliteRepoStorage
 
 
@@ -79,6 +87,24 @@ class TestSqliteRepoStorageUpsert:
         storage.upsert("org/repo", RepoData(collected_at="2024-01-01T00:00:00Z"))
         result = storage.read("org/repo")
         assert result.collected_at == "2024-01-01T00:00:00Z"
+
+    def test_merge_revalidates_nested_models_for_serialization(self, storage):
+        storage.upsert(
+            "org/repo",
+            RepoData(
+                branch_protection=BranchProtection(default_branch_protected=True),
+                community=CommunityProfile(health_percentage=87),
+            ),
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            storage.upsert(
+                "org/repo",
+                RepoData(codeowners=CodeownersData(present=True)),
+            )
+
+        assert not any("Pydantic serializer warnings" in str(w.message) for w in caught)
 
 
 class TestSqliteRepoStorageReadAll:
