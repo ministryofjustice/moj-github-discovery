@@ -27,3 +27,8 @@ repos:
         args: [ --fix ]
       - id: ruff-format
         name: Ruff Format
+  
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.10.11
+    hooks:
+      - id: uv-lock
