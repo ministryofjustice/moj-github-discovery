@@ -83,6 +83,8 @@ python list_repos.py --repo-file <file> [options]
 - `--excel <path>` - Export results to Excel file. Requires `openpyxl`.
 - `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
+- `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
+- `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 
 **Examples:**
 
