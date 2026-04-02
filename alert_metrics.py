@@ -12,7 +12,7 @@ from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
 
 DEFAULT_ORG = "ministryofjustice"
-DEFAULT_MAX_ALERTS = 400
+DEFAULT_MAX_ALERTS = 100000
 DEFAULT_OUTPUT = "github_alerts_limited.csv"
 
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
