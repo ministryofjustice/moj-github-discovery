@@ -76,9 +76,20 @@ def parse_actions_from_workflow(
                         "owner": action_name.split("/")[0]
                         if "/" in action_name
                         else action_name,
+                        "is_pinned": is_pinned_to_sha(version),
+                        "pin_type": "sha"
+                        if is_pinned_to_sha(version)
+                        else "none"
+                        if version == "none"
+                        else "mutable_tag",
                     }
                 )
     return actions
+
+
+def is_pinned_to_sha(version: str) -> bool:
+    """Check if a version string is a full 40-character commit SHA."""
+    return bool(re.match(r"^[0-9a-f]{40}$", version))
 
 
 def check_workflow_permissions(
@@ -473,6 +484,63 @@ def main() -> None:
 
     print(f"Unique actions: {len(usage_summary)}")
     print(f"Unique owners: {len(owner_summary)}")
+
+    # 5b. SHA pinning compliance
+    print("\n--- Analysing SHA pinning compliance ---")
+
+    unpinned_actions = [
+        a for a in all_actions if not a["is_pinned"] and a["version"] != "none"
+    ]
+    pinned_actions = [a for a in all_actions if a["is_pinned"]]
+
+    print(f"Total action references: {len(all_actions)}")
+    print(f"Pinned to SHA: {len(pinned_actions)}")
+    print(f"Unpinned (mutable tag): {len(unpinned_actions)}")
+
+    unpinned_count = CsvCompiler.write_rows(
+        "github_actions_unpinned_detail.csv", unpinned_actions
+    )
+    print(f"Wrote github_actions_unpinned_details.csv ({unpinned_count} rows)")
+
+    repo_pinning: Dict[str, Dict[str, int]] = {}
+    for a in all_actions:
+        if a["version"] == "none":
+            continue
+        repo = a["repo"]
+        if repo not in repo_pinning:
+            repo_pinning[repo] = {"total": 0, "pinned": 0, "unpinned": 0}
+        repo_pinning[repo]["total"] += 1
+        if a["is_pinned"]:
+            repo_pinning[repo]["pinned"] += 1
+        else:
+            repo_pinning[repo]["unpinned"] += 1
+
+    pinning_summary = [
+        {
+            "repo": repo,
+            "total_refs": counts["total"],
+            "pinned": counts["pinned"],
+            "unpinned": counts["unpinned"],
+            "compliance_pct": round(
+                counts["pinned"] / max(counts["total"], 1) * 100, 1
+            ),
+        }
+        for repo, counts in sorted(
+            repo_pinning.items(), key=lambda x: x[1]["unpinned"], reverse=True
+        )
+    ]
+
+    pinning_count = CsvCompiler.write_rows(
+        "github_actions_pinning_per_repo.csv", pinning_summary
+    )
+    print(f"Wrote github_actions_pinning_per_repo.csv ({pinning_count} rows)")
+    print(
+        f"Repos with unpinned actions: "
+        f"{sum(1 for s in pinning_summary if s['unpinned'] > 0)}"
+    )
+    print(
+        f"Repos fully pinned: {sum(1 for s in pinning_summary if s['unpinned'] == 0)}"
+    )
 
     # 6. Workflow permissions check
     print("\n--- Analysing workflow permissions ---")
