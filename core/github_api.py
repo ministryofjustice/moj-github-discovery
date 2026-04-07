@@ -56,6 +56,7 @@ from core.models import (
     ReferenceData,
     ReferenceItem,
     RepoDetails,
+    RepoTreeData,
     WorkflowAnalysis,
     WorkflowData,
 )
@@ -523,6 +524,23 @@ class DependencyGraphEndpoint(BaseEndpoint):
             return DependencyGraphData(enabled=True)
         except Exception:
             return DependencyGraphData(enabled=False)
+
+
+class GetRepoTreeEndpoint(BaseEndpoint):
+    """
+    Returns a single tree using the SHA1 value or ref name for that tree.
+    """
+
+    @property
+    def name(self) -> str:
+        return "repo_tree"
+
+    def fetch(self, owner: str, repo: str, api_branch: str) -> RepoTreeData:
+        try:
+            self.client.get(f"/repos/{owner}/{repo}/git/trees/{api_branch}?recursive=1")
+            return RepoTreeData(enabled=True)
+        except Exception:
+            return RepoTreeData(enabled=False)
 
 
 class CodeSearchEndpoint(BaseEndpoint):

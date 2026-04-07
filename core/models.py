@@ -168,6 +168,12 @@ class DependencyGraphData(BaseModel):
     enabled: bool = False
 
 
+class RepoTreeData(BaseModel):
+    """Whether the dependency graph / SBOM endpoint is available."""
+
+    enabled: bool = False
+
+
 class ReferenceItem(BaseModel):
     """A single code-search hit referencing this repository."""
 
