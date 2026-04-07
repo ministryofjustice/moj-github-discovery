@@ -1,11 +1,13 @@
 import csv
 from pathlib import Path
 
-
+from core.models import FieldDefinition, FieldsConfig, FieldType
 from core.collector import RepoCollector
-from core.github_api import GetRepoTreeEndpoint
+from core.github_api import GetRepoTreeEndpoint, RepoDetailsEndpoint
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
+from core.compiler import ExcelCompiler
+from core.transforms import RepoTreeTransform
 
 # GitHub thresholds (bytes)
 SOFT_LIMIT = 50 * 1024 * 1024
@@ -14,51 +16,44 @@ HARD_LIMIT = 100 * 1024 * 1024
 YAML_FILE = Path("repo_list.yaml")
 DB_FILE = Path("repo_list.db")
 OUTPUT_DIR = Path("repo_summaries")
-MASTER_CSV = Path("repos_exceeding_thresholds.csv")
+MASTER_CSV = Path("repos_exceeding_thresholds.xlsx")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
-def find_largest_blob(tree: list[dict]) -> tuple[int, str, str | None]:
-    largest_size = 0
-    largest_path = ""
-    largest_sha = None
-
-    for item in tree:
-        if item.get("type") != "blob":
-            continue
-        size = item.get("size")
-        if not isinstance(size, int):
-            continue
-
-        if size > largest_size:
-            largest_size = size
-            largest_path = item.get("path", "")
-            largest_sha = item.get("sha")
-
-    return largest_size, largest_path, largest_sha
-
-
-def scan_repo_via_api(repo_full_name, tree):
-    large_blobs = []
-
-    for item in tree:
-        if item.get("type") != "blob" or not isinstance(item.get("size"), int):
-            continue
-        size = item["size"]
-        if size >= SOFT_LIMIT:
-            large_blobs.append((item.get("sha"), size, item.get("path")))
-
-    largest_size, largest_path, _largest_sha = find_largest_blob(tree)
-
-    return {
-        "repo": repo_full_name,
-        "largest_blob_bytes": largest_size,
-        "largest_blob_path": largest_path,
-        "large_blobs": large_blobs,
-        "exceeds_soft_limit": largest_size > SOFT_LIMIT,
-        "exceeds_hard_limit": largest_size > HARD_LIMIT,
-    }
+master_csv_config = FieldsConfig(
+    fields=[
+        FieldDefinition(
+            source="repo_details.full_name",
+            column="Repository",
+            type=FieldType.string,
+        ),
+        FieldDefinition(
+            source="repo_tree_transform.largest_blob_bytes",
+            column="Largest Blob Bytes",
+            type=FieldType.integer,
+            default=0,
+        ),
+        FieldDefinition(
+            source="repo_tree_transform.largest_blob_path",
+            column="Largest blob path",
+            type=FieldType.string,
+            default="",
+        ),
+        FieldDefinition(
+            source="repo_tree_transform.exceeds_soft_limit",
+            column="Exceeds soft limit",
+            type=FieldType.boolean,
+            default=False,
+        ),
+        FieldDefinition(
+            source="repo_tree_transform.exceeds_hard_limit",
+            column="Exceeds hard limit",
+            type=FieldType.boolean,
+            default=False,
+        ),
+    ]
+)
 
 
 def write_repo_csv(repo_full_name: str, tree: list[dict]):
@@ -85,56 +80,16 @@ def main():
     storage = SqliteRepoStorage(DB_FILE)
     collector = RepoCollector(
         storage=storage,
-        endpoints=[GetRepoTreeEndpoint],
+        endpoints=[RepoDetailsEndpoint, GetRepoTreeEndpoint],
     )
     primary_org = repos[0].split("/", 1)[0]
     collector.collect(primary_org, repos=repos, resume=False)
-
-    # with MASTER_CSV.open("w", newline="") as f:
-    #     writer = csv.writer(f)
-    #     writer.writerow(
-    #         [
-    #             "repo",
-    #             "largest_blob_bytes",
-    #             "largest_blob_path",
-    #             "exceeds_soft_limit",
-    #             "exceeds_hard_limit",
-    #         ]
-    #     )
-
-    for repo_full_name in repos:
-        print(f"Processing: {repo_full_name}")
-        data = storage.read(repo_full_name)
-        writer = csv.writer(MASTER_CSV.open("a", newline=""))  # to be removed
-        try:
-            api_tree = data.get("repo_tree")["tree"]
-            result = scan_repo_via_api(repo_full_name, api_tree)
-            write_repo_csv(repo_full_name, api_tree)
-
-            writer.writerow(
-                [
-                    result["repo"],
-                    result["largest_blob_bytes"],
-                    result["largest_blob_path"],
-                    "yes" if result["exceeds_soft_limit"] else "no",
-                    "yes" if result["exceeds_hard_limit"] else "no",
-                ]
-            )
-
-            if result["large_blobs"]:
-                print(
-                    f"  Large blobs found: {len(result['large_blobs'])} >= {SOFT_LIMIT} bytes"
-                )
-            else:
-                print("  No blobs above soft limit")
-
-        except Exception as exc:
-            print(f"  Error scanning {repo_full_name}: {exc}")
-
-
-print("Done.")
-print(f"Per-repo CSVs in: {OUTPUT_DIR}")
-print(f"Master summary: {MASTER_CSV}")
+    ExcelCompiler().compile(
+        storage=storage,
+        config=master_csv_config,
+        output_path=MASTER_CSV,
+        transforms=[RepoTreeTransform()],
+    )
 
 
 if __name__ == "__main__":

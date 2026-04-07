@@ -17,6 +17,7 @@ from core.github_api import (
     CommunityProfileEndpoint,
     DependencyGraphEndpoint,
     ForkTemplateEndpoint,
+    GetRepoTreeEndpoint,
     OrgActionsEndpoint,
     OrgMembersEndpoint,
     OrgRulesetsEndpoint,
@@ -43,6 +44,7 @@ from core.models import (
     OrgWebhooksData,
     ReferenceData,
     RepoDetails,
+    RepoTreeData,
     WorkflowData,
 )
 from tests.conftest import MockHttpClient
@@ -203,6 +205,52 @@ class TestWorkflowAndAlertHelpers:
         )
         alerts = fetch_repo_alerts(client, "o", "r", "code_scanning")
         assert alerts == [{"id": 1}, {"id": 2}]
+
+
+class TestGetRepoTreeEndpoint:
+    def test_fetch_uses_repo_default_branch_and_returns_tree(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/repo/git/trees/trunk?recursive=1": {
+                    "sha": "rootsha",
+                    "url": "https://api.github.com/repos/org/repo/git/trees/rootsha",
+                    "truncated": False,
+                    "tree": [
+                        {
+                            "path": "README.md",
+                            "mode": "100644",
+                            "type": "blob",
+                            "sha": "blobsha",
+                            "size": 12,
+                            "url": "https://api.github.com/blobs/blobsha",
+                        }
+                    ],
+                }
+            }
+        )
+
+        result = GetRepoTreeEndpoint(client).fetch(
+            "org",
+            "repo",
+            repo_details=RepoDetails(
+                full_name="org/repo", name="repo", default_branch="trunk"
+            ),
+        )
+
+        assert isinstance(result, RepoTreeData)
+        assert result.access == "ok"
+        assert result.sha == "rootsha"
+        assert result.tree[0].path == "README.md"
+        assert result.tree[0].size == 12
+
+    def test_fetch_returns_access_error_on_failure(self):
+        client = MockHttpClient()
+
+        result = GetRepoTreeEndpoint(client).fetch("org", "repo")
+
+        assert isinstance(result, RepoTreeData)
+        assert result.tree == []
+        assert "MockHttpClient: no fixture for GET" in result.access
 
 
 # ── Endpoint registries ──────────────────────────────────────────────

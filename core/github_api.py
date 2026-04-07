@@ -535,12 +535,22 @@ class GetRepoTreeEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "repo_tree"
 
-    def fetch(self, owner: str, repo: str, api_branch: str) -> RepoTreeData:
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> RepoTreeData:
         try:
-            self.client.get(f"/repos/{owner}/{repo}/git/trees/{api_branch}?recursive=1")
-            return RepoTreeData(enabled=True)
-        except Exception:
-            return RepoTreeData(enabled=False)
+            default_branch = repo_details.default_branch if repo_details else "main"
+            data = self.client.get(
+                f"/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1"
+            )
+            if not isinstance(data, dict):
+                return RepoTreeData(access="unexpected_response_type")
+            return RepoTreeData.model_validate(data)
+        except Exception as exc:
+            return RepoTreeData(access=str(exc))
 
 
 class CodeSearchEndpoint(BaseEndpoint):

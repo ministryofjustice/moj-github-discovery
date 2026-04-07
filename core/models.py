@@ -168,10 +168,37 @@ class DependencyGraphData(BaseModel):
     enabled: bool = False
 
 
-class RepoTreeData(BaseModel):
-    """Whether the dependency graph / SBOM endpoint is available."""
+class RepoTreeEntry(BaseModel):
+    """A single entry from the Git tree API response."""
 
-    enabled: bool = False
+    model_config = ConfigDict(extra="ignore")
+
+    path: str
+    mode: Optional[str] = None
+    type: Optional[str] = None
+    sha: Optional[str] = None
+    size: Optional[int] = None
+    url: Optional[str] = None
+
+
+class RepoTreeData(BaseModel):
+    """Repository tree data returned by the Git tree API."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    sha: Optional[str] = None
+    url: Optional[str] = None
+    truncated: bool = False
+    tree: list[RepoTreeEntry] = Field(default_factory=list)
+    access: str = "ok"
+
+
+class LargeBlobData(BaseModel):
+    """Blob metadata for files that exceed the configured size threshold."""
+
+    sha: Optional[str] = None
+    size_bytes: int
+    path: str
 
 
 class ReferenceItem(BaseModel):
@@ -298,12 +325,29 @@ class RepoData(BaseModel):
     workflows: Optional[WorkflowData] = None
     fork_template: Optional[ForkTemplateData] = None
     dependency_graph: Optional[DependencyGraphData] = None
+    repo_tree: Optional[RepoTreeData] = None
     references: Optional[ReferenceData] = None
 
     # Transform-computed fields
     days_since_push: Optional[int] = None
     age_days: Optional[int] = None
     flags: list[str] = Field(default_factory=list)
+    repo_tree_transform: Optional[RepoTreeProcessedData] = None
 
     # Collection metadata
     collected_at: Optional[str] = None
+
+
+class RepoTreeProcessedData(BaseModel):
+    """Derived repository tree summary used by the repo tree transform.
+
+    Captures the largest blob in the tree plus any blobs exceeding the
+    configured soft limit.
+    """
+
+    repo: Optional[str] = None
+    largest_blob_bytes: int = 0
+    largest_blob_path: Optional[str] = None
+    large_blobs: list[LargeBlobData] = Field(default_factory=list)
+    exceeds_soft_limit: bool = False
+    exceeds_hard_limit: bool = False
