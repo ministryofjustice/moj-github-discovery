@@ -101,7 +101,7 @@ def _get_nested(data: dict, dot_path: str, default: Any = None) -> Any:
     """
     try:
         return reduce(lambda d, k: d[k], dot_path.split("."), data)
-    except (KeyError, TypeError):
+    except KeyError, TypeError:
         return default
 
 
@@ -113,7 +113,7 @@ def _coerce(value: Any, field: FieldDefinition) -> Any:
     if field.type == FieldType.integer:
         try:
             return int(value)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return field.default
 
     if field.type == FieldType.boolean:

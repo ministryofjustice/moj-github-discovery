@@ -16,6 +16,16 @@ Most of the prerequisites will require `homebrew` and the `brew` utility, this c
 
 - Follow the instructions post-install before continuing.
 
+### uv
+
+[UV](https://docs.astral.sh/uv/) has been chosen for package management to align with standard MoJ usage, and its high performance in comparison to `requirements.txt`.
+
+It can be installed via `brew` : `brew install uv`
+
+Verify via `uv --version`
+
+Install dependencies (including local dev dependencies) via `uv sync --group dev`
+
 ### Github Setup
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
@@ -42,13 +52,19 @@ To align with MOJ standards, the following tools are required:
 
 - **Pre-commit**
   - **NPM**
-  - **Markdownlint CLI**
+  - **Markdownlint CLI 2**
   - **Docker-Desktop** (to allow pre-commit hook to run)
 
-All can be installed via `brew`:
+Install the key dependencies via `brew`:
 
 ```shell
-brew install pre-commit npm markdownlint-cli docker-desktop
+brew install pre-commit npm docker-desktop
+```
+
+And the `npm` dependencies:
+
+```shell
+npm install --ignore-scripts
 ```
 
 Verify pre-commit and install:
@@ -67,12 +83,4 @@ Authenticate to the Github Docker Container Registry with your PAT, providing yo
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
-```
-
-### Installation
-
-The requirements can now be installed for the python scripts, and development can be carried out.
-
-```bash
-pip install -r requirements.txt
 ```

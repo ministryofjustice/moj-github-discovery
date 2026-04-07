@@ -41,13 +41,13 @@ This repository is organized around a reusable `core/` module, with root scripts
 Regular test runs exclude integration tests by default.
 
 ```bash
-pytest -q
+uv run pytest -q
 ```
 
 Run integration tests explicitly when needed (requires owner level permissions to `ministryofjustice-test`).
 
 ```bash
-pytest tests/test_integration.py -m integration -o addopts='' -v
+uv run pytest tests/test_integration.py -m integration -o addopts='' -v
 ```
 
 ## Design Principles

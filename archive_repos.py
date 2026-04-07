@@ -261,6 +261,7 @@ def main() -> None:
 
     rows: list[dict[str, Any]] = []
     for full_name in repo_list:
+        print(f"Collecting data for repo: {full_name}", file=sys.stderr)
         data = storage.read(full_name)
         if data is None:
             continue

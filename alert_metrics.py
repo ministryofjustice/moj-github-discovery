@@ -11,9 +11,13 @@ from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
 
+# Defaults
+
 DEFAULT_ORG = "ministryofjustice"
 DEFAULT_MAX_ALERTS = 100000
 DEFAULT_OUTPUT = "github_alerts_limited.csv"
+
+# Alerts Config
 
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
 ALERT_SPECS: list[AlertSpec] = [
@@ -30,6 +34,7 @@ ALERT_SPECS: list[AlertSpec] = [
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse and return command-line arguments for later use within alert_metrics.py"""
     parser = argparse.ArgumentParser(
         description="Export repository-level alert metrics via core GitHub modules."
     )
@@ -46,10 +51,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_iso(value: str | None) -> dt.datetime | None:
+    """Utility function: convert ISO 8601 datetime strings into readable datetime object"""
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
 
 def main() -> None:
+    # Configure and Validate CLI Arguments
     args = parse_args()
     if args.max_alerts <= 0:
         print("--max-alerts must be > 0", file=sys.stderr)
@@ -58,6 +65,7 @@ def main() -> None:
         print("--repo-limit must be > 0", file=sys.stderr)
         sys.exit(2)
 
+    # Configure GitHub connection and gather Repo Information
     client = GitHubHttpClient()
     repos = list_org_repos(args.org, client)
     if args.repo_limit:
@@ -70,24 +78,29 @@ def main() -> None:
         if len(rows) >= args.max_alerts:
             break
 
+        # Split Repo Owner and Name from list i.e. owner/repo-name
         owner, repo = repo_full.split("/", 1)
         print(f"Scanning {repo_full}...", file=sys.stderr)
 
+        # Assess repository information for each alert category and severity criteria to be logged
         for kind, severity_of in ALERT_SPECS:
             if len(rows) >= args.max_alerts:
                 break
             try:
+                # Gather repo alerts information for assessment
                 alerts = fetch_repo_alerts(client, owner, repo, kind)
             except Exception as exc:
                 print(f"  [warn] {kind} failed: {exc}", file=sys.stderr)
                 continue
 
+            # Review alerts found for given repo and extract creation/remediation timestamps and lifecycle
             for alert in alerts:
                 if len(rows) >= args.max_alerts:
                     break
                 if not isinstance(alert, dict):
                     continue
 
+                # Extract alert lifecycle
                 created = parse_iso(alert.get("created_at"))
                 remediated = parse_iso(alert.get("fixed_at")) or parse_iso(
                     alert.get("dismissed_at")
@@ -96,6 +109,7 @@ def main() -> None:
                     (remediated - created).days if created and remediated else None
                 )
 
+                # Write alert data as row ready for compilation
                 rows.append(
                     {
                         "id": alert.get("number") or alert.get("id"),
@@ -110,9 +124,11 @@ def main() -> None:
                 )
                 repos_with_alerts.add(repo_full)
 
+    # Write rows to final output file
     if rows:
         CsvCompiler.write_rows(args.output, rows)
 
+    # Summary logging
     print(f"Done! Wrote {len(rows)} alerts to {args.output}")
     print(f"Repos with alerts: {len(repos_with_alerts)}")
 

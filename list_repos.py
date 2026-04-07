@@ -14,6 +14,7 @@ import pandas as pd
 
 from core.collector import RepoCollector
 from core.github_api import (
+    REPO_ENDPOINTS,
     STANDARD_REPO_AUDIT_ENDPOINTS,
 )
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
@@ -68,6 +69,22 @@ def _parse_args() -> argparse.Namespace:
             "or '+' for ascending. Default: pushed_at descending."
         ),
     )
+    parser.add_argument(
+        "--standard-endpoints",
+        action="store_true",
+        help=(
+            "Use the reduced standard endpoint set (faster). "
+            "By default, all repo endpoints are collected."
+        ),
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Skip endpoints already collected in the database for each repo. "
+            "Safe to use after an interrupted run."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -104,13 +121,16 @@ def main() -> None:
         return
 
     storage = SqliteRepoStorage(args.db)
+    selected_endpoints = (
+        STANDARD_REPO_AUDIT_ENDPOINTS if args.standard_endpoints else REPO_ENDPOINTS
+    )
     collector = RepoCollector(
         storage=storage,
-        endpoints=STANDARD_REPO_AUDIT_ENDPOINTS,
+        endpoints=selected_endpoints,
     )
 
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=False)
+    collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
     rows: list[dict[str, Any]] = []
     for full_name in repo_list:

@@ -150,9 +150,10 @@ class SqliteRepoStorage(BaseStorage):
 
             if row:
                 existing = RepoData.model_validate_json(row["data"])
-                merged = existing.model_copy(
-                    update=update.model_dump(exclude_none=True)
-                )
+                merged_payload = existing.model_dump(exclude_none=True)
+                merged_payload.update(update.model_dump(exclude_none=True))
+                # Re-validate merged payload so nested fields keep typed Pydantic models.
+                merged = RepoData.model_validate(merged_payload)
             else:
                 merged = update
 

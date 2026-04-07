@@ -24,6 +24,17 @@ allow-licenses:
   - ISC
   - 0BSD
   - CC0-1.0
+  - CC-BY-4.0
+  - GPL-1.0-or-later
+  - LicenseRef-scancode-other-permissive
+  - LGPL-2.0-only
+  - LGPL-2.0-or-later
+  - LGPL-2.1-only
+  - LGPL-3.0-only
+  - LGPL-3.0-or-later
+  - MPL-1.1
+  - MPL-2.0
+  - Python-2.0
   - Unlicense
 
 # Allow dependencies from these sources
