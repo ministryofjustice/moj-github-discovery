@@ -1,4 +1,3 @@
-import csv
 import os
 from pathlib import Path
 
@@ -57,21 +56,6 @@ master_csv_config = FieldsConfig(
         ),
     ]
 )
-
-
-def write_repo_csv(repo_full_name: str, tree: list[dict]):
-    sanitized = repo_full_name.replace("/", "_")
-    output_file = OUTPUT_DIR / f"{sanitized}_summary.csv"
-
-    with output_file.open("w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["sha", "size_bytes", "path"])
-        for item in tree:
-            if item.get("type") != "blob" or not isinstance(item.get("size"), int):
-                continue
-            writer.writerow([item.get("sha"), item.get("size"), item.get("path")])
-
-    return output_file
 
 
 def main():
