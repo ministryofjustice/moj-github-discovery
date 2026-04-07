@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
 
 
-SOFT_LIMIT = 5 * 1024 * 1024
+SOFT_LIMIT = 50 * 1024 * 1024
 HARD_LIMIT = 100 * 1024 * 1024
 
 
