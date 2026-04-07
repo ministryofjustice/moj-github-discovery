@@ -70,7 +70,7 @@ def main():
         endpoints=[RepoDetailsEndpoint, GetRepoTreeEndpoint],
     )
     primary_org = repos[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repos, resume=False)
+    collector.collect(primary_org, repos=repos, resume=True)
     ExcelCompiler().compile(
         storage=storage,
         config=master_csv_config,
