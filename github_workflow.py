@@ -26,6 +26,7 @@ from core.compiler import CsvCompiler
 from core.github_api import (
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
+    check_workflow_permissions,
     fetch_latest_workflow_run_created_at,
     fetch_repo_actions_permissions,
     fetch_repo_file_text,
@@ -79,74 +80,6 @@ def parse_actions_from_workflow(
                     }
                 )
     return actions
-
-
-def check_workflow_permissions(
-    client: GitHubHttpClient,
-    owner: str,
-    repo_name: str,
-    workflow_path: str,
-) -> Dict[str, Any]:
-    """Check if a workflow file has explicit permissions defined and flag broad scopes."""
-    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
-    if content is None:
-        return {
-            "repo": f"{owner}/{repo_name}",
-            "workflow_path": workflow_path,
-            "has_explicit_permissions": False,
-            "permissions_value": "",
-            "has_write_permissions": False,
-            "finding": "could_not_load",
-        }
-
-    has_permissions = False
-    permissions_value = ""
-    has_write = False
-    finding = "no_permissions_block"
-
-    in_permissions_block = False
-    permissions_lines = []
-
-    for line in content.splitlines():
-        stripped = line.strip()
-
-        if line.startswith("permissions:") or line.startswith("permissions :"):
-            has_permissions = True
-            in_permissions_block = True
-            parts = stripped.split(":", 1)
-            if len(parts) > 1 and parts[1].strip():
-                permissions_value = parts[1].strip()
-                in_permissions_block = False
-            continue
-        # Check for write permissions
-        if in_permissions_block:
-            if stripped and not line[0].isspace():
-                in_permissions_block = False
-            elif stripped:
-                permissions_lines.append(stripped)
-
-    if permissions_lines:
-        permissions_value = "; ".join(permissions_lines)
-
-    if not has_permissions:
-        finding = "no_permissions_block"
-    elif "write-all" in permissions_value:
-        finding = "write-all"
-        has_write = True
-    elif "write" in permissions_value:
-        finding = "has_write_scope"
-        has_write = True
-    else:
-        finding = "compliant"
-
-    return {
-        "repo": f"{owner}/{repo_name}",
-        "workflow_path": workflow_path,
-        "has_explicit_permissions": has_permissions,
-        "permissions_value": permissions_value,
-        "has_write_permissions": has_write,
-        "finding": finding,
-    }
 
 
 # ── Row builders ─────────────────────────────────────────────────────
