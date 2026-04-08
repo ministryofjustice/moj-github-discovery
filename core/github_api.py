@@ -58,6 +58,7 @@ from core.models import (
     RepoDetails,
     WorkflowAnalysis,
     WorkflowData,
+    WorkflowPermissionFinding,
 )
 
 
@@ -216,18 +217,15 @@ def check_workflow_permissions(
     owner: str,
     repo_name: str,
     workflow_path: str,
-) -> dict[str, Any]:
+) -> WorkflowPermissionFinding:
     """Check if a workflow file has explicit permissions defined and flag broad scopes."""
     content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
     if content is None:
-        return {
-            "repo": f"{owner}/{repo_name}",
-            "workflow_path": workflow_path,
-            "has_explicit_permissions": False,
-            "permissions_value": "",
-            "has_write_permissions": False,
-            "finding": "could_not_load",
-        }
+        return WorkflowPermissionFinding(
+            repo=f"{owner}/{repo_name}",
+            workflow_path=workflow_path,
+            finding="could_not_load",
+        )
 
     has_permissions = False
     permissions_value = ""
@@ -235,7 +233,7 @@ def check_workflow_permissions(
     finding = "no_permissions_block"
 
     in_permissions_block = False
-    permissions_lines = []
+    permissions_lines: list[str] = []
 
     for line in content.splitlines():
         stripped = line.strip()
@@ -248,7 +246,7 @@ def check_workflow_permissions(
                 permissions_value = parts[1].strip()
                 in_permissions_block = False
             continue
-        # Check for write permissions
+
         if in_permissions_block:
             if stripped and not line[0].isspace():
                 in_permissions_block = False
@@ -269,14 +267,14 @@ def check_workflow_permissions(
     else:
         finding = "compliant"
 
-    return {
-        "repo": f"{owner}/{repo_name}",
-        "workflow_path": workflow_path,
-        "has_explicit_permissions": has_permissions,
-        "permissions_value": permissions_value,
-        "has_write_permissions": has_write,
-        "finding": finding,
-    }
+    return WorkflowPermissionFinding(
+        repo=f"{owner}/{repo_name}",
+        workflow_path=workflow_path,
+        has_explicit_permissions=has_permissions,
+        permissions_value=permissions_value,
+        has_write_permissions=has_write,
+        finding=finding,
+    )
 
 
 def fetch_repo_alerts(

@@ -153,6 +153,17 @@ class WorkflowData(BaseModel):
     analysis: Optional[WorkflowAnalysis] = None
 
 
+class WorkflowPermissionFinding(BaseModel):
+    """Result of checking a single workflow file for permissions posture."""
+
+    repo: str
+    workflow_path: str
+    has_explicit_permissions: bool = False
+    permissions_value: str = ""
+    has_write_permissions: bool = False
+    finding: str = "no_permissions_block"
+
+
 class ForkTemplateData(BaseModel):
     """Fork origin and template source details."""
 

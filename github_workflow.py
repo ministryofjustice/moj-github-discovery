@@ -415,7 +415,7 @@ def main() -> None:
         perm = check_workflow_permissions(
             client, row["owner"], row["repo_name"], row["path"]
         )
-        all_permissions.append(perm)
+        all_permissions.append(perm.model_dump())
 
         if (i + 1) % 100 == 0:
             print(f" Checked {i + 1} / {len(detail_rows)} workflow files")
