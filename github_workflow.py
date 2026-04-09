@@ -14,7 +14,6 @@ Not yet in core (local implementations retained):
 
 import argparse
 import os
-import re
 import sys
 import time
 from collections import Counter
@@ -26,6 +25,7 @@ from core.compiler import CsvCompiler
 from core.github_api import (
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
+    check_workflow_permissions,
     fetch_latest_workflow_run_created_at,
     fetch_repo_actions_permissions,
     fetch_repo_file_text,
@@ -35,6 +35,7 @@ from core.github_client import GitHubHttpClient
 from core.models import RepoData
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
+from core.transforms import parse_actions_from_content
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(SCRIPT_DIR, "github_workflow_posture.db")
@@ -55,30 +56,7 @@ def parse_actions_from_workflow(
         )
         return []
 
-    actions = []
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("uses:") or line.startswith("- uses:"):
-            match = re.search(r'uses:\s*["\']?([^"\'#\s]+)', line)
-            if match:
-                ref = match.group(1)
-                if ref.startswith("./"):
-                    continue
-                action_name, version = (
-                    ref.rsplit("@", 1) if "@" in ref else (ref, "none")
-                )
-                actions.append(
-                    {
-                        "repo": repo_name,
-                        "workflow_path": workflow_path,
-                        "action_name": action_name,
-                        "version": version,
-                        "owner": action_name.split("/")[0]
-                        if "/" in action_name
-                        else action_name,
-                    }
-                )
-    return actions
+    return parse_actions_from_content(content, repo_name, workflow_path)
 
 
 # ── Row builders ─────────────────────────────────────────────────────
@@ -405,6 +383,39 @@ def main() -> None:
 
     print(f"Unique actions: {len(usage_summary)}")
     print(f"Unique owners: {len(owner_summary)}")
+
+    # 6. Workflow permissions check
+    print("\n--- Analysing workflow permissions ---")
+
+    all_permissions: List[Dict[str, Any]] = []
+    for i, row in enumerate(detail_rows):
+        perm = check_workflow_permissions(
+            client, row["owner"], row["repo_name"], row["path"]
+        )
+        all_permissions.append(perm.model_dump())
+
+        if (i + 1) % 100 == 0:
+            print(f" Checked {i + 1} / {len(detail_rows)} workflow files")
+            time.sleep(0.1)
+    perms_count = CsvCompiler.write_rows(
+        "github_workflow_permissions.csv", all_permissions
+    )
+    print(f"Wrote github_workflow_permissions.csv ({perms_count} rows)")
+
+    no_block = sum(1 for p in all_permissions if p["finding"] == "no_permissions_block")
+    write_all = sum(1 for p in all_permissions if p["finding"] == "write-all")
+    has_write_count = sum(
+        1 for p in all_permissions if p["finding"] == "has_write_scope"
+    )
+    compliant_count = sum(1 for p in all_permissions if p["finding"] == "compliant")
+    skipped = sum(1 for p in all_permissions if p["finding"] == "could_not_load")
+
+    print(f"No permissions block: {no_block}")
+    print(f"permissions: write-all: {write_all}")
+    print(f"Has write scope: {has_write_count}")
+    print(f"Compliant (read-only): {compliant_count}")
+    print(f"Could not load: {skipped}")
+
     print("--- Complete ---")
 
 

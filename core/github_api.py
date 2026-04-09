@@ -34,6 +34,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from pydantic import BaseModel
+from core.transforms import parse_workflow_permissions
 
 from core.github_client import BaseHttpClient
 from core.models import (
@@ -59,6 +60,7 @@ from core.models import (
     RepoTreeData,
     WorkflowAnalysis,
     WorkflowData,
+    WorkflowPermissionFinding,
 )
 
 
@@ -210,6 +212,29 @@ def fetch_repo_file_text(
         return base64.b64decode(content).decode("utf-8")
     except Exception:
         return None
+
+
+def check_workflow_permissions(
+    client: BaseHttpClient,
+    owner: str,
+    repo_name: str,
+    workflow_path: str,
+) -> WorkflowPermissionFinding:
+    """Check if a workflow file has explicit permissions defined and flag broad scopes."""
+    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
+    if content is None:
+        return WorkflowPermissionFinding(
+            repo=f"{owner}/{repo_name}",
+            workflow_path=workflow_path,
+            finding="could_not_load",
+        )
+
+    parsed = parse_workflow_permissions(content)
+    return WorkflowPermissionFinding(
+        repo=f"{owner}/{repo_name}",
+        workflow_path=workflow_path,
+        **parsed,
+    )
 
 
 def fetch_repo_alerts(

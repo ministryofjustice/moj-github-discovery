@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+import re
 
 from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
 
@@ -275,6 +276,95 @@ class RepoTreeTransform(BaseTransform):
         )
 
         return data.model_copy(update={"repo_tree_transform": processed})
+
+
+# — Standalone parsing helpers ————————————————————————
+
+
+def parse_workflow_permissions(content: str) -> dict[str, object]:
+    """Parse workflow file content and extract permissions posture.
+
+    Pure function — no network, no side effects.
+    """
+    has_permissions = False
+    permissions_value = ""
+    has_write = False
+    finding = "no_permissions_block"
+
+    in_permissions_block = False
+    permissions_lines: list[str] = []
+
+    for line in content.splitlines():
+        stripped = line.strip()
+
+        if line.startswith("permissions:") or line.startswith("permissions :"):
+            has_permissions = True
+            in_permissions_block = True
+            parts = stripped.split(":", 1)
+            if len(parts) > 1 and parts[1].strip():
+                permissions_value = parts[1].strip()
+                in_permissions_block = False
+            continue
+
+        if in_permissions_block:
+            if stripped and not line[0].isspace():
+                in_permissions_block = False
+            elif stripped:
+                permissions_lines.append(stripped)
+
+    if permissions_lines:
+        permissions_value = "; ".join(permissions_lines)
+
+    if not has_permissions:
+        finding = "no_permissions_block"
+    elif "write-all" in permissions_value:
+        finding = "write-all"
+        has_write = True
+    elif "write" in permissions_value:
+        finding = "has_write_scope"
+        has_write = True
+    else:
+        finding = "compliant"
+
+    return {
+        "has_explicit_permissions": has_permissions,
+        "permissions_value": permissions_value,
+        "has_write_permissions": has_write,
+        "finding": finding,
+    }
+
+
+def parse_actions_from_content(
+    content: str, repo_name: str, workflow_path: str
+) -> list[dict[str, str]]:
+    """Extract all ``uses:`` action references from workflow file content.
+
+    Pure function — no network, no side effects.
+    """
+    actions: list[dict[str, str]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("uses:") or line.startswith("- uses:"):
+            match = re.search(r'uses:\s*["\']?([^"\'#\s]+)', line)
+            if match:
+                ref = match.group(1)
+                if ref.startswith("./"):
+                    continue
+                action_name, version = (
+                    ref.rsplit("@", 1) if "@" in ref else (ref, "none")
+                )
+                actions.append(
+                    {
+                        "repo": repo_name,
+                        "workflow_path": workflow_path,
+                        "action_name": action_name,
+                        "version": version,
+                        "owner": action_name.split("/")[0]
+                        if "/" in action_name
+                        else action_name,
+                    }
+                )
+    return actions
 
 
 # ── Transform registry ────────────────────────────────────────────────

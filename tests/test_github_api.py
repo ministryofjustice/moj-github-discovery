@@ -30,6 +30,7 @@ from core.github_api import (
     fetch_repo_alerts,
     fetch_repo_file_text,
     list_org_repos,
+    check_workflow_permissions,
 )
 from core.models import (
     AlertData,
@@ -46,6 +47,7 @@ from core.models import (
     RepoDetails,
     RepoTreeData,
     WorkflowData,
+    WorkflowPermissionFinding,
 )
 from tests.conftest import MockHttpClient
 
@@ -688,3 +690,67 @@ class TestOrgRulesetsEndpoint:
         client = MockHttpClient()
         result = OrgRulesetsEndpoint(client).fetch("o")
         assert result.count == 0
+
+
+# — check_workflow_permissions ————————————————————————
+
+
+class TestCheckWorkflowPermissions:
+    def _make_client(self, content: str | None) -> MockHttpClient:
+        if content is None:
+            return MockHttpClient()
+        import base64
+
+        encoded = base64.b64encode(content.encode()).decode()
+        return MockHttpClient(
+            {
+                "/repos/o/r/contents/.github/workflows/ci.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+
+    def test_could_not_load(self) -> None:
+        client = self._make_client(None)
+        result = check_workflow_permissions(
+            client, "o", "r", ".github/workflows/ci.yml"
+        )
+        assert isinstance(result, WorkflowPermissionFinding)
+        assert result.finding == "could_not_load"
+        assert result.has_explicit_permissions is False
+
+    def test_no_permissions_block(self) -> None:
+        client = self._make_client("name: CI\non:\n  push:\n")
+        result = check_workflow_permissions(
+            client, "o", "r", ".github/workflows/ci.yml"
+        )
+        assert result.finding == "no_permissions_block"
+        assert result.has_write_permissions is False
+
+    def test_write_all(self) -> None:
+        client = self._make_client("name: CI\npermissions: write-all\non:\n  push:\n")
+        result = check_workflow_permissions(
+            client, "o", "r", ".github/workflows/ci.yml"
+        )
+        assert result.finding == "write-all"
+        assert result.has_write_permissions is True
+
+    def test_returns_correct_repo_and_path(self) -> None:
+        import base64
+
+        content = "name: CI\non:\n  push:\n"
+        encoded = base64.b64encode(content.encode()).decode()
+        client = MockHttpClient(
+            {
+                "/repos/moj/my-repo/contents/.github/workflows/deploy.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+        result = check_workflow_permissions(
+            client, "moj", "my-repo", ".github/workflows/deploy.yml"
+        )
+        assert result.repo == "moj/my-repo"
+        assert result.workflow_path == ".github/workflows/deploy.yml"
