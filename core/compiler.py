@@ -43,6 +43,26 @@ from core.storage import BaseStorage
 from core.transforms import TRANSFORMS, BaseTransform
 
 
+def _instantiate_transforms(
+    transforms: list[BaseTransform | type[BaseTransform]] | None,
+) -> list[BaseTransform]:
+    """Return concrete transform instances from an optional transform list."""
+    if transforms is None:
+        return [transform_cls() for transform_cls in TRANSFORMS]
+
+    instances: list[BaseTransform] = []
+    for transform in transforms:
+        if isinstance(transform, BaseTransform):
+            instances.append(transform)
+        elif isinstance(transform, type) and issubclass(transform, BaseTransform):
+            instances.append(transform())
+        else:
+            raise TypeError(
+                "transforms must contain BaseTransform instances or classes"
+            )
+    return instances
+
+
 # ── Fields config loader ──────────────────────────────────────────────
 
 
@@ -129,7 +149,7 @@ def _apply_transforms(data: RepoData, transforms: list[BaseTransform]) -> RepoDa
 def build_dataframe(
     storage: BaseStorage,
     config: FieldsConfig,
-    transforms: list[BaseTransform] | None = None,
+    transforms: list[BaseTransform | type[BaseTransform]] | None = None,
 ) -> pd.DataFrame:
     """Read all rows, apply transforms, and build a DataFrame.
 
@@ -140,13 +160,14 @@ def build_dataframe(
     Args:
         storage:    Initialised storage backend.
         config:     Validated field definitions.
-        transforms: List of transform instances to apply in order.  Defaults
-                    to instantiating every class in ``TRANSFORMS``.
+        transforms: Optional transform instances or transform classes to
+                apply in order. Defaults to instantiating every class in
+                ``TRANSFORMS``.
 
     Returns:
         DataFrame with one row per repo and one column per field definition.
     """
-    active_transforms = [t() for t in TRANSFORMS] if transforms is None else transforms
+    active_transforms = _instantiate_transforms(transforms)
 
     rows = []
     for full_name, repo_data in storage.read_all():
@@ -178,8 +199,8 @@ class BaseCompiler(ABC):
             def format_name(self) -> str:
                 return "json"
 
-            def compile(self, storage, output_path, config):
-                df = build_dataframe(storage, config)
+            def compile(self, storage, output_path, config, transforms=None):
+                df = build_dataframe(storage, config, transforms=transforms)
                 df.to_json(output_path, orient="records", indent=2)
 
     Register in :data:`COMPILERS` and add a ``--json`` flag in ``compile.py``.
@@ -196,6 +217,7 @@ class BaseCompiler(ABC):
         storage: BaseStorage,
         output_path: str | Path,
         config: FieldsConfig,
+        transforms: list[BaseTransform | type[BaseTransform]] | None = None,
     ) -> None:
         """Read the database and write output to ``output_path``.
 
@@ -203,6 +225,9 @@ class BaseCompiler(ABC):
             storage:     Initialised storage backend to read data from.
             output_path: Destination file path.
             config:      Validated field definitions loaded from ``fields.yaml``.
+            transforms:  Optional transform instances or transform classes to
+                         apply before extracting configured fields. Defaults
+                         to the global :data:`TRANSFORMS` registry when omitted.
         """
 
 
@@ -224,8 +249,9 @@ class ExcelCompiler(BaseCompiler):
         storage: BaseStorage,
         output_path: str | Path,
         config: FieldsConfig,
+        transforms: list[BaseTransform | type[BaseTransform]] | None = None,
     ) -> None:
-        df = build_dataframe(storage, config)
+        df = build_dataframe(storage, config, transforms=transforms)
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Repos")
         print(f"Wrote {output_path}", file=sys.stderr)
@@ -243,8 +269,9 @@ class CsvCompiler(BaseCompiler):
         storage: BaseStorage,
         output_path: str | Path,
         config: FieldsConfig,
+        transforms: list[BaseTransform | type[BaseTransform]] | None = None,
     ) -> None:
-        df = build_dataframe(storage, config)
+        df = build_dataframe(storage, config, transforms=transforms)
         df.to_csv(output_path, index=False)
         print(f"Wrote {output_path}", file=sys.stderr)
 

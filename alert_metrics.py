@@ -14,7 +14,7 @@ from core.github_client import GitHubHttpClient
 # Defaults
 
 DEFAULT_ORG = "ministryofjustice"
-DEFAULT_MAX_ALERTS = 400
+DEFAULT_MAX_ALERTS = 100000
 DEFAULT_OUTPUT = "github_alerts_limited.csv"
 
 # Alerts Config

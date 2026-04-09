@@ -116,7 +116,7 @@ class RepoCollector(BaseCollector):
         storage: BaseStorage,
         client: BaseHttpClient | None = None,
         endpoints: list[type[BaseEndpoint]] | None = None,
-        max_workers: int = 8,
+        max_workers: int = 4,
     ) -> None:
         """
         Args:

@@ -30,3 +30,7 @@ node_modules
 
 # Misc
 .DS_Store
+
+.venv/
+.ds_store
+*.pem

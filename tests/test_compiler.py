@@ -12,6 +12,7 @@ from core.compiler import (
     _apply_transforms,
     _coerce,
     _get_nested,
+    _instantiate_transforms,
     build_dataframe,
     load_fields_config,
 )
@@ -160,6 +161,24 @@ class TestApplyTransforms:
         assert isinstance(result, RepoData)
 
 
+class TestInstantiateTransforms:
+    def test_instantiates_transform_classes(self):
+        transforms = _instantiate_transforms([TimestampTransform])
+
+        assert len(transforms) == 1
+        assert isinstance(transforms[0], TimestampTransform)
+
+    def test_preserves_transform_instances(self):
+        transforms = _instantiate_transforms([TimestampTransform()])
+
+        assert len(transforms) == 1
+        assert isinstance(transforms[0], TimestampTransform)
+
+    def test_invalid_transform_raises(self):
+        with pytest.raises(TypeError):
+            _instantiate_transforms([object()])
+
+
 # ── build_dataframe ──────────────────────────────────────────────────
 
 
@@ -231,6 +250,31 @@ class TestBuildDataframe:
         df = build_dataframe(storage, config, transforms=[TimestampTransform()])
         assert df.iloc[0]["Days"] > 365
 
+    def test_with_transform_classes(self):
+        config = FieldsConfig(
+            fields=[
+                FieldDefinition(
+                    source="days_since_push",
+                    column="Days",
+                    type=FieldType.integer,
+                    default=0,
+                ),
+            ]
+        )
+        storage = MockStorage()
+        storage.upsert(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at="2020-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        df = build_dataframe(storage, config, transforms=[TimestampTransform])
+        assert df.iloc[0]["Days"] > 365
+
     def test_multiple_rows(self):
         storage = MockStorage()
         for i in range(3):
@@ -292,6 +336,41 @@ class TestCsvCompiler:
     def test_format_name(self):
         assert CsvCompiler().format_name == "csv"
 
+    def test_accepts_explicit_transforms(self, tmp_path):
+        storage = MockStorage()
+        storage.upsert(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at="2020-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        config = FieldsConfig(
+            fields=[
+                FieldDefinition(
+                    source="days_since_push",
+                    column="Days",
+                    type=FieldType.integer,
+                    default=0,
+                ),
+            ]
+        )
+        output = tmp_path / "output.csv"
+
+        CsvCompiler().compile(
+            storage,
+            output,
+            config,
+            transforms=[TimestampTransform()],
+        )
+
+        content = output.read_text(encoding="utf-8")
+        assert "Days" in content
+        assert len(content.splitlines()) == 2
+
     def test_write_rows_empty_creates_empty_file(self, tmp_path):
         output = tmp_path / "rows.csv"
         written = CsvCompiler.write_rows(output, [])
@@ -338,5 +417,40 @@ class TestExcelCompiler:
         )
         output = tmp_path / "output.xlsx"
         ExcelCompiler().compile(storage, output, config)
+        assert output.exists()
+        assert output.stat().st_size > 0
+
+    def test_accepts_explicit_transforms(self, tmp_path):
+        pytest.importorskip("openpyxl")
+        storage = MockStorage()
+        storage.upsert(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at="2020-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        config = FieldsConfig(
+            fields=[
+                FieldDefinition(
+                    source="days_since_push",
+                    column="Days",
+                    type=FieldType.integer,
+                    default=0,
+                ),
+            ]
+        )
+        output = tmp_path / "output.xlsx"
+
+        ExcelCompiler().compile(
+            storage,
+            output,
+            config,
+            transforms=[TimestampTransform()],
+        )
+
         assert output.exists()
         assert output.stat().st_size > 0
