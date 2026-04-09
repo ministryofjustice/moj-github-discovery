@@ -14,7 +14,6 @@ Not yet in core (local implementations retained):
 
 import argparse
 import os
-import re
 import sys
 import time
 from collections import Counter
@@ -36,6 +35,7 @@ from core.github_client import GitHubHttpClient
 from core.models import RepoData
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
+from core.transforms import parse_actions_from_content
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(SCRIPT_DIR, "github_workflow_posture.db")
@@ -56,30 +56,7 @@ def parse_actions_from_workflow(
         )
         return []
 
-    actions = []
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("uses:") or line.startswith("- uses:"):
-            match = re.search(r'uses:\s*["\']?([^"\'#\s]+)', line)
-            if match:
-                ref = match.group(1)
-                if ref.startswith("./"):
-                    continue
-                action_name, version = (
-                    ref.rsplit("@", 1) if "@" in ref else (ref, "none")
-                )
-                actions.append(
-                    {
-                        "repo": repo_name,
-                        "workflow_path": workflow_path,
-                        "action_name": action_name,
-                        "version": version,
-                        "owner": action_name.split("/")[0]
-                        if "/" in action_name
-                        else action_name,
-                    }
-                )
-    return actions
+    return parse_actions_from_content(content, repo_name, workflow_path)
 
 
 # ── Row builders ─────────────────────────────────────────────────────

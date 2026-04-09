@@ -34,6 +34,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from pydantic import BaseModel
+from core.transforms import parse_workflow_permissions
 
 from core.github_client import BaseHttpClient
 from core.models import (
@@ -227,53 +228,11 @@ def check_workflow_permissions(
             finding="could_not_load",
         )
 
-    has_permissions = False
-    permissions_value = ""
-    has_write = False
-    finding = "no_permissions_block"
-
-    in_permissions_block = False
-    permissions_lines: list[str] = []
-
-    for line in content.splitlines():
-        stripped = line.strip()
-
-        if line.startswith("permissions:") or line.startswith("permissions :"):
-            has_permissions = True
-            in_permissions_block = True
-            parts = stripped.split(":", 1)
-            if len(parts) > 1 and parts[1].strip():
-                permissions_value = parts[1].strip()
-                in_permissions_block = False
-            continue
-
-        if in_permissions_block:
-            if stripped and not line[0].isspace():
-                in_permissions_block = False
-            elif stripped:
-                permissions_lines.append(stripped)
-
-    if permissions_lines:
-        permissions_value = "; ".join(permissions_lines)
-
-    if not has_permissions:
-        finding = "no_permissions_block"
-    elif "write-all" in permissions_value:
-        finding = "write-all"
-        has_write = True
-    elif "write" in permissions_value:
-        finding = "has_write_scope"
-        has_write = True
-    else:
-        finding = "compliant"
-
+    parsed = parse_workflow_permissions(content)
     return WorkflowPermissionFinding(
         repo=f"{owner}/{repo_name}",
         workflow_path=workflow_path,
-        has_explicit_permissions=has_permissions,
-        permissions_value=permissions_value,
-        has_write_permissions=has_write,
-        finding=finding,
+        **parsed,
     )
 
 

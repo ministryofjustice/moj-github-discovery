@@ -19,6 +19,8 @@ from core.transforms import (
     FlagTransform,
     ReferenceClassifier,
     TimestampTransform,
+    parse_workflow_permissions,
+    parse_actions_from_content,
 )
 
 
@@ -335,3 +337,85 @@ class TestTransformPipeline:
         assert "stale" in data.flags
         assert "unprotected_default_branch" in data.flags
         assert "no_codeowners" in data.flags
+
+
+# — parse_workflow_permissions ————————————————————————
+
+
+class TestParseWorkflowPermissions:
+    def test_no_permissions_block(self) -> None:
+        content = (
+            "name: CI\non:\n  push:\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+        )
+        result = parse_workflow_permissions(content)
+        assert result["finding"] == "no_permissions_block"
+        assert result["has_explicit_permissions"] is False
+        assert result["has_write_permissions"] is False
+
+    def test_inline_write_all(self) -> None:
+        content = "name: CI\npermissions: write-all\non:\n  push:\n"
+        result = parse_workflow_permissions(content)
+        assert result["finding"] == "write-all"
+        assert result["has_explicit_permissions"] is True
+        assert result["has_write_permissions"] is True
+
+    def test_inline_read_all(self) -> None:
+        content = "name: CI\npermissions: read-all\non:\n  push:\n"
+        result = parse_workflow_permissions(content)
+        assert result["finding"] == "compliant"
+        assert result["has_explicit_permissions"] is True
+        assert result["has_write_permissions"] is False
+
+    def test_multiline_with_write_scope(self) -> None:
+        content = (
+            "name: CI\npermissions:\n  contents: read\n"
+            "  packages: write\non:\n  push:\n"
+        )
+        result = parse_workflow_permissions(content)
+        assert result["finding"] == "has_write_scope"
+        assert result["has_explicit_permissions"] is True
+        assert result["has_write_permissions"] is True
+        assert "packages: write" in result["permissions_value"]
+
+    def test_compliant_read_only(self) -> None:
+        content = "name: CI\npermissions:\n  contents: read\non:\n  push:\n"
+        result = parse_workflow_permissions(content)
+        assert result["finding"] == "compliant"
+        assert result["has_explicit_permissions"] is True
+        assert result["has_write_permissions"] is False
+
+
+# — parse_actions_from_content ————————————————————————
+
+
+class TestParseActionsFromContent:
+    def test_extracts_actions(self) -> None:
+        content = (
+            "name: CI\njobs:\n  build:\n    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "      - uses: actions/setup-node@v3\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert len(result) == 2
+        assert result[0]["action_name"] == "actions/checkout"
+        assert result[0]["version"] == "v4"
+        assert result[0]["owner"] == "actions"
+        assert result[0]["repo"] == "my-repo"
+
+    def test_skips_local_actions(self) -> None:
+        content = "steps:\n  - uses: ./local-action\n  - uses: actions/checkout@v4\n"
+        result = parse_actions_from_content(content, "r", "ci.yml")
+        assert len(result) == 1
+        assert result[0]["action_name"] == "actions/checkout"
+
+    def test_no_version(self) -> None:
+        content = "steps:\n  - uses: some/action\n"
+        result = parse_actions_from_content(content, "r", "ci.yml")
+        assert len(result) == 1
+        assert result[0]["version"] == "none"
+
+    def test_empty_content(self) -> None:
+        result = parse_actions_from_content("", "r", "ci.yml")
+        assert result == []
