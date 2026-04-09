@@ -24,7 +24,12 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import re
 
-from core.models import RepoData
+from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
+
+# Size limits in bytes (50/100 MB converted to bytes for ease of processing)
+SOFT_LIMIT = 50 * 1024 * 1024
+SOFT_LIMIT = 50 * 1024 * 1024
+HARD_LIMIT = 100 * 1024 * 1024
 
 
 # ── Abstract base ─────────────────────────────────────────────────────
@@ -186,6 +191,91 @@ class FlagTransform(BaseTransform):
             flags.append("stale")
 
         return data.model_copy(update={"flags": flags})
+
+
+class RepoTreeTransform(BaseTransform):
+    """Summarise the repository tree into large-file metrics.
+
+    Populates ``repo_tree_transform`` with:
+
+    * ``repo``               — repository full name
+    * ``largest_blob_bytes`` — size of the largest blob in the tree
+    * ``largest_blob_path``  — path of the largest blob in the tree
+    * ``large_blobs``        — blobs at or above the soft limit
+    * ``exceeds_soft_limit`` — whether the largest blob exceeds the soft limit
+    * ``exceeds_hard_limit`` — whether the largest blob exceeds the hard limit
+    """
+
+    @property
+    def name(self) -> str:
+        return "repo_tree_transform"
+
+    @staticmethod
+    def find_largest_blob(tree: list[object]) -> tuple[int, str | None, str | None]:
+        largest_size = 0
+        largest_path: str | None = None
+        largest_sha: str | None = None
+
+        for item in tree:
+            if getattr(item, "type", None) != "blob":
+                continue
+            size = getattr(item, "size", None)
+            if not isinstance(size, int):
+                continue
+
+            if size > largest_size:
+                largest_size = size
+                largest_path = getattr(item, "path", None)
+                largest_sha = getattr(item, "sha", None)
+
+        return largest_size, largest_path, largest_sha
+
+    @staticmethod
+    def process_repo_tree_stats(
+        repo_full_name: str,
+        tree: list[object],
+    ) -> RepoTreeProcessedData:
+        large_blobs: list[LargeBlobData] = []
+
+        for item in tree:
+            if getattr(item, "type", None) != "blob":
+                continue
+            size = getattr(item, "size", None)
+            path = getattr(item, "path", None)
+            if not isinstance(size, int) or not isinstance(path, str):
+                continue
+            if size >= SOFT_LIMIT:
+                large_blobs.append(
+                    LargeBlobData(
+                        sha=getattr(item, "sha", None),
+                        size_bytes=size,
+                        path=path,
+                    )
+                )
+
+        largest_size, largest_path, _largest_sha = RepoTreeTransform.find_largest_blob(
+            tree
+        )
+
+        return RepoTreeProcessedData(
+            repo=repo_full_name,
+            largest_blob_bytes=largest_size,
+            largest_blob_path=largest_path,
+            large_blobs=large_blobs,
+            exceeds_soft_limit=largest_size > SOFT_LIMIT,
+            exceeds_hard_limit=largest_size > HARD_LIMIT,
+        )
+
+    def apply(self, data: RepoData) -> RepoData:
+        if data.repo_tree is None or data.repo_details is None:
+            return data
+
+        processed = self.process_repo_tree_stats(
+            data.repo_details.full_name,
+            data.repo_tree.tree,
+        )
+
+        return data.model_copy(update={"repo_tree_transform": processed})
 
 
 # — Standalone parsing helpers ————————————————————————

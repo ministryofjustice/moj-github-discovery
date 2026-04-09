@@ -22,8 +22,12 @@ from core.models import (
     OrgWebhooksData,
     ReferenceData,
     ReferenceItem,
+    LargeBlobData,
     RepoData,
     RepoDetails,
+    RepoTreeData,
+    RepoTreeEntry,
+    RepoTreeProcessedData,
     WorkflowAnalysis,
     WorkflowData,
 )
@@ -229,6 +233,55 @@ class TestDependencyGraphData:
         assert dg.enabled is False
 
 
+class TestRepoTreeData:
+    def test_defaults(self):
+        tree = RepoTreeData()
+        assert tree.tree == []
+        assert tree.truncated is False
+        assert tree.access == "ok"
+
+    def test_with_entries(self):
+        tree = RepoTreeData(
+            sha="rootsha",
+            tree=[
+                RepoTreeEntry(
+                    path="docs/readme.md",
+                    type="blob",
+                    size=123,
+                    sha="blobsha",
+                )
+            ],
+        )
+        assert tree.sha == "rootsha"
+        assert tree.tree[0].path == "docs/readme.md"
+        assert tree.tree[0].size == 123
+
+
+class TestRepoTreeProcessedData:
+    def test_defaults(self):
+        processed = RepoTreeProcessedData()
+        assert processed.repo is None
+        assert processed.largest_blob_bytes == 0
+        assert processed.largest_blob_path is None
+        assert processed.large_blobs == []
+        assert processed.exceeds_soft_limit is False
+        assert processed.exceeds_hard_limit is False
+
+    def test_with_large_blobs(self):
+        processed = RepoTreeProcessedData(
+            repo="org/repo",
+            largest_blob_bytes=60,
+            largest_blob_path="assets/big.bin",
+            large_blobs=[
+                LargeBlobData(sha="abc123", size_bytes=60, path="assets/big.bin")
+            ],
+            exceeds_soft_limit=True,
+        )
+        assert processed.repo == "org/repo"
+        assert processed.large_blobs[0].size_bytes == 60
+        assert processed.large_blobs[0].path == "assets/big.bin"
+
+
 # ── ReferenceData / ReferenceItem ─────────────────────────────────────
 
 
@@ -316,12 +369,20 @@ class TestRepoData:
         rd = RepoData(
             repo_details=RepoDetails(full_name="org/repo", name="repo"),
             alerts=AlertData(dependabot_alerts=1),
+            repo_tree=RepoTreeData(tree=[RepoTreeEntry(path="README.md", type="blob")]),
+            repo_tree_transform=RepoTreeProcessedData(
+                repo="org/repo",
+                largest_blob_bytes=10,
+                largest_blob_path="README.md",
+            ),
             flags=["stale"],
         )
         json_str = rd.model_dump_json()
         restored = RepoData.model_validate_json(json_str)
         assert restored.repo_details.full_name == "org/repo"
         assert restored.alerts.dependabot_alerts == 1
+        assert restored.repo_tree.tree[0].path == "README.md"
+        assert restored.repo_tree_transform.largest_blob_path == "README.md"
         assert restored.flags == ["stale"]
 
     def test_model_dump_exclude_none(self):
