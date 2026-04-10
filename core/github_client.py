@@ -264,7 +264,7 @@ class GitHubHttpClient(BaseHttpClient):
 
         with requests.Session() as app_sess:
             app_installation_id = GitHubHttpClient._resolve_github_app_installation_id(
-                app_sess
+                app_sess, headers
             )
 
             token_resp = app_sess.post(
