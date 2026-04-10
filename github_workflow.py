@@ -4,11 +4,9 @@
 Refactored to use core modules:
   - Repo discovery / loading     core.github_api.list_org_repos, core.repo_list
   - HTTP transport               core.github_client.GitHubHttpClient
-  - Workflow + repo data         WorkflowsEndpoint + RepoDetailsEndpoint via RepoCollector
+    - Workflow + repo data         RepoCollector with typed repo-scoped endpoints
 
 Not yet in core (local implementations retained):
-  - Repo-level Actions permissions  GET /repos/{owner}/{repo}/actions/permissions
-  - Latest workflow run timestamp   GET /repos/{owner}/{repo}/actions/runs
   - Workflow YAML uses: parsing
 """
 
@@ -18,21 +16,21 @@ import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
 from core.github_api import (
+    LatestWorkflowRunEndpoint,
     RepoDetailsEndpoint,
+    RepoActionsPermissionsEndpoint,
     WorkflowsEndpoint,
     check_workflow_permissions,
-    fetch_latest_workflow_run_created_at,
-    fetch_repo_actions_permissions,
     fetch_repo_file_text,
     list_org_repos,
 )
 from core.github_client import GitHubHttpClient
-from core.models import RepoData
+from core.models import RepoActionsPermissionsData, RepoData
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
@@ -65,12 +63,11 @@ def parse_actions_from_workflow(
 def build_repo_row(
     full_name: str,
     data: RepoData,
-    actions_permissions: Dict[str, Any],
-    latest_run_date: Optional[str],
 ) -> Dict[str, Any]:
-    """Build a posture summary row from RepoData and locally fetched supplements."""
+    """Build a posture summary row from collected RepoData."""
     repo = data.repo_details
     workflows = data.workflows
+    actions_permissions = data.repo_actions_permissions or RepoActionsPermissionsData()
     owner, _, repo_name = full_name.partition("/")
 
     archived = repo.archived if repo else False
@@ -111,7 +108,10 @@ def build_repo_row(
         "has_workflows": has_workflows,
         "workflow_count": workflow_count,
         "workflow_names": workflow_names,
-        "latest_workflow_run": latest_run_date or "",
+        "latest_workflow_run": (
+            data.latest_workflow_run.created_at if data.latest_workflow_run else ""
+        )
+        or "",
         "posture": posture,
         "disable_candidate": disable_candidate,
     }
@@ -303,42 +303,37 @@ def main() -> None:
     print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
 
     # ================================================================
-    # Stage 2: Collect baseline repo metadata and workflow inventory
+    # Stage 2: Collect baseline repo metadata and workflow posture data
     # ================================================================
 
-    # 2. Collect repo details + workflow inventory via core
+    # 2. Collect repo details + workflow posture data via core
     storage = SqliteRepoStorage(args.db)
     collector = RepoCollector(
         storage=storage,
         client=client,
-        endpoints=[RepoDetailsEndpoint, WorkflowsEndpoint],
+        endpoints=[
+            RepoDetailsEndpoint,
+            WorkflowsEndpoint,
+            RepoActionsPermissionsEndpoint,
+            LatestWorkflowRunEndpoint,
+        ],
     )
     primary_org = repo_list[0].split("/", 1)[0]
     collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
     # ================================================================
-    # Stage 3: Enrich collected data and build output row sets
+    # Stage 3: Read collected data and build output row sets
     # ================================================================
 
-    # 3. Augment with local-only endpoints and build output rows
+    # 3. Read collected data and build output rows
     repo_rows: List[Dict[str, Any]] = []
     detail_rows: List[Dict[str, Any]] = []
     total = len(repo_list)
     for idx, full_name in enumerate(repo_list, start=1):
-        owner, _, repo_name = full_name.partition("/")
         print(f"[{idx}/{total}] Augmenting {full_name}...", file=sys.stderr)
 
         data = storage.read(full_name) or RepoData()
-        actions_permissions = fetch_repo_actions_permissions(client, owner, repo_name)
-        latest_run = (
-            fetch_latest_workflow_run_created_at(client, owner, repo_name)
-            if data.workflows and data.workflows.count > 0
-            else None
-        )
-
-        repo_rows.append(
-            build_repo_row(full_name, data, actions_permissions, latest_run)
-        )
+        repo_rows.append(build_repo_row(full_name, data))
         detail_rows.extend(build_workflow_detail_rows(full_name, data))
 
     # ================================================================

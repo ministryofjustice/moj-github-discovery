@@ -44,12 +44,14 @@ from core.models import (
     CommunityProfile,
     DependencyGraphData,
     ForkTemplateData,
+    LatestWorkflowRunData,
     OrgActionsData,
     OrgAuditLogData,
     OrgCodeScanningAlertsData,
     OrgMembersData,
     OrgOutsideCollaboratorsData,
     OrgOverviewData,
+    RepoActionsPermissionsData,
     OrgRulesetsData,
     OrgSecretScanningAlertsData,
     OrgTeamsData,
@@ -161,38 +163,6 @@ def dependency_supply_chain_summary(
         ),
         "details": details,
     }
-
-
-def fetch_repo_actions_permissions(
-    client: BaseHttpClient,
-    owner: str,
-    repo: str,
-) -> dict[str, Any]:
-    """Return repo-level Actions permissions from the GitHub API."""
-    try:
-        data = client.get(f"/repos/{owner}/{repo}/actions/permissions")
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def fetch_latest_workflow_run_created_at(
-    client: BaseHttpClient,
-    owner: str,
-    repo: str,
-) -> str | None:
-    """Return created_at of the most recent workflow run for a repo."""
-    try:
-        data = client.get(f"/repos/{owner}/{repo}/actions/runs?per_page=1")
-        if isinstance(data, dict):
-            runs = data.get("workflow_runs", [])
-            if runs:
-                first = runs[0]
-                if isinstance(first, dict):
-                    return first.get("created_at")
-        return None
-    except Exception:
-        return None
 
 
 def fetch_repo_file_text(
@@ -531,6 +501,52 @@ class WorkflowsEndpoint(BaseEndpoint):
             )
         except Exception:
             return WorkflowData()
+
+
+class RepoActionsPermissionsEndpoint(BaseEndpoint):
+    """Repository-level GitHub Actions permissions settings."""
+
+    @property
+    def name(self) -> str:
+        return "repo_actions_permissions"
+
+    def fetch(self, owner: str, repo: str) -> RepoActionsPermissionsData:
+        try:
+            data = self.client.get(f"/repos/{owner}/{repo}/actions/permissions")
+            if not isinstance(data, dict):
+                return RepoActionsPermissionsData()
+            return RepoActionsPermissionsData.model_validate(data)
+        except Exception:
+            return RepoActionsPermissionsData()
+
+
+class LatestWorkflowRunEndpoint(BaseEndpoint):
+    """Latest workflow run timestamp for a repository."""
+
+    @property
+    def name(self) -> str:
+        return "latest_workflow_run"
+
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        workflows: WorkflowData | None = None,
+    ) -> LatestWorkflowRunData:
+        if workflows is not None and workflows.count == 0:
+            return LatestWorkflowRunData()
+
+        try:
+            data = self.client.get(f"/repos/{owner}/{repo}/actions/runs?per_page=1")
+            if isinstance(data, dict):
+                runs = data.get("workflow_runs", [])
+                if runs:
+                    first = runs[0]
+                    if isinstance(first, dict):
+                        return LatestWorkflowRunData(created_at=first.get("created_at"))
+            return LatestWorkflowRunData()
+        except Exception:
+            return LatestWorkflowRunData()
 
 
 class DependencyGraphEndpoint(BaseEndpoint):
