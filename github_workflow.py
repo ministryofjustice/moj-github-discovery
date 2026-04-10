@@ -270,6 +270,11 @@ def main() -> None:
         default=DEFAULT_DB,
         help=f"SQLite path for collection cache (default: {DEFAULT_DB})",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume collection by skipping endpoint data already cached in the database",
+    )
     args = parser.parse_args()
 
     client = GitHubHttpClient()
@@ -309,7 +314,7 @@ def main() -> None:
         endpoints=[RepoDetailsEndpoint, WorkflowsEndpoint],
     )
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=False)
+    collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
     # ================================================================
     # Stage 3: Enrich collected data and build output row sets
