@@ -274,6 +274,10 @@ def main() -> None:
 
     client = GitHubHttpClient()
 
+    # ================================================================
+    # Stage 1: Resolve the repository list to scan
+    # ================================================================
+
     # 1. Resolve repo list
     if args.repos:
         repo_list = args.repos[: args.limit]
@@ -293,6 +297,10 @@ def main() -> None:
         raise SystemExit("No repositories found to scan.")
     print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
 
+    # ================================================================
+    # Stage 2: Collect baseline repo metadata and workflow inventory
+    # ================================================================
+
     # 2. Collect repo details + workflow inventory via core
     storage = SqliteRepoStorage(args.db)
     collector = RepoCollector(
@@ -302,6 +310,10 @@ def main() -> None:
     )
     primary_org = repo_list[0].split("/", 1)[0]
     collector.collect(primary_org, repos=repo_list, resume=False)
+
+    # ================================================================
+    # Stage 3: Enrich collected data and build output row sets
+    # ================================================================
 
     # 3. Augment with local-only endpoints and build output rows
     repo_rows: List[Dict[str, Any]] = []
@@ -324,6 +336,10 @@ def main() -> None:
         )
         detail_rows.extend(build_workflow_detail_rows(full_name, data))
 
+    # ================================================================
+    # Stage 4: Write repo-level posture reports
+    # ================================================================
+
     # 4. Write posture outputs
     prefix = args.out_prefix
     repo_count = CsvCompiler.write_rows(f"{prefix}_repo_summary.csv", repo_rows)
@@ -340,6 +356,10 @@ def main() -> None:
         f"with {len(detail_rows)} total workflow files.",
         file=sys.stderr,
     )
+
+    # ================================================================
+    # Stage 5: Parse workflow files to inventory action usage
+    # ================================================================
 
     # 5. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
@@ -383,6 +403,10 @@ def main() -> None:
 
     print(f"Unique actions: {len(usage_summary)}")
     print(f"Unique owners: {len(owner_summary)}")
+
+    # ================================================================
+    # Stage 6: Parse workflow files for permissions posture
+    # ================================================================
 
     # 6. Workflow permissions check
     print("\n--- Analysing workflow permissions ---")
