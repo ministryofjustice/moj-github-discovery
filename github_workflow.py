@@ -80,8 +80,8 @@ def build_repo_row(
         sorted(wf.get("name", "") for wf in (workflows.workflows if workflows else []))
     )
 
-    actions_enabled = actions_permissions.get("enabled")
-    allowed_actions = actions_permissions.get("allowed_actions", "")
+    actions_enabled = actions_permissions.enabled
+    allowed_actions = actions_permissions.allowed_actions or ""
 
     if archived and has_workflows:
         posture = "archived_with_workflows"
@@ -303,10 +303,10 @@ def main() -> None:
     print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
 
     # ================================================================
-    # Stage 2: Collect baseline repo metadata and workflow posture data
+    # Stage 2: Collect baseline repo metadata and workflow inventory
     # ================================================================
 
-    # 2. Collect repo details + workflow posture data via core
+    # 2. Collect repo details + workflow inventory via core
     storage = SqliteRepoStorage(args.db)
     collector = RepoCollector(
         storage=storage,
@@ -314,18 +314,46 @@ def main() -> None:
         endpoints=[
             RepoDetailsEndpoint,
             WorkflowsEndpoint,
-            RepoActionsPermissionsEndpoint,
-            LatestWorkflowRunEndpoint,
         ],
     )
     primary_org = repo_list[0].split("/", 1)[0]
     collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
     # ================================================================
-    # Stage 3: Read collected data and build output row sets
+    # Stage 3: Collect remaining workflow posture data
     # ================================================================
 
-    # 3. Read collected data and build output rows
+    # 3.1 Collect repo-level Actions permissions for all repos
+    collector = RepoCollector(
+        storage=storage,
+        client=client,
+        endpoints=[RepoActionsPermissionsEndpoint],
+    )
+    collector.collect(primary_org, repos=repo_list, resume=args.resume)
+
+    # 3.2 Collect latest workflow run only for repos that have workflows
+    repos_with_workflows: List[str] = []
+    for full_name in repo_list:
+        data = storage.read(full_name) or RepoData()
+        if data.workflows and data.workflows.count > 0:
+            repos_with_workflows.append(full_name)
+    if repos_with_workflows:
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[LatestWorkflowRunEndpoint],
+        )
+        collector.collect(
+            primary_org,
+            repos=repos_with_workflows,
+            resume=args.resume,
+        )
+
+    # ================================================================
+    # Stage 4: Read collected data and build output row sets
+    # ================================================================
+
+    # 4. Read collected data and build output rows
     repo_rows: List[Dict[str, Any]] = []
     detail_rows: List[Dict[str, Any]] = []
     total = len(repo_list)
@@ -337,10 +365,10 @@ def main() -> None:
         detail_rows.extend(build_workflow_detail_rows(full_name, data))
 
     # ================================================================
-    # Stage 4: Write repo-level posture reports
+    # Stage 5: Write repo-level posture reports
     # ================================================================
 
-    # 4. Write posture outputs
+    # 5. Write posture outputs
     prefix = args.out_prefix
     repo_count = CsvCompiler.write_rows(f"{prefix}_repo_summary.csv", repo_rows)
     details_count = CsvCompiler.write_rows(
@@ -358,10 +386,10 @@ def main() -> None:
     )
 
     # ================================================================
-    # Stage 5: Parse workflow files to inventory action usage
+    # Stage 6: Parse workflow files to inventory action usage
     # ================================================================
 
-    # 5. Analyse most common GitHub Actions used
+    # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
 
     all_actions: List[Dict[str, Any]] = []
@@ -405,10 +433,10 @@ def main() -> None:
     print(f"Unique owners: {len(owner_summary)}")
 
     # ================================================================
-    # Stage 6: Parse workflow files for permissions posture
+    # Stage 7: Parse workflow files for permissions posture
     # ================================================================
 
-    # 6. Workflow permissions check
+    # 7. Workflow permissions check
     print("\n--- Analysing workflow permissions ---")
 
     all_permissions: List[Dict[str, Any]] = []
