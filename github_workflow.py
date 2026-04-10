@@ -4,11 +4,9 @@
 Refactored to use core modules:
   - Repo discovery / loading     core.github_api.list_org_repos, core.repo_list
   - HTTP transport               core.github_client.GitHubHttpClient
-  - Workflow + repo data         WorkflowsEndpoint + RepoDetailsEndpoint via RepoCollector
+    - Workflow + repo data         RepoCollector with typed repo-scoped endpoints
 
 Not yet in core (local implementations retained):
-  - Repo-level Actions permissions  GET /repos/{owner}/{repo}/actions/permissions
-  - Latest workflow run timestamp   GET /repos/{owner}/{repo}/actions/runs
   - Workflow YAML uses: parsing
 """
 
@@ -18,21 +16,21 @@ import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
 from core.github_api import (
+    LatestWorkflowRunEndpoint,
     RepoDetailsEndpoint,
+    RepoActionsPermissionsEndpoint,
     WorkflowsEndpoint,
     check_workflow_permissions,
-    fetch_latest_workflow_run_created_at,
-    fetch_repo_actions_permissions,
     fetch_repo_file_text,
     list_org_repos,
 )
 from core.github_client import GitHubHttpClient
-from core.models import RepoData
+from core.models import RepoActionsPermissionsData, RepoData
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
@@ -65,12 +63,11 @@ def parse_actions_from_workflow(
 def build_repo_row(
     full_name: str,
     data: RepoData,
-    actions_permissions: Dict[str, Any],
-    latest_run_date: Optional[str],
 ) -> Dict[str, Any]:
-    """Build a posture summary row from RepoData and locally fetched supplements."""
+    """Build a posture summary row from collected RepoData."""
     repo = data.repo_details
     workflows = data.workflows
+    actions_permissions = data.repo_actions_permissions or RepoActionsPermissionsData()
     owner, _, repo_name = full_name.partition("/")
 
     archived = repo.archived if repo else False
@@ -83,8 +80,8 @@ def build_repo_row(
         sorted(wf.get("name", "") for wf in (workflows.workflows if workflows else []))
     )
 
-    actions_enabled = actions_permissions.get("enabled")
-    allowed_actions = actions_permissions.get("allowed_actions", "")
+    actions_enabled = actions_permissions.enabled
+    allowed_actions = actions_permissions.allowed_actions or ""
 
     if archived and has_workflows:
         posture = "archived_with_workflows"
@@ -111,7 +108,10 @@ def build_repo_row(
         "has_workflows": has_workflows,
         "workflow_count": workflow_count,
         "workflow_names": workflow_names,
-        "latest_workflow_run": latest_run_date or "",
+        "latest_workflow_run": (
+            data.latest_workflow_run.created_at if data.latest_workflow_run else ""
+        )
+        or "",
         "posture": posture,
         "disable_candidate": disable_candidate,
     }
@@ -270,9 +270,18 @@ def main() -> None:
         default=DEFAULT_DB,
         help=f"SQLite path for collection cache (default: {DEFAULT_DB})",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume collection by skipping endpoint data already cached in the database",
+    )
     args = parser.parse_args()
 
     client = GitHubHttpClient()
+
+    # ================================================================
+    # Stage 1: Resolve the repository list to scan
+    # ================================================================
 
     # 1. Resolve repo list
     if args.repos:
@@ -293,38 +302,73 @@ def main() -> None:
         raise SystemExit("No repositories found to scan.")
     print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
 
+    # ================================================================
+    # Stage 2: Collect baseline repo metadata and workflow inventory
+    # ================================================================
+
     # 2. Collect repo details + workflow inventory via core
     storage = SqliteRepoStorage(args.db)
     collector = RepoCollector(
         storage=storage,
         client=client,
-        endpoints=[RepoDetailsEndpoint, WorkflowsEndpoint],
+        endpoints=[
+            RepoDetailsEndpoint,
+            WorkflowsEndpoint,
+        ],
     )
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=False)
+    collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
-    # 3. Augment with local-only endpoints and build output rows
+    # ================================================================
+    # Stage 3: Collect remaining workflow posture data
+    # ================================================================
+
+    # 3.1 Collect repo-level Actions permissions for all repos
+    collector = RepoCollector(
+        storage=storage,
+        client=client,
+        endpoints=[RepoActionsPermissionsEndpoint],
+    )
+    collector.collect(primary_org, repos=repo_list, resume=args.resume)
+
+    # 3.2 Collect latest workflow run only for repos that have workflows
+    repos_with_workflows: List[str] = []
+    for full_name in repo_list:
+        data = storage.read(full_name) or RepoData()
+        if data.workflows and data.workflows.count > 0:
+            repos_with_workflows.append(full_name)
+    if repos_with_workflows:
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[LatestWorkflowRunEndpoint],
+        )
+        collector.collect(
+            primary_org,
+            repos=repos_with_workflows,
+            resume=args.resume,
+        )
+
+    # ================================================================
+    # Stage 4: Read collected data and build output row sets
+    # ================================================================
+
+    # 4. Read collected data and build output rows
     repo_rows: List[Dict[str, Any]] = []
     detail_rows: List[Dict[str, Any]] = []
     total = len(repo_list)
     for idx, full_name in enumerate(repo_list, start=1):
-        owner, _, repo_name = full_name.partition("/")
         print(f"[{idx}/{total}] Augmenting {full_name}...", file=sys.stderr)
 
         data = storage.read(full_name) or RepoData()
-        actions_permissions = fetch_repo_actions_permissions(client, owner, repo_name)
-        latest_run = (
-            fetch_latest_workflow_run_created_at(client, owner, repo_name)
-            if data.workflows and data.workflows.count > 0
-            else None
-        )
-
-        repo_rows.append(
-            build_repo_row(full_name, data, actions_permissions, latest_run)
-        )
+        repo_rows.append(build_repo_row(full_name, data))
         detail_rows.extend(build_workflow_detail_rows(full_name, data))
 
-    # 4. Write posture outputs
+    # ================================================================
+    # Stage 5: Write repo-level posture reports
+    # ================================================================
+
+    # 5. Write posture outputs
     prefix = args.out_prefix
     repo_count = CsvCompiler.write_rows(f"{prefix}_repo_summary.csv", repo_rows)
     details_count = CsvCompiler.write_rows(
@@ -341,7 +385,11 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    # 5. Analyse most common GitHub Actions used
+    # ================================================================
+    # Stage 6: Parse workflow files to inventory action usage
+    # ================================================================
+
+    # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
 
     all_actions: List[Dict[str, Any]] = []
@@ -384,7 +432,11 @@ def main() -> None:
     print(f"Unique actions: {len(usage_summary)}")
     print(f"Unique owners: {len(owner_summary)}")
 
-    # 6. Workflow permissions check
+    # ================================================================
+    # Stage 7: Parse workflow files for permissions posture
+    # ================================================================
+
+    # 7. Workflow permissions check
     print("\n--- Analysing workflow permissions ---")
 
     all_permissions: List[Dict[str, Any]] = []

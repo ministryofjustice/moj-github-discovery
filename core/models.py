@@ -153,6 +153,21 @@ class WorkflowData(BaseModel):
     analysis: Optional[WorkflowAnalysis] = None
 
 
+class RepoActionsPermissionsData(BaseModel):
+    """Repository-level GitHub Actions permissions settings."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: Optional[bool] = None
+    allowed_actions: Optional[str] = None
+
+
+class LatestWorkflowRunData(BaseModel):
+    """Timestamp of the most recent workflow run for a repository."""
+
+    created_at: Optional[str] = None
+
+
 class WorkflowPermissionFinding(BaseModel):
     """Result of checking a single workflow file for permissions posture."""
 
@@ -334,6 +349,8 @@ class RepoData(BaseModel):
     community: Optional[CommunityProfile] = None
     codeowners: Optional[CodeownersData] = None
     workflows: Optional[WorkflowData] = None
+    repo_actions_permissions: Optional[RepoActionsPermissionsData] = None
+    latest_workflow_run: Optional[LatestWorkflowRunData] = None
     fork_template: Optional[ForkTemplateData] = None
     dependency_graph: Optional[DependencyGraphData] = None
     repo_tree: Optional[RepoTreeData] = None

@@ -18,15 +18,15 @@ from core.github_api import (
     DependencyGraphEndpoint,
     ForkTemplateEndpoint,
     GetRepoTreeEndpoint,
+    LatestWorkflowRunEndpoint,
     OrgActionsEndpoint,
     OrgMembersEndpoint,
     OrgRulesetsEndpoint,
     OrgWebhooksEndpoint,
+    RepoActionsPermissionsEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
     dependency_supply_chain_summary,
-    fetch_latest_workflow_run_created_at,
-    fetch_repo_actions_permissions,
     fetch_repo_alerts,
     fetch_repo_file_text,
     list_org_repos,
@@ -39,11 +39,13 @@ from core.models import (
     CommunityProfile,
     DependencyGraphData,
     ForkTemplateData,
+    LatestWorkflowRunData,
     OrgActionsData,
     OrgMembersData,
     OrgRulesetsData,
     OrgWebhooksData,
     ReferenceData,
+    RepoActionsPermissionsData,
     RepoDetails,
     RepoTreeData,
     WorkflowData,
@@ -157,7 +159,7 @@ class TestDependencySupplyChainSummary:
 
 
 class TestWorkflowAndAlertHelpers:
-    def test_fetch_repo_actions_permissions(self):
+    def test_repo_actions_permissions_endpoint(self):
         client = MockHttpClient(
             {
                 "/repos/o/r/actions/permissions": {
@@ -166,10 +168,18 @@ class TestWorkflowAndAlertHelpers:
                 }
             }
         )
-        result = fetch_repo_actions_permissions(client, "o", "r")
-        assert result["enabled"] is True
+        result = RepoActionsPermissionsEndpoint(client).fetch("o", "r")
+        assert isinstance(result, RepoActionsPermissionsData)
+        assert result.enabled is True
+        assert result.allowed_actions == "selected"
 
-    def test_fetch_latest_workflow_run_created_at(self):
+    def test_repo_actions_permissions_endpoint_error_returns_default(self):
+        client = MockHttpClient()
+        result = RepoActionsPermissionsEndpoint(client).fetch("o", "r")
+        assert isinstance(result, RepoActionsPermissionsData)
+        assert result.enabled is None
+
+    def test_latest_workflow_run_endpoint(self):
         client = MockHttpClient(
             {
                 "/repos/o/r/actions/runs?per_page=1": {
@@ -177,15 +187,28 @@ class TestWorkflowAndAlertHelpers:
                 }
             }
         )
-        result = fetch_latest_workflow_run_created_at(client, "o", "r")
-        assert result == "2026-01-01T10:00:00Z"
+        result = LatestWorkflowRunEndpoint(client).fetch(
+            "o", "r", workflows=WorkflowData(count=1)
+        )
+        assert isinstance(result, LatestWorkflowRunData)
+        assert result.created_at == "2026-01-01T10:00:00Z"
 
-    def test_fetch_latest_workflow_run_created_at_missing(self):
+    def test_latest_workflow_run_endpoint_missing(self):
         client = MockHttpClient(
             {"/repos/o/r/actions/runs?per_page=1": {"workflow_runs": []}}
         )
-        result = fetch_latest_workflow_run_created_at(client, "o", "r")
-        assert result is None
+        result = LatestWorkflowRunEndpoint(client).fetch(
+            "o", "r", workflows=WorkflowData(count=1)
+        )
+        assert result.created_at is None
+
+    def test_latest_workflow_run_endpoint_skips_api_when_no_workflows(self):
+        client = MockHttpClient()
+        result = LatestWorkflowRunEndpoint(client).fetch(
+            "o", "r", workflows=WorkflowData(count=0)
+        )
+        assert result.created_at is None
+        assert client.calls == []
 
     def test_fetch_repo_file_text(self):
         client = MockHttpClient(
