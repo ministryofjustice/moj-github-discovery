@@ -52,6 +52,8 @@ class TestTokenResolution:
     def test_no_token_raises(self, monkeypatch, tmp_path):
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_APP_ID", raising=False)
+        monkeypatch.delenv("GH_APP_ID", raising=False)
         # Point config path to a non-existent location
         monkeypatch.setattr(
             "os.path.expanduser",
