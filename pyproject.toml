@@ -22,7 +22,7 @@ markers = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "ruff>=0.15.8",
+    "ruff>=0.15.10",
 ]
 
 [tool.ruff.lint]
