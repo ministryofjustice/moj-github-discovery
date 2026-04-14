@@ -25,6 +25,7 @@ from core.transforms import (
     TimestampTransform,
     parse_workflow_permissions,
     parse_actions_from_content,
+    is_pinned_to_sha,
 )
 
 
@@ -472,3 +473,125 @@ class TestParseActionsFromContent:
     def test_empty_content(self) -> None:
         result = parse_actions_from_content("", "r", "ci.yml")
         assert result == []
+
+
+class TestIsPinnedToSha:
+    def test_valid_sha_returns_true(self):
+        sha = "a12a3943b11318369cde8d083ae4d22002f08cba"
+        assert is_pinned_to_sha(sha) is True
+
+    def test_short_sha_returns_false(self):
+        assert is_pinned_to_sha("a12a394") is False
+
+    def test_mutable_tag_v3_returns_false(self):
+        assert is_pinned_to_sha("v3") is False
+
+    def test_main_branch_returns_false(self):
+        assert is_pinned_to_sha("main") is False
+
+    def test_master_branch_returns_false(self):
+        assert is_pinned_to_sha("master") is False
+
+    def test_semver_tag_returns_false(self):
+        assert is_pinned_to_sha("v1.8.1") is False
+
+    def test_uppercase_hex_returns_false(self):
+        sha = "A12A3943B11318369CDE8D083AE4D22002F08CBA"
+        assert is_pinned_to_sha(sha) is False
+
+    def test_empty_string_returns_false(self):
+        assert is_pinned_to_sha("") is False
+
+    def test_none_string_returns_false(self):
+        assert is_pinned_to_sha("none") is False
+
+
+class TestParseActionsFromContentPinning:
+    def test_pinned_action_has_correct_fields(self):
+        content = (
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@a12a3943b11318369cde8d083ae4d22002f08cba\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert len(result) == 1
+        assert result[0]["is_pinned"] is True
+        assert result[0]["pin_type"] == "sha"
+        assert result[0]["action_name"] == "actions/checkout"
+        assert result[0]["owner"] == "actions"
+
+    def test_unpinned_action_mutable_tag(self):
+        content = (
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v3\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert len(result) == 1
+        assert result[0]["is_pinned"] is False
+        assert result[0]["pin_type"] == "mutable_tag"
+
+    def test_main_branch_is_unpinned(self):
+        content = (
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@main\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert result[0]["is_pinned"] is False
+        assert result[0]["pin_type"] == "mutable_tag"
+
+    def test_mixed_pinned_and_unpinned(self):
+        content = (
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@a12a3943b11318369cde8d083ae4d22002f08cba\n"
+            "      - uses: actions/setup-node@v4\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert len(result) == 2
+        assert result[0]["is_pinned"] is True
+        assert result[0]["pin_type"] == "sha"
+        assert result[1]["is_pinned"] is False
+        assert result[1]["pin_type"] == "mutable_tag"
+
+    def test_semver_tag_is_unpinned(self):
+        content = (
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: aws-actions/amazon-ecs-render-task-definition@v1.8.1\n"
+        )
+        result = parse_actions_from_content(
+            content, "my-repo", ".github/workflows/ci.yml"
+        )
+        assert result[0]["is_pinned"] is False
+        assert result[0]["pin_type"] == "mutable_tag"
+        assert result[0]["owner"] == "aws-actions"

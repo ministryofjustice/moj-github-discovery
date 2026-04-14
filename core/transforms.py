@@ -334,6 +334,11 @@ def parse_workflow_permissions(content: str) -> dict[str, object]:
     }
 
 
+def is_pinned_to_sha(version: str) -> bool:
+    """Check if a version string is a full 40-character commit SHA."""
+    return bool(re.match(r"^[0-9a-f]{40}$", version))
+
+
 def parse_actions_from_content(
     content: str, repo_name: str, workflow_path: str
 ) -> list[dict[str, str]]:
@@ -362,6 +367,12 @@ def parse_actions_from_content(
                         "owner": action_name.split("/")[0]
                         if "/" in action_name
                         else action_name,
+                        "is_pinned": is_pinned_to_sha(version),
+                        "pin_type": "sha"
+                        if is_pinned_to_sha(version)
+                        else "none"
+                        if version == "none"
+                        else "mutable_tag",
                     }
                 )
     return actions
