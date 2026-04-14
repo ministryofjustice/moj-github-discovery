@@ -105,7 +105,8 @@ Optionally, run pre-commit against all files:
 pre-commit run --all-files
 ```
 
-Authenticate to the Github Docker Container Registry with your PAT, providing your username after the `-u` flag and your Github password upon command execution:
+Authenticate to the Github Docker Container Registry with your PAT
+Provide your username after the `-u` flag and your Github PAT (if using `GITHUB_TOKEN` / `GH_TOKEN`) upon command execution:
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin

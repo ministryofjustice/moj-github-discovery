@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+import types
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -49,9 +51,72 @@ class TestTokenResolution:
         client = GitHubHttpClient()
         assert client._token == "primary"
 
-    def test_no_token_raises(self, monkeypatch, tmp_path):
+    def test_github_app_auth(self, monkeypatch):
+        # No PATs
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         monkeypatch.delenv("GH_TOKEN", raising=False)
+
+        # App Env Vars
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+        monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "mock-key")
+        monkeypatch.setenv("GITHUB_ORG", "mock-org")
+        monkeypatch.delenv("GH_ORG", raising=False)
+
+        # Mock Time and JWT
+        monkeypatch.setattr("core.github_client.time.time", lambda: 1_700_000_000)
+        mock_jwt = types.SimpleNamespace(encode=lambda *a, **k: "mock-jwt")
+
+        monkeypatch.setitem(sys.modules, "jwt", mock_jwt)
+
+        # Mock Requests Session
+        mock_sess = MagicMock()
+
+        # GET: app/installations
+        install_resp = MagicMock()
+        install_resp.raise_for_status.return_value = None
+        install_resp.json.return_value = [{"id": 999, "account": {"login": "mock-org"}}]
+
+        # POST: app/installations/<app id>/access_tokens
+        token_resp = MagicMock()
+        token_resp.raise_for_status.return_value = None
+        token_resp.json.return_value = {"token": "app-token"}
+
+        mock_sess.get.return_value = install_resp
+        mock_sess.post.return_value = token_resp
+
+        with patch("core.github_client.requests.Session", return_value=mock_sess):
+            with patch.object(mock_sess, "__enter__", return_value=mock_sess):
+                with patch.object(mock_sess, "__exit__", return_value=None):
+                    client = GitHubHttpClient()
+
+        assert client._token == "app-token"
+
+    def test_github_app_no_private_key(self, monkeypatch):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+        monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("GH_APP_PRIVATE_KEY", raising=False)
+
+        # If no private key is provided but an app id is - token resolution should fail
+        with pytest.raises(RuntimeError, match="no private key provided"):
+            GitHubHttpClient()
+
+    def test_token_from_gh_cli_config(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GH_APP_ID", raising=False)
+        config_path = tmp_path / "hosts.yml"
+        config_path.write_text("github.com:\n  oauth_token: cli-token\n")
+        monkeypatch.setattr("os.path.expanduser", lambda p: str(config_path))
+        client = GitHubHttpClient()
+        assert client._token == "cli-token"
+
+    def test_no_token_raises(self, monkeypatch, tmp_path):
+        # Delete PAT env vars
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        # Delete GH App env vars
         monkeypatch.delenv("GITHUB_APP_ID", raising=False)
         monkeypatch.delenv("GH_APP_ID", raising=False)
         # Point config path to a non-existent location
@@ -61,15 +126,6 @@ class TestTokenResolution:
         )
         with pytest.raises(RuntimeError, match="No GitHub token found"):
             GitHubHttpClient()
-
-    def test_token_from_gh_cli_config(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        config_path = tmp_path / "hosts.yml"
-        config_path.write_text("github.com:\n  oauth_token: cli-token\n")
-        monkeypatch.setattr("os.path.expanduser", lambda p: str(config_path))
-        client = GitHubHttpClient()
-        assert client._token == "cli-token"
 
 
 # ── Session headers ───────────────────────────────────────────────────

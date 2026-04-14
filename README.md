@@ -113,7 +113,7 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-python archive_repos.py <org> [options]
+uv run python archive_repos.py <org> [options]
 ```
 
 **Options:**

@@ -130,16 +130,27 @@ class GitHubHttpClient(BaseHttpClient):
         """
 
         # 1. GitHub PAT Environment Variable
+        print("Checking for GitHub PAT Authentication", file=sys.stderr)
         token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
         if token:
+            print("PAT Authentication Successful", file=sys.stderr)
             return token
 
         # 2. GitHub App Environment Variables
+        print(
+            "PAT Authentication Unsuccessful - Attempting GitHub App Authentication",
+            file=sys.stderr,
+        )
         gh_app_token = GitHubHttpClient._resolve_github_app_installation_token()
         if gh_app_token:
+            print("GitHub App Authentication Successful", file=sys.stderr)
             return gh_app_token
 
         # 3. GitHub CLI Config
+        print(
+            "GitHub App Authentication Unsuccessful - Attempting GitHub CLI Authentication",
+            file=sys.stderr,
+        )
         config_path = os.path.expanduser("~/.config/gh/hosts.yml")
         if os.path.exists(config_path):
             try:
@@ -151,6 +162,7 @@ class GitHubHttpClient(BaseHttpClient):
                     "oauth_token"
                 ) or config.get("github.com", {}).get("token")
                 if gh_token:
+                    print("GitHub CLI Authentication Successful", file=sys.stderr)
                     return gh_token
             except Exception:
                 pass
@@ -175,7 +187,7 @@ class GitHubHttpClient(BaseHttpClient):
 
         # If Env Vars not Provided - Fallback to Auto-Discovery via Org Login
         org_login = (
-            os.getenv("GH_ORG") or os.getenv("GITHUB_ORG") or os.getenv("GITHUB_OWNER")
+            os.getenv("GITHUB_ORG") or os.getenv("GH_ORG") or os.getenv("GITHUB_OWNER")
         )
 
         if not org_login:
@@ -226,7 +238,7 @@ class GitHubHttpClient(BaseHttpClient):
     def _resolve_github_app_installation_token() -> str:
 
         # Env Var Validation: GH_APP_ID / GITHUB_APP_ID
-        github_app_id = os.getenv("GH_APP_ID") or os.getenv("GITHUB_APP_ID")
+        github_app_id = os.getenv("GITHUB_APP_ID") or os.getenv("GH_APP_ID")
         if not github_app_id:
             return None
 
@@ -285,10 +297,10 @@ class GitHubHttpClient(BaseHttpClient):
 
             return token
 
-    def _read_github_app_private_key(self) -> Optional[str]:
+    def _read_github_app_private_key() -> Optional[str]:
         """Return GitHub App private key from environment variable content."""
-        key_value = os.getenv("GH_APP_PRIVATE_KEY") or os.getenv(
-            "GITHUB_APP_PRIVATE_KEY"
+        key_value = os.getenv("GITHUB_APP_PRIVATE_KEY") or os.getenv(
+            "GH_APP_PRIVATE_KEY"
         )
         if key_value:
             return key_value.replace("\\n", "\n")
