@@ -26,7 +26,7 @@ import os
 import sys
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -107,17 +107,18 @@ class GitHubHttpClient(BaseHttpClient):
 
     def __init__(
         self,
+        auth_method: Literal["pat", "app", "cli"] | None = None,
         token: str | None = None,
         max_attempts: int = 5,
     ) -> None:
-        self._token = token or self._resolve_token()
+        self._token = token or self._resolve_token(auth_method)
         self._max_attempts = max_attempts
         self._session: requests.Session | None = None
 
     # ── Token resolution ──────────────────────────────────────────────
 
     @staticmethod
-    def _resolve_token() -> str:
+    def _resolve_token(auth_method) -> str:
         """Return a GitHub token and cache the result.
 
         Resolution order:
@@ -129,6 +130,41 @@ class GitHubHttpClient(BaseHttpClient):
             RuntimeError: if no token can be found anywhere.
         """
 
+        # Check if auth_method specified and call particular method, fall back to default behaviour otherwise
+        if auth_method is not None:
+            print(
+                f"Auth Method Selected: {auth_method} - Attempting Authentication",
+                file=sys.stderr,
+            )
+            if auth_method == "pat":
+                token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+                if not token:
+                    raise RuntimeError(
+                        f"Auth method {auth_method} selected - but no GITHUB_TOKEN or GH_TOKEN env var found"
+                    )
+                print("PAT Authentication Successful", file=sys.stderr)
+                return token
+            if auth_method == "app":
+                token = GitHubHttpClient._resolve_github_app_installation_token()
+                if not token:
+                    raise RuntimeError(
+                        f"Auth method {auth_method} selected - but GitHub App auth could not be resolved"
+                    )
+                print("GitHub App Authentication Successful", file=sys.stderr)
+                return token
+            if auth_method == "cli":
+                token = GitHubHttpClient._resolve_github_cli_token()
+                if not token:
+                    raise RuntimeError(
+                        f"Auth method {auth_method} selected - but no GITHUB_CLI token found"
+                    )
+                print("GitHub CLI Authentication Successful", file=sys.stderr)
+                return token
+
+        print(
+            "No Auth Method Arg Provided - Reverting to Default Behaviour",
+            file=sys.stderr,
+        )
         # 1. GitHub PAT Environment Variable
         print("Checking for GitHub PAT Authentication", file=sys.stderr)
         token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
@@ -146,26 +182,16 @@ class GitHubHttpClient(BaseHttpClient):
             print("GitHub App Authentication Successful", file=sys.stderr)
             return gh_app_token
 
-        # 3. GitHub CLI Config
         print(
             "GitHub App Authentication Unsuccessful - Attempting GitHub CLI Authentication",
             file=sys.stderr,
         )
-        config_path = os.path.expanduser("~/.config/gh/hosts.yml")
-        if os.path.exists(config_path):
-            try:
-                import yaml  # pyyaml is already a dependency
 
-                with open(config_path) as f:
-                    config = yaml.safe_load(f) or {}
-                gh_token = config.get("github.com", {}).get(
-                    "oauth_token"
-                ) or config.get("github.com", {}).get("token")
-                if gh_token:
-                    print("GitHub CLI Authentication Successful", file=sys.stderr)
-                    return gh_token
-            except Exception:
-                pass
+        # 3. GitHub CLI Config
+        gh_cli_token = GitHubHttpClient._resolve_github_cli_token()
+        if gh_cli_token:
+            print("GitHub CLI Authentication Successful", file=sys.stderr)
+            return gh_cli_token
 
         raise RuntimeError(
             "No GitHub token found. "
@@ -305,6 +331,43 @@ class GitHubHttpClient(BaseHttpClient):
         if key_value:
             return key_value.replace("\\n", "\n")
         return None
+
+    @staticmethod
+    def _resolve_github_cli_token() -> str:
+        """Attempt to resolve a GitHub CLI token from the gh CLI config or via `gh auth token` command."""
+
+        # First Attempt - Use gh auth token
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["gh", "auth", "token"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True,
+            )
+            token = result.stdout.strip()
+            if token:
+                return token
+        except Exception:
+            pass
+
+        # Second Attempt - Read from gh CLI config file
+        config_path = os.path.expanduser("~/.config/gh/hosts.yml")
+
+        if not os.path.exists(config_path):
+            return None
+        try:
+            import yaml  # pyyaml is already a dependency
+
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+            return config.get("github.com", {}).get("oauth_token") or config.get(
+                "github.com", {}
+            ).get("token")
+        except Exception:
+            return None
 
     # ── Session ───────────────────────────────────────────────────────
 

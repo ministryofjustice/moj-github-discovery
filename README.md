@@ -73,7 +73,7 @@ the core SQLite storage, and optionally exports an Excel workbook.
 **Usage:**
 
 ```bash
-python list_repos.py --repo-file <file> [options]
+uv run python list_repos.py --repo-file <file> [options]
 ```
 
 **Options:**
