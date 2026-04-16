@@ -85,6 +85,7 @@ uv run python list_repos.py --repo-file <file> [options]
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
 - `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Examples:**
 
@@ -125,6 +126,7 @@ uv run python archive_repos.py <org> [options]
 - `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script.
   - If provided without a path, it also defaults to `repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Output:**
 
@@ -182,6 +184,7 @@ uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] 
 - `--excel <path>` - Write the report to a multi-sheet Excel workbook.
 - `--repo-file [path]` - Limit repo-level supply-chain checks to repos in a list file. If passed without a value, defaults to `repo_list.yaml`.
 - `--no-cache` - Ignore the saved posture cache and fetch fresh data.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Output:**
 
