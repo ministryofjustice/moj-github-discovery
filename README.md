@@ -93,6 +93,9 @@ uv run python list_repos.py --repo-file <file> [options]
 # Audit all repos from file and print JSON output
 uv run python list_repos.py --repo-file repo_list.yaml
 
+# Audit all repos from file and print JSON output, authenticating via PAT specifically
+uv run python list_repos.py --repo-file repo_list.yaml --auth pat
+
 # Export to Excel
 uv run python list_repos.py --repo-file repo_list.yaml --excel report.xlsx
 
@@ -147,6 +150,9 @@ uv run python archive_repos.py <org> [options]
 # Export archive candidates to CSV
 uv run python archive_repos.py ministryofjustice --csv archivable.csv
 
+# Export archive candidates to CSV, authenticating via PAT specifically
+uv run python archive_repos.py ministryofjustice --csv archivable.csv --auth pat
+
 # Reuse local caches only for a fast rerun
 uv run python archive_repos.py ministryofjustice --cache-only --csv archivable.csv
 
@@ -197,6 +203,9 @@ uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] 
 ```bash
 # Export a workbook for review
 uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+
+# Export a workbook for review, authenticating via PAT specifically
+uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
 
 # Limit supply-chain checks to repos from repo_list.yaml
 uv run python org_security_posture.py ministryofjustice --repo-file
