@@ -34,8 +34,13 @@ class MockHttpClient(BaseHttpClient):
     For ``get_paginated()`` the value is a list of dicts.
     """
 
-    def __init__(self, fixtures: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        fixtures: dict[str, Any] | None = None,
+        graphql_fixtures: dict[tuple[str, str], dict[str, Any]] | None = None,
+    ) -> None:
         self.fixtures: dict[str, Any] = fixtures or {}
+        self.graphql_fixtures = graphql_fixtures or {}
         self.calls: list[tuple[str, str]] = []  # [(method, path), ...]
 
     def get(self, path: str) -> Any:
@@ -49,6 +54,15 @@ class MockHttpClient(BaseHttpClient):
         if path in self.fixtures:
             return self.fixtures[path]
         raise Exception(f"MockHttpClient: no fixture for GET_PAGINATED {path}")
+
+    def graphql(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        variables = variables or {}
+        key = (variables.get("owner", ""), variables.get("repo", ""))
+        return self.graphql_fixtures.get(key, {"repository": {"archivedAt": None}})
 
 
 # ── Mock storage ──────────────────────────────────────────────────────

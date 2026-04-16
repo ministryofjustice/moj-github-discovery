@@ -160,7 +160,7 @@ class GitHubHttpClient(BaseHttpClient):
             sess = requests.Session()
             sess.headers.update(
                 {
-                    "Authorization": f"Bearer {self._token}",
+                    "Authorization": f"token {self._token}",
                     "Accept": "application/vnd.github.v3+json",
                     "X-GitHub-Api-Version": "2022-11-28",
                 }

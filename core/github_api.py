@@ -29,7 +29,6 @@ the legacy single-repo audit script (``repo_info``, ``community_profile``, ``lis
 from __future__ import annotations
 
 import base64
-import sys
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Literal
@@ -336,17 +335,6 @@ class RepoDetailsEndpoint(BaseEndpoint):
         archived_at = (
             repository.get("archivedAt") if isinstance(repository, dict) else None
         )
-
-        if data.get("archived") and not archived_at:
-            print(
-                f"[DEBUG] Archived repo missing archivedAt: {owner}/{repo}",
-                file=sys.stderr,
-            )
-
-        if archived_at:
-            print(
-                f"[DEBUG] archivedAt for {owner}/{repo}: {archived_at}", file=sys.stderr
-            )
 
         data["org"] = owner
         data["archived_at"] = archived_at
