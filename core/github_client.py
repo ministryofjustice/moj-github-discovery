@@ -86,6 +86,12 @@ class BaseHttpClient(ABC):
             Concatenated items from all pages.
         """
 
+    @abstractmethod
+    def graphql(
+        self, query: str, variables: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """POST a graphQL query and return the data"""
+
 
 # ── Concrete implementation ───────────────────────────────────────────
 
@@ -154,7 +160,7 @@ class GitHubHttpClient(BaseHttpClient):
             sess = requests.Session()
             sess.headers.update(
                 {
-                    "Authorization": f"token {self._token}",
+                    "Authorization": f"Bearer {self._token}",
                     "Accept": "application/vnd.github.v3+json",
                     "X-GitHub-Api-Version": "2022-11-28",
                 }
@@ -225,11 +231,11 @@ class GitHubHttpClient(BaseHttpClient):
         print("\r" + " " * 100, end="\r", file=sys.stderr, flush=True)
         print(f"{prefix}: retrying now", file=sys.stderr, flush=True)
 
-    def _request(self, method: str, url: str) -> requests.Response:
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         """Send a request and retry on rate-limit 403s."""
         sess = self._get_session()
         for attempt in range(1, self._max_attempts + 1):
-            resp = sess.request(method, url)
+            resp = sess.request(method, url, **kwargs)
             try:
                 resp.raise_for_status()
                 return resp
@@ -245,6 +251,24 @@ class GitHubHttpClient(BaseHttpClient):
                 )
 
         raise RuntimeError("Unexpected retry exhaustion")  # defensive
+
+    def graphql(
+        self, query: str, variables: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        url = urljoin(self.BASE_URL, "/graphql")
+        payload = {"query": query, "variables": variables or {}}
+
+        resp = self._request("POST", url, json=payload)
+        body = resp.json()
+
+        if "errors" in body:
+            raise RuntimeError(f"GraphQL query failed: {body['errors']}")
+
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise RuntimeError("GraphQL response missing 'data'")
+
+        return data
 
     # ── Link-header pagination ────────────────────────────────────────
 

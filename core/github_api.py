@@ -29,6 +29,7 @@ the legacy single-repo audit script (``repo_info``, ``community_profile``, ``lis
 from __future__ import annotations
 
 import base64
+import sys
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Literal
@@ -318,7 +319,37 @@ class RepoDetailsEndpoint(BaseEndpoint):
 
     def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")
+
+        gql_data = self.client.graphql(
+            """
+            query RepoArchivedAt($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                    archivedAt
+                }
+            }
+            """,
+            {"owner": owner, "repo": repo},
+        )
+
+        repository = gql_data.get("repository")
+
+        archived_at = (
+            repository.get("archivedAt") if isinstance(repository, dict) else None
+        )
+
+        if data.get("archived") and not archived_at:
+            print(
+                f"[DEBUG] Archived repo missing archivedAt: {owner}/{repo}",
+                file=sys.stderr,
+            )
+
+        if archived_at:
+            print(
+                f"[DEBUG] archivedAt for {owner}/{repo}: {archived_at}", file=sys.stderr
+            )
+
         data["org"] = owner
+        data["archived_at"] = archived_at
         return RepoDetails.model_validate(data)
 
 
