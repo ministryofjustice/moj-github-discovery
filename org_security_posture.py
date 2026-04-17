@@ -8,7 +8,7 @@ import atexit
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -66,6 +66,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Ignore on-disk posture cache and fetch fresh data.",
     )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly",
+    )
     return parser.parse_args()
 
 
@@ -94,6 +100,7 @@ def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage) -> N
 
 def run_full_audit(
     org: str,
+    auth_method: Literal["pat", "app", "cli"] | None = None,
     repo_full_names: list[str] | None = None,
     use_cache: bool = True,
 ) -> dict[str, Any]:
@@ -323,6 +330,7 @@ def main() -> None:
     print(f"Running org security posture audit for: {args.org}", file=sys.stderr)
     report = run_full_audit(
         args.org,
+        args.auth,
         repo_full_names=repo_scope,
         use_cache=not args.no_cache,
     )

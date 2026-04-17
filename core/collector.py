@@ -117,6 +117,7 @@ class RepoCollector(BaseCollector):
         client: BaseHttpClient | None = None,
         endpoints: list[type[BaseEndpoint]] | None = None,
         max_workers: int = 4,
+        auth_method: Literal["pat", "app", "cli"] | None = None,
     ) -> None:
         """
         Args:
@@ -128,12 +129,17 @@ class RepoCollector(BaseCollector):
                        :data:`~core.github_api.REPO_ENDPOINTS`.
             max_workers: Number of worker threads for repo collection.
                         Use ``1`` for sequential collection.
+            auth_method: Authentication method to pass to GitHubHttpClient if no client provided.
         """
+        if auth_method is not None and auth_method not in ["pat", "app", "cli"]:
+            raise ValueError(
+                f"auth_method must be one of 'pat', 'app', 'cli', got {auth_method!r}"
+            )
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
 
         self.storage = storage
-        self.client = client or GitHubHttpClient()
+        self.client = client or GitHubHttpClient(auth_method=auth_method)
         self.endpoints: list[type[BaseEndpoint]] = endpoints or REPO_ENDPOINTS
         self.max_workers = max_workers
         self._storage_lock = threading.Lock()
@@ -286,8 +292,13 @@ class OrgEndpointCollector:
         self,
         client: BaseHttpClient | None = None,
         endpoints: list[type[BaseOrgEndpoint]] | None = None,
+        auth_method: Literal["pat", "app", "cli"] | None = None,
     ) -> None:
-        self.client = client or GitHubHttpClient()
+        if auth_method is not None and auth_method not in ["pat", "app", "cli"]:
+            raise ValueError(
+                f"auth_method must be one of 'pat', 'app', 'cli', got {auth_method!r}"
+            )
+        self.client = client or GitHubHttpClient(auth_method=auth_method)
         self.endpoints: list[type[BaseOrgEndpoint]] = endpoints or ORG_ENDPOINTS
 
     def collect(self, org: str) -> dict[str, BaseModel]:
@@ -331,8 +342,16 @@ class RepoListCollector:
         )
     """
 
-    def __init__(self, client: BaseHttpClient | None = None) -> None:
-        self.client = client or GitHubHttpClient()
+    def __init__(
+        self,
+        client: BaseHttpClient | None = None,
+        auth_method: Literal["pat", "app", "cli"] | None = None,
+    ) -> None:
+        if auth_method is not None and auth_method not in ["pat", "app", "cli"]:
+            raise ValueError(
+                f"auth_method must be one of 'pat', 'app', 'cli', got {auth_method!r}"
+            )
+        self.client = client or GitHubHttpClient(auth_method=auth_method)
 
     def collect(
         self,

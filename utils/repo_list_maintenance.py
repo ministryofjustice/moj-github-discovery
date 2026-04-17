@@ -153,7 +153,7 @@ def main() -> None:
     existing_repos = load_repo_list_file(repo_file)
     existing_set = set(existing_repos)
 
-    client = GitHubHttpClient()
+    client = GitHubHttpClient(auth_method=args.auth)
     recent_org_repos = list_org_repos(
         args.org,
         client,

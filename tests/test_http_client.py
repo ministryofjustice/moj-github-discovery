@@ -3,12 +3,100 @@
 from __future__ import annotations
 
 import time
+import types
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
 from core.github_client import BaseHttpClient, GitHubHttpClient
+
+
+# ── Fixtures ───────────────────────────────────────────────────────────
+@pytest.fixture
+def clear_auth_env_vars(monkeypatch):
+    """Clear all GitHub auth-related environment variables before each test."""
+    # Clear All Env Vars
+    for var in [
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "GH_APP_ID",
+        "GITHUB_APP_ID",
+        "GITHUB_APP_PRIVATE_KEY",
+        "GH_APP_PRIVATE_KEY",
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+
+# App Auth Fixtures: mock JWT and mock HTTP interactions for GitHub App token resolution
+
+
+@pytest.fixture
+def mock_jwt(monkeypatch):
+    # Mock Time and JWT
+    monkeypatch.setattr("core.github_client.time.time", lambda: 1_700_000_000)
+    mock_jwt = types.SimpleNamespace(encode=lambda *a, **k: "mock-jwt")
+
+    monkeypatch.setitem(sys.modules, "jwt", mock_jwt)
+
+
+@pytest.fixture
+def mock_github_app_http_with_token(monkeypatch):
+    # Mock Requests Session
+    mock_sess = MagicMock()
+
+    # GET: app/installations
+    install_resp = MagicMock()
+    install_resp.raise_for_status.return_value = None
+    install_resp.json.return_value = [{"id": 999, "account": {"login": "mock-org"}}]
+
+    # POST: app/installations/<app id>/access_tokens
+    token_resp = MagicMock()
+    token_resp.raise_for_status.return_value = None
+    token_resp.json.return_value = {"token": "app-token"}
+
+    mock_sess.get.return_value = install_resp
+    mock_sess.post.return_value = token_resp
+
+    monkeypatch.setattr(
+        "core.github_client.requests.Session",
+        lambda: mock_sess,
+    )
+
+    monkeypatch.setattr(mock_sess, "__enter__", lambda s: s)
+    monkeypatch.setattr(mock_sess, "__exit__", lambda *a: None)
+
+    return mock_sess
+
+
+@pytest.fixture
+def mock_github_app_http_no_token(monkeypatch):
+    # Mock Requests Session
+    mock_sess = MagicMock()
+
+    # GET: app/installations
+    install_resp = MagicMock()
+    install_resp.raise_for_status.return_value = None
+    install_resp.json.return_value = [{"id": 999, "account": {"login": "mock-org"}}]
+
+    # POST: bad app/installations response (no token)
+    bad_token_resp = MagicMock()
+    bad_token_resp.raise_for_status.return_value = None
+    bad_token_resp.json.return_value = {}
+
+    mock_sess.get.return_value = install_resp
+    mock_sess.post.return_value = bad_token_resp
+
+    monkeypatch.setattr(
+        "core.github_client.requests.Session",
+        lambda: mock_sess,
+    )
+
+    monkeypatch.setattr(mock_sess, "__enter__", lambda s: s)
+    monkeypatch.setattr(mock_sess, "__exit__", lambda *a: None)
+
+    return mock_sess
 
 
 # ── BaseHttpClient contract ───────────────────────────────────────────
@@ -49,9 +137,145 @@ class TestTokenResolution:
         client = GitHubHttpClient()
         assert client._token == "primary"
 
-    def test_no_token_raises(self, monkeypatch, tmp_path):
+    def test_github_app_auth(
+        self, monkeypatch, mock_jwt, mock_github_app_http_with_token
+    ):
+        # No PATs
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         monkeypatch.delenv("GH_TOKEN", raising=False)
+
+        # App Env Vars
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+        monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "mock-key")
+        monkeypatch.setenv("GITHUB_ORG", "mock-org")
+        monkeypatch.delenv("GH_ORG", raising=False)
+
+        client = GitHubHttpClient()
+
+        assert client._token == "app-token"
+
+    def test_github_app_no_private_key(self, monkeypatch, clear_auth_env_vars):
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+
+        # If no private key is provided but an app id is - token resolution should fail
+        with pytest.raises(RuntimeError, match="no private key provided"):
+            GitHubHttpClient()
+
+    def test_github_app_takes_precedence_over_cli_config(
+        self,
+        monkeypatch,
+        tmp_path,
+        clear_auth_env_vars,
+        mock_jwt,
+        mock_github_app_http_with_token,
+    ):
+        # App Env Vars
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+        monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "mock-key")
+        monkeypatch.setenv("GITHUB_ORG", "mock-org")
+
+        # CLI config
+        config_path = tmp_path / "hosts.yml"
+        config_path.write_text("github.com:\n  oauth_token: cli-token\n")
+        monkeypatch.setattr("os.path.expanduser", lambda p: str(config_path))
+
+        client = GitHubHttpClient()
+
+        assert client._token == "app-token"
+
+    def test_github_app_no_app_token_raises(
+        self, monkeypatch, clear_auth_env_vars, mock_jwt, mock_github_app_http_no_token
+    ):
+        # App Env Vars
+        monkeypatch.setenv("GITHUB_APP_ID", "1234")
+        monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "mock-key")
+        monkeypatch.setenv("GITHUB_ORG", "mock-org")
+
+        with pytest.raises(
+            RuntimeError,
+            match="did not include a token value",
+        ):
+            GitHubHttpClient._resolve_github_app_installation_token()
+
+    # Test GitHub CLI Token Resolution: `gh auth token` (primary method)
+    def test_token_from_gh_cli(self, monkeypatch, clear_auth_env_vars):
+
+        # Mock subprocess to simulate `gh auth token` output
+        mock_subproc = MagicMock()
+        mock_subproc.stdout = "cli-token\n"
+        mock_subproc.returncode = 0
+
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: mock_subproc)
+
+        token = GitHubHttpClient._resolve_github_cli_token()
+        assert token == "cli-token"
+
+    # Test GitHub CLI Token Resolution: GH Hosts Config Fallback (secondary method if `gh auth token` fails or returns no token)
+    def test_token_from_gh_cli_config_hosts_file(
+        self, monkeypatch, tmp_path, clear_auth_env_vars
+    ):
+
+        # Mock Failed Subprocess with no token output to force hosts config fallback
+        mock_subproc = MagicMock()
+        mock_subproc.stdout = "\n"
+        mock_subproc.returncode = 0
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **k: mock_subproc,
+        )
+
+        config_path = tmp_path / "hosts.yml"
+        config_path.write_text("github.com:\n  oauth_token: cli-token\n")
+        monkeypatch.setattr("os.path.expanduser", lambda p: str(config_path))
+        client = GitHubHttpClient()
+        assert client._token == "cli-token"
+
+    @pytest.mark.parametrize(
+        "auth_method, expected_token",
+        [("pat", "pat-token"), ("app", "app-token"), ("cli", "cli-token")],
+        ids=["pat", "app", "cli"],
+    )
+    def test_auth_method_selector(
+        self,
+        monkeypatch,
+        tmp_path,
+        clear_auth_env_vars,
+        auth_method,
+        expected_token,
+        mock_jwt,
+        mock_github_app_http_with_token,
+    ):
+        # Set Config Based on Auth Method
+        if auth_method == "pat":
+            monkeypatch.setenv("GITHUB_TOKEN", "pat-token")
+        elif auth_method == "app":
+            # App Env Vars
+            monkeypatch.setenv("GITHUB_APP_ID", "1234")
+            monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "mock-key")
+            monkeypatch.setenv("GITHUB_ORG", "mock-org")
+            monkeypatch.delenv("GH_ORG", raising=False)
+
+        elif auth_method == "cli":
+            # Mock subprocess to simulate `gh auth token` output
+            mock_subproc = MagicMock()
+            mock_subproc.stdout = "cli-token\n"
+            mock_subproc.returncode = 0
+
+            monkeypatch.setattr("subprocess.run", lambda *a, **k: mock_subproc)
+
+        client = GitHubHttpClient(auth_method=auth_method)
+        assert client._token == expected_token
+
+    def test_no_token_raises(self, monkeypatch, tmp_path, clear_auth_env_vars):
+
+        # Mock Failed Subprocess with no token output to force hosts config fallback
+        mock_subproc = MagicMock()
+        mock_subproc.stdout = "\n"
+        mock_subproc.returncode = 0
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **k: mock_subproc,
+        )
         # Point config path to a non-existent location
         monkeypatch.setattr(
             "os.path.expanduser",
@@ -59,15 +283,6 @@ class TestTokenResolution:
         )
         with pytest.raises(RuntimeError, match="No GitHub token found"):
             GitHubHttpClient()
-
-    def test_token_from_gh_cli_config(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        config_path = tmp_path / "hosts.yml"
-        config_path.write_text("github.com:\n  oauth_token: cli-token\n")
-        monkeypatch.setattr("os.path.expanduser", lambda p: str(config_path))
-        client = GitHubHttpClient()
-        assert client._token == "cli-token"
 
 
 # ── Session headers ───────────────────────────────────────────────────

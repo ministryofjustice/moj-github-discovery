@@ -73,7 +73,7 @@ the core SQLite storage, and optionally exports an Excel workbook.
 **Usage:**
 
 ```bash
-python list_repos.py --repo-file <file> [options]
+uv run python list_repos.py --repo-file <file> [options]
 ```
 
 **Options:**
@@ -85,12 +85,16 @@ python list_repos.py --repo-file <file> [options]
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
 - `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Examples:**
 
 ```bash
 # Audit all repos from file and print JSON output
 uv run python list_repos.py --repo-file repo_list.yaml
+
+# Audit all repos from file and print JSON output, authenticating via PAT specifically
+uv run python list_repos.py --repo-file repo_list.yaml --auth pat
 
 # Export to Excel
 uv run python list_repos.py --repo-file repo_list.yaml --excel report.xlsx
@@ -113,7 +117,7 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-python archive_repos.py <org> [options]
+uv run python archive_repos.py <org> [options]
 ```
 
 **Options:**
@@ -125,6 +129,7 @@ python archive_repos.py <org> [options]
 - `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script.
   - If provided without a path, it also defaults to `repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Output:**
 
@@ -144,6 +149,9 @@ python archive_repos.py <org> [options]
 ```bash
 # Export archive candidates to CSV
 uv run python archive_repos.py ministryofjustice --csv archivable.csv
+
+# Export archive candidates to CSV, authenticating via PAT specifically
+uv run python archive_repos.py ministryofjustice --csv archivable.csv --auth pat
 
 # Reuse local caches only for a fast rerun
 uv run python archive_repos.py ministryofjustice --cache-only --csv archivable.csv
@@ -182,6 +190,7 @@ uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] 
 - `--excel <path>` - Write the report to a multi-sheet Excel workbook.
 - `--repo-file [path]` - Limit repo-level supply-chain checks to repos in a list file. If passed without a value, defaults to `repo_list.yaml`.
 - `--no-cache` - Ignore the saved posture cache and fetch fresh data.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Output:**
 
@@ -194,6 +203,9 @@ uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] 
 ```bash
 # Export a workbook for review
 uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+
+# Export a workbook for review, authenticating via PAT specifically
+uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
 
 # Limit supply-chain checks to repos from repo_list.yaml
 uv run python org_security_posture.py ministryofjustice --repo-file

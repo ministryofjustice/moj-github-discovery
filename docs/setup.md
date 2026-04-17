@@ -2,10 +2,6 @@
 
 ## Prerequisites
 
-### Python
-
-- Python 3.7+ (Self Service or [Direct Download](https://www.python.org/downloads/))
-
 ### Brew
 
 Most of the prerequisites will require `homebrew` and the `brew` utility, this can be installed via the below command (also found in the `brew` [docs](https://brew.sh/).)
@@ -32,6 +28,14 @@ Install dependencies (including local dev dependencies) via `uv sync --group dev
 - GitHub personal access token (PAT) with appropriate scopes (minimum: `repo`) - [Guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
 - Note: If you are contributing to this repository, signed commits are required - guidance is available on how to do this via SSH or GPG keys here: [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 
+GitHub App credentials available for `Developer Experience GitHub Audit`:
+
+- `GH_APP_ID` (or `GITHUB_APP_ID`)
+- `GH_APP_PRIVATE_KEY` (or `GITHUB_APP_PRIVATE_KEY`) with full PEM key content
+- `GH_APP_INSTALLATION_ID` (or `GITHUB_APP_INSTALLATION_ID`) **or** `GH_ORG` / `GITHUB_ORG` / `GITHUB_OWNER` for installation auto-discovery
+
+**Note:** `GH_APP_PRIVATE_KEY` can be extracted from the **Developer Experience Team** 1Password Vault.
+
 ### Environment Variables
 
 Set your GitHub token as an environment variable:
@@ -45,6 +49,28 @@ export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 The tools will automatically use whichever token is available (checks both `GH_TOKEN` and `GITHUB_TOKEN`).
+
+Set the required GitHub App Credentials as environment variables:
+
+```shell
+export GH_APP_ID="<app id>"
+export GH_ORG="<github organisation>"
+export GH_APP_PRIVATE_KEY="$(cat /path/to/private-key.pem)"
+
+# Optional: Set explicitly if you do not want installation auto-discovery
+# export GH_APP_INSTALLATION_ID="<your_installation_id>"
+
+# Optional: force GitHub App path by clearing PAT vars
+# unset GH_TOKEN GITHUB_TOKEN
+```
+
+Authentication resolution order is:
+
+1. `GITHUB_TOKEN` or `GH_TOKEN`
+2. GitHub App credentials (`GH_APP_ID` + `GH_APP_PRIVATE_KEY`)
+3. GitHub CLI token from `~/.config/gh/hosts.yml`
+
+If you want to ensure app-only auth is used, keep PAT variables unset.
 
 ### Compliance Tooling
 
@@ -79,7 +105,8 @@ Optionally, run pre-commit against all files:
 pre-commit run --all-files
 ```
 
-Authenticate to the Github Docker Container Registry with your PAT, providing your username after the `-u` flag and your Github password upon command execution:
+Authenticate to the Github Docker Container Registry with your PAT
+Provide your username after the `-u` flag and your Github PAT (if using `GITHUB_TOKEN` / `GH_TOKEN`) upon command execution:
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
