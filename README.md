@@ -113,7 +113,7 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-python archive_repos.py <org> [options]
+uv run python archive_repos.py <org> [options]
 ```
 
 **Options:**
@@ -288,10 +288,10 @@ uv run python testEnv.py
 
 Core storage uses a single SQLite table that stores one merged JSON payload per repository:
 
-| Column    | Type      | Description                                   |
-| --------- | --------- | --------------------------------------------- |
-| full_name | TEXT (PK) | Repository full name (`owner/repo`)           |
-| data      | TEXT      | JSON-serialized `RepoData` from core models   |
+| Column    | Type      | Description                                 |
+| --------- | --------- | ------------------------------------------- |
+| full_name | TEXT (PK) | Repository full name (`owner/repo`)         |
+| data      | TEXT      | JSON-serialized `RepoData` from core models |
 
 ## Audit Flags Explained
 
