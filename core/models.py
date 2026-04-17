@@ -81,6 +81,7 @@ class RepoDetails(BaseModel):
     org: Optional[str] = None
     private: bool = False
     archived: bool = False
+    archived_at: Optional[str] = None
     disabled: bool = False
     fork: bool = False
     is_template: bool = False

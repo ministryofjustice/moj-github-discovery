@@ -318,7 +318,26 @@ class RepoDetailsEndpoint(BaseEndpoint):
 
     def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")
+
+        gql_data = self.client.graphql(
+            """
+            query RepoArchivedAt($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                    archivedAt
+                }
+            }
+            """,
+            {"owner": owner, "repo": repo},
+        )
+
+        repository = gql_data.get("repository")
+
+        archived_at = (
+            repository.get("archivedAt") if isinstance(repository, dict) else None
+        )
+
         data["org"] = owner
+        data["archived_at"] = archived_at
         return RepoDetails.model_validate(data)
 
 
