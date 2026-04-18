@@ -34,7 +34,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from core.transforms import parse_workflow_permissions, assess_credential_posture
+from core.transforms import parse_workflow_permissions, CredentialPostureTransform
 
 from core.github_client import BaseHttpClient
 from core.models import (
@@ -223,7 +223,7 @@ def check_credential_posture(
             posture="could_not_load",
         )
 
-    parsed = assess_credential_posture(content)
+    parsed = CredentialPostureTransform.assess_credential_posture(content)
     return CredentialPostureFinding(
         repo=f"{owner}/{repo_name}",
         workflow_path=workflow_path,
