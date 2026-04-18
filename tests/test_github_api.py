@@ -31,12 +31,14 @@ from core.github_api import (
     fetch_repo_file_text,
     list_org_repos,
     check_workflow_permissions,
+    check_credential_posture,
 )
 from core.models import (
     AlertData,
     BranchProtection,
     CodeownersData,
     CommunityProfile,
+    CredentialPostureFinding,
     DependencyGraphData,
     ForkTemplateData,
     LatestWorkflowRunData,
@@ -776,4 +778,64 @@ class TestCheckWorkflowPermissions:
             client, "moj", "my-repo", ".github/workflows/deploy.yml"
         )
         assert result.repo == "moj/my-repo"
+        assert result.workflow_path == ".github/workflows/deploy.yml"
+
+
+# — check_credential_posture ——————————————————
+
+
+class TestCheckCredentialPosture:
+    def _make_client(self, content: str | None) -> MockHttpClient:
+        if content is None:
+            return MockHttpClient()
+        import base64
+
+        encoded = base64.b64encode(content.encode()).decode()
+        return MockHttpClient(
+            {
+                "/repos/o/r/contents/.github/workflows/ci.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+
+    def test_could_not_load(self) -> None:
+        client = self._make_client(None)
+        result = check_credential_posture(client, "o", "r", ".github/workflows/ci.yml")
+        assert isinstance(result, CredentialPostureFinding)
+        assert result.posture == "could_not_load"
+
+    def test_oidc_detected(self) -> None:
+        client = self._make_client(
+            "permissions:\n  id-token: write\nsteps:\n  - uses: aws-actions/configure-aws-credentials@v4\n"
+        )
+        result = check_credential_posture(client, "o", "r", ".github/workflows/ci.yml")
+        assert result.posture == "oidc"
+        assert result.has_id_token_write is True
+
+    def test_long_lived_credentials_detected(self) -> None:
+        client = self._make_client(
+            "steps:\n  - run: deploy\n    env:\n      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}\n"
+        )
+        result = check_credential_posture(client, "o", "r", ".github/workflows/ci.yml")
+        assert result.posture == "long_lived_credentials"
+
+    def test_returns_correct_repo_and_path(self) -> None:
+        import base64
+
+        content = "name: CI\non: push\n"
+        encoded = base64.b64encode(content.encode()).decode()
+        client = MockHttpClient(
+            {
+                "/repos/myorg/myrepo/contents/.github/workflows/deploy.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+        result = check_credential_posture(
+            client, "myorg", "myrepo", ".github/workflows/deploy.yml"
+        )
+        assert result.repo == "myorg/myrepo"
         assert result.workflow_path == ".github/workflows/deploy.yml"

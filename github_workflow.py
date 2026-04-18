@@ -26,6 +26,7 @@ from core.github_api import (
     RepoActionsPermissionsEndpoint,
     WorkflowsEndpoint,
     check_workflow_permissions,
+    check_credential_posture,
     fetch_repo_file_text,
     list_org_repos,
 )
@@ -529,6 +530,87 @@ def main() -> None:
     print(f"permissions: write-all: {write_all}")
     print(f"Has write scope: {has_write_count}")
     print(f"Compliant (read-only): {compliant_count}")
+    print(f"Could not load: {skipped}")
+
+    # ================================================================
+    # Stage 8: Assess OIDC vs long-lived credentials
+    # ================================================================
+
+    # 8. OIDC vs long-lived credentials assessment
+    print("\n--- Assessing OIDC vs long-lived credentials ---")
+
+    all_credential_findings: List[Dict[str, Any]] = []
+    for i, row in enumerate(detail_rows):
+        finding = check_credential_posture(
+            client, row["owner"], row["repo_name"], row["path"]
+        )
+        all_credential_findings.append(finding.model_dump())
+
+        if (i + 1) % 100 == 0:
+            print(f" Checked {i + 1} / {len(detail_rows)} workflow files")
+            time.sleep(0.1)
+
+    cred_count = CsvCompiler.write_rows(
+        "github_workflow_credential_posture.csv", all_credential_findings
+    )
+    print(f"Wrote github_workflow_credential_posture.csv ({cred_count} rows)")
+
+    repo_cred_summary: Dict[str, Dict[str, int]] = {}
+    for f in all_credential_findings:
+        repo = f["repo"]
+        if repo not in repo_cred_summary:
+            repo_cred_summary[repo] = {
+                "oidc": 0,
+                "long_lived_credentials": 0,
+                "mixed": 0,
+                "no_cloud_auth_detected": 0,
+                "could_not_load": 0,
+                "total_workflows": 0,
+            }
+        repo_cred_summary[repo]["total_workflows"] += 1
+        repo_cred_summary[repo][f["posture"]] += 1
+
+    cred_repo_rows = [
+        {
+            "repo": repo,
+            "total_workflows": counts["total_workflows"],
+            "oidc": counts["oidc"],
+            "long_lived_credentials": counts["long_lived_credentials"],
+            "mixed": counts["mixed"],
+            "no_cloud_auth_detected": counts["no_cloud_auth_detected"],
+            "could_not_load": counts["could_not_load"],
+        }
+        for repo, counts in sorted(
+            repo_cred_summary.items(),
+            key=lambda x: x[1]["long_lived_credentials"],
+            reverse=True,
+        )
+    ]
+
+    cred_repo_count = CsvCompiler.write_rows(
+        "github_workflow_credential_posture_per_repo.csv", cred_repo_rows
+    )
+    print(
+        f"Wrote github_workflow_credential_posture_per_repo.csv"
+        f" ({cred_repo_count} rows)"
+    )
+
+    oidc_only = sum(1 for f in all_credential_findings if f["posture"] == "oidc")
+    long_lived = sum(
+        1 for f in all_credential_findings if f["posture"] == "long_lived_credentials"
+    )
+    mixed = sum(1 for f in all_credential_findings if f["posture"] == "mixed")
+    no_cloud = sum(
+        1 for f in all_credential_findings if f["posture"] == "no_cloud_auth_detected"
+    )
+    skipped = sum(
+        1 for f in all_credential_findings if f["posture"] == "could_not_load"
+    )
+
+    print(f"OIDC only: {oidc_only}")
+    print(f"Long-lived credentials only: {long_lived}")
+    print(f"Mixed (both): {mixed}")
+    print(f"No cloud auth detected: {no_cloud}")
     print(f"Could not load: {skipped}")
 
     print("--- Complete ---")
