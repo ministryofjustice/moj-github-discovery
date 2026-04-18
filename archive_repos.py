@@ -81,6 +81,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip API collection and use only existing data from the SQLite store.",
     )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly",
+    )
     return parser.parse_args()
 
 
@@ -225,7 +231,8 @@ def main() -> None:
     if args.cache_only:
         repo_list = _list_repos_from_storage(args.org, storage)
     else:
-        repo_list = RepoListCollector().collect(
+        repo_list_collector = RepoListCollector(auth_method=args.auth)
+        repo_list = repo_list_collector.collect(
             args.org,
             sort="pushed",
             direction="asc",
@@ -251,6 +258,7 @@ def main() -> None:
     if not args.cache_only:
         collector = RepoCollector(
             storage=storage,
+            auth_method=args.auth,
             endpoints=[
                 RepoDetailsEndpoint,
                 DependencyGraphEndpoint,

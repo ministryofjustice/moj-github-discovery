@@ -47,6 +47,12 @@ def parse_args() -> argparse.Namespace:
         help="Maximum number of alert rows to export.",
     )
     parser.add_argument("--repo-limit", type=int, help="Limit scanned repositories.")
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly",
+    )
     return parser.parse_args()
 
 
@@ -66,7 +72,7 @@ def main() -> None:
         sys.exit(2)
 
     # Configure GitHub connection and gather Repo Information
-    client = GitHubHttpClient()
+    client = GitHubHttpClient(auth_method=args.auth)
     repos = list_org_repos(args.org, client)
     if args.repo_limit:
         repos = repos[: args.repo_limit]

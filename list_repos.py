@@ -85,6 +85,12 @@ def _parse_args() -> argparse.Namespace:
             "Safe to use after an interrupted run."
         ),
     )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly",
+    )
     return parser.parse_args()
 
 

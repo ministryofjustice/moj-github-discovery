@@ -276,9 +276,15 @@ def main() -> None:
         action="store_true",
         help="Resume collection by skipping endpoint data already cached in the database",
     )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly",
+    )
     args = parser.parse_args()
 
-    client = GitHubHttpClient()
+    client = GitHubHttpClient(auth_method=args.auth)
 
     # ================================================================
     # Stage 1: Resolve the repository list to scan
