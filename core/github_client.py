@@ -252,24 +252,6 @@ class GitHubHttpClient(BaseHttpClient):
 
         raise RuntimeError("Unexpected retry exhaustion")  # defensive
 
-    def graphql(
-        self, query: str, variables: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        url = urljoin(self.BASE_URL, "/graphql")
-        payload = {"query": query, "variables": variables or {}}
-
-        resp = self._request("POST", url, json=payload)
-        body = resp.json()
-
-        if "errors" in body:
-            raise RuntimeError(f"GraphQL query failed: {body['errors']}")
-
-        data = body.get("data")
-        if not isinstance(data, dict):
-            raise RuntimeError("GraphQL response missing 'data'")
-
-        return data
-
     # ── Link-header pagination ────────────────────────────────────────
 
     @staticmethod
@@ -311,3 +293,21 @@ class GitHubHttpClient(BaseHttpClient):
                 items.extend(data.get("items", []))
             url = self._next_page_url(resp.headers.get("Link"))
         return items
+
+    def graphql(
+        self, query: str, variables: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        url = urljoin(self.BASE_URL, "/graphql")
+        payload = {"query": query, "variables": variables or {}}
+
+        resp = self._request("POST", url, json=payload)
+        body = resp.json()
+
+        if "errors" in body:
+            raise RuntimeError(f"GraphQL query failed: {body['errors']}")
+
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise RuntimeError("GraphQL response missing 'data'")
+
+        return data

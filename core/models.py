@@ -102,6 +102,8 @@ class RepoDetails(BaseModel):
 
 
 class RepoArchivedAt(BaseModel):
+    """Repository Archival Date metadata. Also used for calculating days since archival"""
+
     archived_at: Optional[str] = None
 
 
