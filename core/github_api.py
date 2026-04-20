@@ -58,6 +58,7 @@ from core.models import (
     OrgWebhooksData,
     ReferenceData,
     ReferenceItem,
+    RepoArchivedAt,
     RepoDetails,
     RepoTreeData,
     WorkflowAnalysis,
@@ -318,8 +319,17 @@ class RepoDetailsEndpoint(BaseEndpoint):
 
     def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")
+        data["org"] = owner
+        return RepoDetails.model_validate(data)
 
-        gql_data = self.client.graphql(
+
+class RepoArchivedAtEndpoint(BaseEndpoint):
+    @property
+    def name(self) -> str:
+        return "repo_archived_at"
+
+    def fetch(self, owner: str, repo: str) -> RepoArchivedAt:
+        data = self.client.graphql(
             """
             query RepoArchivedAt($owner: String!, $repo: String!) {
                 repository(owner: $owner, name: $repo) {
@@ -330,15 +340,13 @@ class RepoDetailsEndpoint(BaseEndpoint):
             {"owner": owner, "repo": repo},
         )
 
-        repository = gql_data.get("repository")
+        repository = data.get("repository")
 
-        archived_at = (
-            repository.get("archivedAt") if isinstance(repository, dict) else None
+        return RepoArchivedAt(
+            archived_at=(
+                repository.get("archivedAt") if isinstance(repository, dict) else None
+            )
         )
-
-        data["org"] = owner
-        data["archived_at"] = archived_at
-        return RepoDetails.model_validate(data)
 
 
 class AlertsEndpoint(BaseEndpoint):

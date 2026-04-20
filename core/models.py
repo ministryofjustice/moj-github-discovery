@@ -101,6 +101,10 @@ class RepoDetails(BaseModel):
     """Repository license information from the GitHub API (e.g., SPDX key, name)."""
 
 
+class RepoArchivedAt(BaseModel):
+    archived_at: Optional[str] = None
+
+
 class AlertData(BaseModel):
     """Open security alert counts for a single repository."""
 
@@ -345,6 +349,7 @@ class RepoData(BaseModel):
 
     # Endpoint-populated fields
     repo_details: Optional[RepoDetails] = None
+    repo_archived_at: Optional[RepoArchivedAt] = None
     alerts: Optional[AlertData] = None
     branch_protection: Optional[BranchProtection] = None
     community: Optional[CommunityProfile] = None

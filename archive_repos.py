@@ -22,6 +22,7 @@ from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
     DependencyGraphEndpoint,
+    RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
 )
 from core.models import RepoData
@@ -146,7 +147,9 @@ def _build_row(org: str, full_name: str, data: RepoData) -> dict[str, Any]:
         ),
         "references": references,
         "archive_references": sorted(archive_references),
-        "archived_at": repo.archived_at if repo else None,
+        "archived_at": data.repo_archived_at.archived_at
+        if data.repo_archived_at
+        else None,
         "active_references": sorted(active_references),
         "pushed_at": repo.pushed_at if repo else None,
         "default_branch": repo.default_branch if repo else None,
@@ -258,6 +261,7 @@ def main() -> None:
                 RepoDetailsEndpoint,
                 DependencyGraphEndpoint,
                 CodeSearchEndpoint,
+                RepoArchivedAtEndpoint,
             ],
         )
         collector.collect(args.org, repos=repo_list, resume=True)
