@@ -24,6 +24,7 @@ from core.github_api import (
     OrgRulesetsEndpoint,
     OrgWebhooksEndpoint,
     RepoActionsPermissionsEndpoint,
+    RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
     dependency_supply_chain_summary,
@@ -358,7 +359,7 @@ class TestRepoDetailsEndpoint:
             },
         )
 
-        result = RepoDetailsEndpoint(client).fetch("myorg", "myrepo")
+        result = RepoArchivedAtEndpoint(client).fetch("myorg", "myrepo")
         assert result.archived_at == "2024-01-15T10:30:00Z"
 
 
