@@ -22,6 +22,7 @@ from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
     DependencyGraphEndpoint,
+    RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
 )
 from core.models import RepoData
@@ -152,6 +153,9 @@ def _build_row(org: str, full_name: str, data: RepoData) -> dict[str, Any]:
         ),
         "references": references,
         "archive_references": sorted(archive_references),
+        "archived_at": data.repo_archived_at.archived_at
+        if data.repo_archived_at
+        else None,
         "active_references": sorted(active_references),
         "pushed_at": repo.pushed_at if repo else None,
         "default_branch": repo.default_branch if repo else None,
@@ -195,7 +199,7 @@ def _compute_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     now = pd.Timestamp.now("UTC")
 
-    for col in ("pushed_at", "created_at", "updated_at"):
+    for col in ("pushed_at", "created_at", "updated_at", "archived_at"):
         if col in out.columns:
             out[col] = pd.to_datetime(out[col], errors="coerce", utc=True)
 
@@ -203,8 +207,10 @@ def _compute_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
         out["days_since_push"] = (now - out["pushed_at"]).dt.days
     if "created_at" in out.columns:
         out["age_days"] = (now - out["created_at"]).dt.days
+    if "archived_at" in out.columns:
+        out["days_since_archived"] = (now - out["archived_at"]).dt.days
 
-    for col in ("pushed_at", "created_at", "updated_at"):
+    for col in ("pushed_at", "created_at", "updated_at", "archived_at"):
         if col in out.columns:
             out[col] = out[col].dt.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -263,6 +269,7 @@ def main() -> None:
                 RepoDetailsEndpoint,
                 DependencyGraphEndpoint,
                 CodeSearchEndpoint,
+                RepoArchivedAtEndpoint,
             ],
         )
         collector.collect(args.org, repos=repo_list, resume=True)

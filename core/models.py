@@ -81,6 +81,7 @@ class RepoDetails(BaseModel):
     org: Optional[str] = None
     private: bool = False
     archived: bool = False
+    archived_at: Optional[str] = None
     disabled: bool = False
     fork: bool = False
     is_template: bool = False
@@ -98,6 +99,12 @@ class RepoDetails(BaseModel):
     security_and_analysis: Optional[dict[str, Any]] = None
     license: Optional[dict[str, Any]] = None
     """Repository license information from the GitHub API (e.g., SPDX key, name)."""
+
+
+class RepoArchivedAt(BaseModel):
+    """Repository Archival Date metadata. Also used for calculating days since archival"""
+
+    archived_at: Optional[str] = None
 
 
 class AlertData(BaseModel):
@@ -344,6 +351,7 @@ class RepoData(BaseModel):
 
     # Endpoint-populated fields
     repo_details: Optional[RepoDetails] = None
+    repo_archived_at: Optional[RepoArchivedAt] = None
     alerts: Optional[AlertData] = None
     branch_protection: Optional[BranchProtection] = None
     community: Optional[CommunityProfile] = None

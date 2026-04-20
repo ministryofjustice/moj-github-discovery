@@ -24,6 +24,7 @@ from core.github_api import (
     OrgRulesetsEndpoint,
     OrgWebhooksEndpoint,
     RepoActionsPermissionsEndpoint,
+    RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
     dependency_supply_chain_summary,
@@ -341,6 +342,25 @@ class TestRepoDetailsEndpoint:
         )
         result = RepoDetailsEndpoint(client).fetch("myorg", "myrepo")
         assert result.org == "myorg"
+
+    def test_fetch_includes_archive_date(self):
+        client = MockHttpClient(
+            fixtures={
+                "/repos/myorg/myrepo": {
+                    "full_name": "myorg/myrepo",
+                    "name": "myrepo",
+                    "archived": True,
+                },
+            },
+            graphql_fixtures={
+                ("myorg", "myrepo"): {
+                    "repository": {"archivedAt": "2024-01-15T10:30:00Z"},
+                },
+            },
+        )
+
+        result = RepoArchivedAtEndpoint(client).fetch("myorg", "myrepo")
+        assert result.archived_at == "2024-01-15T10:30:00Z"
 
 
 # ── AlertsEndpoint ────────────────────────────────────────────────────
