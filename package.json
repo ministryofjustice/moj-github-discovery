@@ -91,7 +91,8 @@
     "ignores": [
       ".github",
       "node_modules/**/*.md",
-      ".venv"
+      ".venv",
+      "LICENSE"
     ]
   }
 }

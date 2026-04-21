@@ -107,7 +107,7 @@ def run_full_audit(
     cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
     cache_storage.init()
     cache = _load_cache(org, cache_storage) if use_cache else {}
-    client = GitHubHttpClient()
+    client = GitHubHttpClient(auth_method)
 
     report: dict[str, Any] = {
         "org": org,
