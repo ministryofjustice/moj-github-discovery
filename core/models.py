@@ -186,6 +186,17 @@ class WorkflowPermissionFinding(BaseModel):
     finding: str = "no_permissions_block"
 
 
+class CredentialPostureFinding(BaseModel):
+    """Result of checking a single workflow file for OIDC vs long-lived credentials."""
+
+    repo: str
+    workflow_path: str
+    has_id_token_write: bool = False
+    oidc_actions: str = ""
+    credential_secrets_found: str = ""
+    posture: str = "no_cloud_auth_detected"
+
+
 class ForkTemplateData(BaseModel):
     """Fork origin and template source details."""
 

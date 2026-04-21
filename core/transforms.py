@@ -279,6 +279,81 @@ class RepoTreeTransform(BaseTransform):
         return data.model_copy(update={"repo_tree_transform": processed})
 
 
+class CredentialPostureTransform(BaseTransform):
+    """Assess workflow content for OIDC indicators and long-lived credential patterns."""
+
+    OIDC_ACTION_PREFIXES = (
+        "aws-actions/configure-aws-credentials",
+        "azure/login",
+        "google-github-actions/auth",
+    )
+
+    CREDENTIAL_SECRET_PATTERNS = (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_ACCESS_KEY",
+        "AWS_SECRET_KEY",
+        "AWS_SESSION_TOKEN",
+        "AZURE_CLIENT_SECRET",
+        "AZURE_CREDENTIALS",
+        "GCP_SA_KEY",
+        "GCP_CREDENTIALS",
+    )
+
+    @property
+    def name(self) -> str:
+        return "credential_posture"
+
+    @staticmethod
+    def assess_credential_posture(content: str) -> dict[str, Any]:
+        """Parse workflow content for OIDC indicators and long-lived credential patterns."""
+
+        has_id_token_write = False
+        oidc_actions: list[str] = []
+        credential_secrets_found: list[str] = []
+
+        for line in content.splitlines():
+            stripped = line.strip()
+
+            if stripped.startswith("id-token") and "write" in stripped:
+                has_id_token_write = True
+
+            if stripped.startswith("- uses:") or stripped.startswith("uses:"):
+                for prefix in CredentialPostureTransform.OIDC_ACTION_PREFIXES:
+                    if prefix in stripped:
+                        oidc_actions.append(prefix)
+
+            for pattern in CredentialPostureTransform.CREDENTIAL_SECRET_PATTERNS:
+                if pattern in stripped and "secrets." in stripped.lower():
+                    if pattern not in credential_secrets_found:
+                        credential_secrets_found.append(pattern)
+
+        has_oidc = has_id_token_write or len(oidc_actions) > 0
+        has_long_lived = len(credential_secrets_found) > 0
+
+        if has_oidc and has_long_lived:
+            posture = "mixed"
+        elif has_oidc:
+            posture = "oidc"
+        elif has_long_lived:
+            posture = "long_lived_credentials"
+        else:
+            posture = "no_cloud_auth_detected"
+
+        return {
+            "has_id_token_write": has_id_token_write,
+            "oidc_actions": "; ".join(oidc_actions) if oidc_actions else "",
+            "credential_secrets_found": "; ".join(credential_secrets_found)
+            if credential_secrets_found
+            else "",
+            "posture": posture,
+        }
+
+    def apply(self, data: RepoData) -> RepoData:
+        """No-op at repo level — credential posture is assessed per-workflow in Stage 8."""
+        return data
+
+
 class TriggerRiskTransform(BaseTransform):
     """Analyse workflow trigger configurations for security risk."""
 
@@ -520,5 +595,6 @@ TRANSFORMS: list[type[BaseTransform]] = [
     TimestampTransform,
     ReferenceClassifier,
     FlagTransform,
+    CredentialPostureTransform,
     TriggerRiskTransform,
 ]

@@ -18,6 +18,7 @@ from core.models import (
 from core.transforms import (
     TRANSFORMS,
     BaseTransform,
+    CredentialPostureTransform,
     FlagTransform,
     RepoTreeTransform,
     ReferenceClassifier,
@@ -48,6 +49,7 @@ class TestTransformRegistry:
             TimestampTransform,
             ReferenceClassifier,
             FlagTransform,
+            CredentialPostureTransform,
             TriggerRiskTransform,
         ]
 
@@ -601,6 +603,58 @@ class TestParseActionsFromContentPinning:
         assert result[0]["is_pinned"] is False
         assert result[0]["pin_type"] == "mutable_tag"
         assert result[0]["owner"] == "aws-actions"
+
+
+class TestAssessCredentialPosture:
+    def test_oidc_with_id_token_write(self):
+        content = "permissions:\n  id-token: write\nsteps:\n  - uses: aws-actions/configure-aws-credentials@v4\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "oidc"
+        assert result["has_id_token_write"] is True
+        assert "aws-actions/configure-aws-credentials" in result["oidc_actions"]
+
+    def test_long_lived_credentials(self):
+        content = "steps:\n  - run: aws s3 sync\n    env:\n      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}\n      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "long_lived_credentials"
+        assert "AWS_ACCESS_KEY_ID" in result["credential_secrets_found"]
+
+    def test_mixed(self):
+        content = "permissions:\n  id-token: write\nsteps:\n  - uses: aws-actions/configure-aws-credentials@v4\n  - run: echo\n    env:\n      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "mixed"
+
+    def test_no_cloud_auth(self):
+        content = "name: CI\non: push\nsteps:\n  - uses: actions/checkout@v4\n  - run: npm test\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "no_cloud_auth_detected"
+        assert result["oidc_actions"] == ""
+        assert result["credential_secrets_found"] == ""
+
+    def test_azure_login_is_oidc(self):
+        content = "permissions:\n  id-token: write\nsteps:\n  - uses: azure/login@v2\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "oidc"
+        assert "azure/login" in result["oidc_actions"]
+
+    def test_id_token_write_without_oidc_action(self):
+        content = (
+            "permissions:\n  id-token: write\nsteps:\n  - uses: actions/checkout@v4\n"
+        )
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "oidc"
+        assert result["has_id_token_write"] is True
+
+    def test_azure_credentials_secret_is_mixed(self):
+        content = "steps:\n  - uses: azure/login@v2\n    with:\n      creds: ${{ secrets.AZURE_CREDENTIALS }}\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert result["posture"] == "mixed"
+
+    def test_no_repo_or_path_in_result(self):
+        content = "name: CI\n"
+        result = CredentialPostureTransform.assess_credential_posture(content)
+        assert "repo" not in result
+        assert "workflow_path" not in result
 
 
 class TestTriggerRiskTransform:
