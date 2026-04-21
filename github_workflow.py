@@ -26,6 +26,7 @@ from core.github_api import (
     RepoActionsPermissionsEndpoint,
     WorkflowsEndpoint,
     check_workflow_permissions,
+    check_trigger_risk,
     fetch_repo_file_text,
     list_org_repos,
 )
@@ -530,6 +531,91 @@ def main() -> None:
     print(f"Has write scope: {has_write_count}")
     print(f"Compliant (read-only): {compliant_count}")
     print(f"Could not load: {skipped}")
+
+    # ================================================================
+    # Stage 9: Analysing workflow trigger config risk
+    # ================================================================
+
+    # 9. Workflow trigger risk analysis
+    print("\n--- Analysing workflow trigger risk ---")
+
+    all_trigger_findings: List[Dict[str, Any]] = []
+    for i, row in enumerate(detail_rows):
+        finding = check_trigger_risk(
+            client, row["owner"], row["repo_name"], row["path"]
+        )
+        all_trigger_findings.append(finding.model_dump())
+
+        if (i + 1) % 100 == 0:
+            print(f"    Checked {i + 1} / {len(detail_rows)} workflow files")
+            time.sleep(0.1)
+
+    trigger_count = CsvCompiler.write_rows(
+        "github_workflow_trigger_risk.csv", all_trigger_findings
+    )
+    print(f"Wrote github_workflow_trigger_risk.csv ({trigger_count} rows)")
+
+    repo_trigger_summary: Dict[str, Dict[str, int]] = {}
+    for f in all_trigger_findings:
+        repo = f["repo"]
+        if repo not in repo_trigger_summary:
+            repo_trigger_summary[repo] = {
+                "total_workflows": 0,
+                "high_risk": 0,
+                "medium_risk": 0,
+                "low_risk": 0,
+                "no_risk": 0,
+                "could_not_load": 0,
+            }
+        repo_trigger_summary[repo]["total_workflows"] += 1
+        if f["posture"] == "could_not_load":
+            repo_trigger_summary[repo]["could_not_load"] += 1
+        elif f["risk_level"] == "high":
+            repo_trigger_summary[repo]["high_risk"] += 1
+        elif f["risk_level"] == "medium":
+            repo_trigger_summary[repo]["medium_risk"] += 1
+        elif f["risk_level"] == "low":
+            repo_trigger_summary[repo]["low_risk"] += 1
+        else:
+            repo_trigger_summary[repo]["no_risk"] += 1
+
+    trigger_repo_rows = [
+        {
+            "repo": repo,
+            "total_workflows": counts["total_workflows"],
+            "high_risk": counts["high_risk"],
+            "medium_risk": counts["medium_risk"],
+            "low_risk": counts["low_risk"],
+            "no_risk": counts["no_risk"],
+            "could_not_load": counts["could_not_load"],
+        }
+        for repo, counts in sorted(
+            repo_trigger_summary.items(),
+            key=lambda x: x[1]["high_risk"],
+            reverse=True,
+        )
+    ]
+
+    trigger_summary_count = CsvCompiler.write_rows(
+        "github_workflow_trigger_risk_per_repo.csv", trigger_repo_rows
+    )
+    print(
+        f"Wrote github_workflow_trigger_risk_per_repo.csv ({trigger_summary_count} rows)"
+    )
+
+    high_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "high")
+    medium_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "medium")
+    low_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "low")
+    no_risk_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "none")
+    could_not_load_count = sum(
+        1 for f in all_trigger_findings if f["posture"] == "could_not_load"
+    )
+
+    print(f"High risk: {high_count}")
+    print(f"Medium risk: {medium_count}")
+    print(f"Low risk: {low_count}")
+    print(f"No risk: {no_risk_count}")
+    print(f"Could not load: {could_not_load_count}")
 
     print("--- Complete ---")
 

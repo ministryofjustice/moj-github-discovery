@@ -387,3 +387,18 @@ class RepoTreeProcessedData(BaseModel):
     large_blobs: list[LargeBlobData] = Field(default_factory=list)
     exceeds_soft_limit: bool = False
     exceeds_hard_limit: bool = False
+
+
+class TriggerRiskFinding(BaseModel):
+    """Result of analysing workflow trigger configuration risk."""
+
+    repo: str = ""
+    workflow_path: str = ""
+    triggers_found: str = ""
+    risky_triggers: str = ""
+    risk_level: str = ""
+    has_pull_request_target: bool = False
+    has_issue_comment: bool = False
+    has_repository_dispatch: bool = False
+    has_workflow_dispatch: bool = False
+    posture: str = ""

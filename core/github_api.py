@@ -34,7 +34,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from core.transforms import parse_workflow_permissions
+from core.transforms import parse_workflow_permissions, TriggerRiskTransform
 
 from core.github_client import BaseHttpClient
 from core.models import (
@@ -61,6 +61,7 @@ from core.models import (
     RepoArchivedAt,
     RepoDetails,
     RepoTreeData,
+    TriggerRiskFinding,
     WorkflowAnalysis,
     WorkflowData,
     WorkflowPermissionFinding,
@@ -223,6 +224,29 @@ def fetch_repo_alerts(
     endpoint = endpoint_map[kind]
     items = client.get_paginated(f"/repos/{owner}/{repo}/{endpoint}")
     return [item for item in items if isinstance(item, dict)]
+
+
+def check_trigger_risk(
+    client: BaseHttpClient,
+    owner: str,
+    repo_name: str,
+    workflow_path: str,
+) -> TriggerRiskFinding:
+    """Check if a workflow has risky trigger configurations."""
+    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
+    if content is None:
+        return TriggerRiskFinding(
+            repo=f"{owner}/{repo_name}",
+            workflow_path=workflow_path,
+            posture="could_not_load",
+        )
+
+    parsed = TriggerRiskTransform.assess_trigger_risk(content)
+    return TriggerRiskFinding(
+        repo=f"{owner}/{repo_name}",
+        workflow_path=workflow_path,
+        **parsed,
+    )
 
 
 # ── Abstract bases ────────────────────────────────────────────────────

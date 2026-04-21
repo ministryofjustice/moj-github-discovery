@@ -21,6 +21,7 @@ from core.transforms import (
     FlagTransform,
     RepoTreeTransform,
     ReferenceClassifier,
+    TriggerRiskTransform,
     SOFT_LIMIT,
     TimestampTransform,
     parse_workflow_permissions,
@@ -43,7 +44,12 @@ class TestBaseTransform:
 
 class TestTransformRegistry:
     def test_order(self):
-        assert TRANSFORMS == [TimestampTransform, ReferenceClassifier, FlagTransform]
+        assert TRANSFORMS == [
+            TimestampTransform,
+            ReferenceClassifier,
+            FlagTransform,
+            TriggerRiskTransform,
+        ]
 
     def test_all_have_name_and_apply(self):
         for cls in TRANSFORMS:
@@ -595,3 +601,68 @@ class TestParseActionsFromContentPinning:
         assert result[0]["is_pinned"] is False
         assert result[0]["pin_type"] == "mutable_tag"
         assert result[0]["owner"] == "aws-actions"
+
+
+class TestTriggerRiskTransform:
+    def test_pull_request_target_is_high_risk(self):
+        content = "on:\n  pull_request_target:\n    branches: [main]\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "high"
+        assert result["has_pull_request_target"] is True
+        assert "pull_request_target" in result["risky_triggers"]
+        assert result["posture"] == "risky_triggers_detected"
+
+    def test_issue_comment_is_medium_risk(self):
+        content = "on:\n  issue_comment:\n    types: [created]\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "medium"
+        assert result["has_issue_comment"] is True
+
+    def test_repository_dispatch_is_medium_risk(self):
+        content = "on:\n  repository_dispatch:\n    types: [deploy]\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "medium"
+        assert result["has_repository_dispatch"] is True
+
+    def test_workflow_dispatch_is_low_risk(self):
+        content = "on:\n  workflow_dispatch:\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "low"
+        assert result["has_workflow_dispatch"] is True
+
+    def test_push_only_is_no_risk(self):
+        content = "on:\n  push:\n    branches: [main]\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "none"
+        assert result["posture"] == "no_risky_triggers"
+
+    def test_single_line_on(self):
+        content = "on: push\njobs:\n  build:\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert "push" in result["triggers_found"]
+        assert result["risk_level"] == "none"
+
+    def test_inline_array_on(self):
+        content = "on: [push, pull_request_target]\njobs:\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["has_pull_request_target"] is True
+        assert result["risk_level"] == "high"
+
+    def test_multiple_risky_triggers(self):
+        content = "on:\n  pull_request_target:\n  issue_comment:\n  push:\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "high"
+        assert result["has_pull_request_target"] is True
+        assert result["has_issue_comment"] is True
+
+    def test_empty_content(self):
+        content = ""
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert result["risk_level"] == "none"
+        assert result["triggers_found"] == ""
+
+    def test_no_repo_or_path_in_result(self):
+        content = "on: push\n"
+        result = TriggerRiskTransform.assess_trigger_risk(content)
+        assert "repo" not in result
+        assert "workflow_path" not in result
