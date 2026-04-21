@@ -34,13 +34,14 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from core.transforms import parse_workflow_permissions
+from core.transforms import parse_workflow_permissions, CredentialPostureTransform
 
 from core.github_client import BaseHttpClient
 from core.models import (
     AlertData,
     BranchProtection,
     CodeownersData,
+    CredentialPostureFinding,
     CommunityProfile,
     DependencyGraphData,
     ForkTemplateData,
@@ -202,6 +203,29 @@ def check_workflow_permissions(
 
     parsed = parse_workflow_permissions(content)
     return WorkflowPermissionFinding(
+        repo=f"{owner}/{repo_name}",
+        workflow_path=workflow_path,
+        **parsed,
+    )
+
+
+def check_credential_posture(
+    client: BaseHttpClient,
+    owner: str,
+    repo_name: str,
+    workflow_path: str,
+) -> CredentialPostureFinding:
+    """Check if a workflow uses OIDC or long-lived credentials."""
+    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
+    if content is None:
+        return CredentialPostureFinding(
+            repo=f"{owner}/{repo_name}",
+            workflow_path=workflow_path,
+            posture="could_not_load",
+        )
+
+    parsed = CredentialPostureTransform.assess_credential_posture(content)
+    return CredentialPostureFinding(
         repo=f"{owner}/{repo_name}",
         workflow_path=workflow_path,
         **parsed,
