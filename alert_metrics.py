@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import pandas as pd
 import sys
 from typing import Any, Callable
 
@@ -59,6 +60,49 @@ def parse_args() -> argparse.Namespace:
 def parse_iso(value: str | None) -> dt.datetime | None:
     """Utility function: convert ISO 8601 datetime strings into readable datetime object"""
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+
+
+def summarise_results(output_file: str) -> None:
+    """Utility function: print summary of results to console after processing"""
+    # Load the CSV file containing GitHub alert data
+    df = pd.read_csv(output_file)
+
+    # Normalise column names:
+    # - strip whitespace
+    # - convert to lowercase
+    # This prevents KeyErrors if the CSV has inconsistent formatting
+    df.columns = df.columns.str.strip().str.lower()
+
+    # Define which alert states count as "closed"
+    closed_states = ["resolved", "fixed"]
+
+    # --- High‑level counts ---
+    print("Total alerts:", len(df))
+    print("Open alerts:", len(df[df["state"] == "open"]))
+    print("Closed alerts:", len(df[df["state"].isin(closed_states)]))
+
+    # --- Severity breakdown ---
+    print("\nAlerts by severity:")
+    print(df["severity"].value_counts())
+
+    # --- Type breakdown ---
+    print("\nAlerts by type:")
+    print(df["type"].value_counts())
+
+    # --- Time‑to‑Remediate (TTR) statistics ---
+    # Assumes the CSV includes a numeric column `ttr_days`
+    print("\nAverage TTR:", df["ttr_days"].mean())
+    print("Max TTR:", df["ttr_days"].max())
+    print("Min TTR:", df["ttr_days"].min())
+
+    # --- Open alerts by severity ---
+    print("\nOpen alerts by severity:")
+    print(df[df["state"] == "open"]["severity"].value_counts())
+
+    # --- Combined grouping: severity + type ---
+    # This helps identify patterns, e.g. which severity/type combinations are most common
+    print("\nGrouped by severity + type:")
+    print(df.groupby(["severity", "type"]).size())
 
 
 def main() -> None:
@@ -137,6 +181,8 @@ def main() -> None:
     # Summary logging
     print(f"Done! Wrote {len(rows)} alerts to {args.output}")
     print(f"Repos with alerts: {len(repos_with_alerts)}")
+
+    summarise_results(args.output)
 
 
 if __name__ == "__main__":
