@@ -4,9 +4,9 @@
 
 A comprehensive Python toolset for auditing GitHub repositories across organizations. Analyzes:
 
-- Security posture
-- CI/CD workflows
-- Branch Protection
+- Organisation Security posture
+- GitHub Actions Workflows
+- Repository Management Lifecycle (Archival Candidacy)
 - Security Alerts
 - Adherence to [MOJ Github community standards](https://github-community.service.justice.gov.uk/repository-standards/guidance).
 
