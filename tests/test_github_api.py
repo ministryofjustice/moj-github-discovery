@@ -33,6 +33,7 @@ from core.github_api import (
     list_org_repos,
     check_workflow_permissions,
     check_credential_posture,
+    check_trigger_risk,
 )
 from core.models import (
     AlertData,
@@ -51,6 +52,7 @@ from core.models import (
     RepoActionsPermissionsData,
     RepoDetails,
     RepoTreeData,
+    TriggerRiskFinding,
     WorkflowData,
     WorkflowPermissionFinding,
 )
@@ -855,6 +857,68 @@ class TestCheckCredentialPosture:
             }
         )
         result = check_credential_posture(
+            client, "myorg", "myrepo", ".github/workflows/deploy.yml"
+        )
+        assert result.repo == "myorg/myrepo"
+        assert result.workflow_path == ".github/workflows/deploy.yml"
+
+
+# — CheckWorkflowTriggerRisk ————————————————————————
+
+
+class TestCheckTriggerRisk:
+    def _make_client(self, content: str | None) -> MockHttpClient:
+        if content is None:
+            return MockHttpClient()
+        import base64
+
+        encoded = base64.b64encode(content.encode()).decode()
+        return MockHttpClient(
+            {
+                "/repos/o/r/contents/.github/workflows/ci.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+
+    def test_could_not_load(self) -> None:
+        client = self._make_client(None)
+        result = check_trigger_risk(client, "o", "r", ".github/workflows/ci.yml")
+        assert isinstance(result, TriggerRiskFinding)
+        assert result.posture == "could_not_load"
+
+    def test_high_risk_detected(self) -> None:
+        client = self._make_client(
+            "on:\n  pull_request_target:\n    branches: [main]\njobs:\n  build:\n"
+        )
+        result = check_trigger_risk(client, "o", "r", ".github/workflows/ci.yml")
+        assert result.posture == "risky_triggers_detected"
+        assert result.risk_level == "high"
+        assert result.has_pull_request_target is True
+
+    def test_no_risk_detected(self) -> None:
+        client = self._make_client(
+            "on:\n  push:\n    branches: [main]\njobs:\n  build:\n"
+        )
+        result = check_trigger_risk(client, "o", "r", ".github/workflows/ci.yml")
+        assert result.posture == "no_risky_triggers"
+        assert result.risk_level == "none"
+
+    def test_returns_correct_repo_and_path(self) -> None:
+        import base64
+
+        content = "name: CI\non: push\n"
+        encoded = base64.b64encode(content.encode()).decode()
+        client = MockHttpClient(
+            {
+                "/repos/myorg/myrepo/contents/.github/workflows/deploy.yml": {
+                    "encoding": "base64",
+                    "content": encoded,
+                }
+            }
+        )
+        result = check_trigger_risk(
             client, "myorg", "myrepo", ".github/workflows/deploy.yml"
         )
         assert result.repo == "myorg/myrepo"

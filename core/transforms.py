@@ -19,6 +19,7 @@ mutating the model in place.  Pydantic models are designed for this pattern.
 """
 
 from __future__ import annotations
+
 from typing import Any
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -353,6 +354,138 @@ class CredentialPostureTransform(BaseTransform):
         return data
 
 
+class TriggerRiskTransform(BaseTransform):
+    """Analyse workflow trigger configurations for security risk."""
+
+    HIGH_RISK_TRIGGERS = ("pull_request_target",)
+
+    MEDIUM_RISK_TRIGGERS = (
+        "issue_comment",
+        "issues",
+        "repository_dispatch",
+    )
+
+    LOW_RISK_TRIGGERS = (
+        "workflow_dispatch",
+        "fork",
+    )
+
+    ALL_RISKY_TRIGGERS = HIGH_RISK_TRIGGERS + MEDIUM_RISK_TRIGGERS + LOW_RISK_TRIGGERS
+
+    @property
+    def name(self) -> str:
+        return "trigger_risk"
+
+    @staticmethod
+    def assess_trigger_risk(content: str) -> dict[str, Any]:
+        """Parse workflow content for trigger configurations and assess risk."""
+
+        triggers_found: list[str] = []
+        risky_triggers: list[str] = []
+        has_pull_request_target = False
+        has_issue_comment = False
+        has_repository_dispatch = False
+        has_workflow_dispatch = False
+
+        in_on_block = False
+        on_block_indent = 0
+
+        for line in content.splitlines():
+            stripped = line.strip()
+
+            # Single-line on: trigger or on: [trigger, trigger]
+            if stripped.startswith("on:") and not in_on_block:
+                rest = stripped[3:].strip()
+                if rest:
+                    rest = rest.strip("[]")
+                    for trigger in rest.split(","):
+                        trigger = trigger.strip().strip("'\"")
+                        if trigger:
+                            triggers_found.append(trigger)
+                else:
+                    in_on_block = True
+                    on_block_indent = len(line) - len(line.lstrip())
+                continue
+
+            if stripped.startswith('"on":') or stripped.startswith("'on':"):
+                rest = stripped.split(":", 1)[1].strip()
+                if rest:
+                    rest = rest.strip("[]")
+                    for trigger in rest.split(","):
+                        trigger = trigger.strip().strip("'\"")
+                        if trigger:
+                            triggers_found.append(trigger)
+                else:
+                    in_on_block = True
+                    on_block_indent = len(line) - len(line.lstrip())
+                continue
+
+            # Inside multi-line on: block
+            if in_on_block:
+                if not stripped or stripped.startswith("#"):
+                    continue
+                current_indent = len(line) - len(line.lstrip())
+                if (
+                    current_indent <= on_block_indent
+                    and stripped
+                    and not stripped.startswith("#")
+                ):
+                    in_on_block = False
+                else:
+                    if ":" in stripped:
+                        trigger = stripped.split(":")[0].strip().strip("'\"")
+                        if trigger and not trigger.startswith("#"):
+                            triggers_found.append(trigger)
+
+        # Deduplicate
+        triggers_found = list(dict.fromkeys(triggers_found))
+
+        # Classify
+        for trigger in triggers_found:
+            if trigger in TriggerRiskTransform.ALL_RISKY_TRIGGERS:
+                risky_triggers.append(trigger)
+            if trigger == "pull_request_target":
+                has_pull_request_target = True
+            if trigger == "issue_comment":
+                has_issue_comment = True
+            if trigger == "repository_dispatch":
+                has_repository_dispatch = True
+            if trigger == "workflow_dispatch":
+                has_workflow_dispatch = True
+
+        # Determine risk level
+        if any(t in TriggerRiskTransform.HIGH_RISK_TRIGGERS for t in risky_triggers):
+            risk_level = "high"
+        elif any(
+            t in TriggerRiskTransform.MEDIUM_RISK_TRIGGERS for t in risky_triggers
+        ):
+            risk_level = "medium"
+        elif any(t in TriggerRiskTransform.LOW_RISK_TRIGGERS for t in risky_triggers):
+            risk_level = "low"
+        else:
+            risk_level = "none"
+
+        if risky_triggers:
+            posture = "risky_triggers_detected"
+        else:
+            posture = "no_risky_triggers"
+
+        return {
+            "triggers_found": "; ".join(triggers_found) if triggers_found else "",
+            "risky_triggers": "; ".join(risky_triggers) if risky_triggers else "",
+            "risk_level": risk_level,
+            "has_pull_request_target": has_pull_request_target,
+            "has_issue_comment": has_issue_comment,
+            "has_repository_dispatch": has_repository_dispatch,
+            "has_workflow_dispatch": has_workflow_dispatch,
+            "posture": posture,
+        }
+
+    def apply(self, data: RepoData) -> RepoData:
+        """No-op at repo level — trigger risk is assessed per-workflow in Stage 9."""
+        return data
+
+
 # — Standalone parsing helpers ————————————————————————
 
 
@@ -463,4 +596,5 @@ TRANSFORMS: list[type[BaseTransform]] = [
     ReferenceClassifier,
     FlagTransform,
     CredentialPostureTransform,
+    TriggerRiskTransform,
 ]
