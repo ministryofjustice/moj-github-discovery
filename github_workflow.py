@@ -2,24 +2,28 @@
 """GitHub Actions workflow posture discovery.
 
 Refactored to use core modules:
-  - Repo discovery / loading     core.github_api.list_org_repos, core.repo_list
-  - HTTP transport               core.github_client.GitHubHttpClient
-    - Workflow + repo data         RepoCollector with typed repo-scoped endpoints
+    - Repo discovery / loading      core.github_api.list_org_repos, core.repo_list
+    - HTTP transport                core.github_client.GitHubHttpClient
+    - Workflow + repo data          RepoCollector with typed repo-scoped endpoints
+    - Stage toggles                 core.config.load_audit_config
 
 Not yet in core (local implementations retained):
-  - Workflow YAML uses: parsing
+    - Workflow YAML uses: parsing
 """
 
 import argparse
 import os
 import sys
 import time
+import sqlite3
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
+from core.config import AuditConfig, load_audit_config
 from core.github_api import (
     LatestWorkflowRunEndpoint,
     RepoDetailsEndpoint,
@@ -41,6 +45,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(SCRIPT_DIR, "github_workflow_posture.db")
 
 
+# --- Workflow file parsing ------------------------------------------------
+
+
 def parse_actions_from_workflow(
     client: GitHubHttpClient,
     owner: str,
@@ -55,17 +62,13 @@ def parse_actions_from_workflow(
             file=sys.stderr,
         )
         return []
-
     return parse_actions_from_content(content, repo_name, workflow_path)
 
 
-# ── Row builders ─────────────────────────────────────────────────────
+# --- Row builders ---------------------------------------------------------
 
 
-def build_repo_row(
-    full_name: str,
-    data: RepoData,
-) -> Dict[str, Any]:
+def build_repo_row(full_name: str, data: RepoData) -> Dict[str, Any]:
     """Build a posture summary row from collected RepoData."""
     repo = data.repo_details
     workflows = data.workflows
@@ -119,14 +122,11 @@ def build_repo_row(
     }
 
 
-def build_workflow_detail_rows(
-    full_name: str,
-    data: RepoData,
-) -> List[Dict[str, Any]]:
+def build_workflow_detail_rows(full_name: str, data: RepoData) -> List[Dict[str, Any]]:
     """Build one detail row per workflow from WorkflowData."""
     owner, _, repo_name = full_name.partition("/")
     workflows = data.workflows
-    rows = []
+    rows: List[Dict[str, Any]] = []
     for wf in workflows.workflows if workflows else []:
         rows.append(
             {
@@ -141,7 +141,7 @@ def build_workflow_detail_rows(
     return rows
 
 
-# ── Summary report ────────────────────────────────────────────────────
+# --- Summary report -------------------------------------------------------
 
 
 def write_summary(
@@ -176,20 +176,20 @@ def write_summary(
         "=" * 70,
         "",
         "OVERVIEW",
-        "_" * 40,
+        "-" * 40,
         f"  Total repositories scanned:       {total}",
-        f"  Repos using GitHub Actions:        {len(with_wf)} ({len(with_wf) / max(total, 1) * 100:.1f}%)",
-        f"  Repos NOT using GitHub Actions:    {len(without_wf)} ({len(without_wf) / max(total, 1) * 100:.1f}%)",
-        f"  Total workflow files found:        {len(detail_rows)}",
+        f"  Repos using GitHub Actions:       {len(with_wf)} ({len(with_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Repos NOT using GitHub Actions:   {len(without_wf)} ({len(without_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Total workflow files found:       {len(detail_rows)}",
         "",
         "BREAKDOWN",
-        "_" * 40,
-        f"  Active repos with workflows:       {len(active_with)}",
-        f"  Active repos without workflows:    {len(active_without)}",
-        f"  Archived repos with workflows:     {len(archived_with)}",
-        f"  Archived repos without workflows:  {len(archived_without)}",
+        "-" * 40,
+        f"  Active repos with workflows:      {len(active_with)}",
+        f"  Active repos without workflows:   {len(active_without)}",
+        f"  Archived repos with workflows:    {len(archived_with)}",
+        f"  Archived repos without workflows: {len(archived_without)}",
         "",
-        f"  Candidates for disabling Actions:  {len(disable_candidates)}",
+        f"  Candidates for disabling Actions: {len(disable_candidates)}",
         "  (archived repos with workflows + active repos with Actions enabled but no workflow files)",
         "",
     ]
@@ -235,10 +235,10 @@ def write_summary(
     print(report)
 
 
-# ── Main ──────────────────────────────────────────────────────────────
+# --- CLI ------------------------------------------------------------------
 
 
-def main() -> None:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Identify repositories using GitHub Actions across the MoJ estate"
     )
@@ -249,7 +249,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--repos",
-        nargs="*",
+        nargs="+",
         help="Specific repos to scan, e.g. owner/repo owner/repo",
     )
     parser.add_argument(
@@ -283,19 +283,51 @@ def main() -> None:
         default=None,
         help="Select GitHub authentication method explicitly",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--config-file",
+        type=Path,
+        default=None,
+        help=(
+            "Path to audit config YAML. Defaults to config/audit_config.yaml "
+            "if present, otherwise all stages run with built-in defaults."
+        ),
+    )
+    return parser.parse_args()
 
-    client = GitHubHttpClient(auth_method=args.auth)
 
-    # ================================================================
-    # Stage 1: Resolve the repository list to scan
-    # ================================================================
+# --- Stage functions ------------------------------------------------------
 
-    # 1. Resolve repo list
+
+def stage_1_resolve_repo_list(
+    args: argparse.Namespace,
+    client: GitHubHttpClient,
+    config: AuditConfig,
+) -> List[str]:
+    """Stage 1: Resolve the repository list to scan (mandatory).
+
+    Resolution order:
+      1. ``--repos`` CLI arg (explicit list)
+      2. ``--repo-file`` CLI arg (explicit path)
+      3. ``repo_list_file`` from the loaded audit config, if that path exists
+      4. ``repo_list.yaml`` in the current working directory, if present
+      5. Fall back to listing the org via the GitHub API
+    """
     if args.repos:
         repo_list = args.repos[: args.limit]
     elif args.repo_file:
         repo_list = load_repo_list_file(args.repo_file)[: args.limit]
+    elif config.repo_list_file and Path(config.repo_list_file).exists():
+        print(
+            f"Using repo list from config: {config.repo_list_file}",
+            file=sys.stderr,
+        )
+        repo_list = load_repo_list_file(config.repo_list_file)[: args.limit]
+    elif Path("repo_list.yaml").exists():
+        print(
+            "Using repo_list.yaml from current directory",
+            file=sys.stderr,
+        )
+        repo_list = load_repo_list_file("repo_list.yaml")[: args.limit]
     else:
         print("Listing org repositories...", file=sys.stderr)
         try:
@@ -309,13 +341,16 @@ def main() -> None:
     if not repo_list:
         raise SystemExit("No repositories found to scan.")
     print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
+    return repo_list
 
-    # ================================================================
-    # Stage 2: Collect baseline repo metadata and workflow inventory
-    # ================================================================
 
-    # 2. Collect repo details + workflow inventory via core
-    storage = SqliteRepoStorage(args.db)
+def stage_2_collect_baseline(
+    args: argparse.Namespace,
+    client: GitHubHttpClient,
+    repo_list: List[str],
+    storage: SqliteRepoStorage,
+) -> None:
+    """Stage 2: Collect baseline repo metadata and workflow inventory."""
     collector = RepoCollector(
         storage=storage,
         client=client,
@@ -327,9 +362,15 @@ def main() -> None:
     primary_org = repo_list[0].split("/", 1)[0]
     collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
-    # ================================================================
-    # Stage 3: Collect remaining workflow posture data
-    # ================================================================
+
+def stage_3_collect_additional(
+    args: argparse.Namespace,
+    client: GitHubHttpClient,
+    repo_list: List[str],
+    storage: SqliteRepoStorage,
+) -> None:
+    """Stage 3: Collect remaining workflow posture data."""
+    primary_org = repo_list[0].split("/", 1)[0]
 
     # 3.1 Collect repo-level Actions permissions for all repos
     collector = RepoCollector(
@@ -357,26 +398,44 @@ def main() -> None:
             resume=args.resume,
         )
 
-    # ================================================================
-    # Stage 4: Read collected data and build output row sets
-    # ================================================================
 
-    # 4. Read collected data and build output rows
+def stage_4_build_rows(
+    repo_list: List[str], storage: SqliteRepoStorage
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Stage 4: Read collected data and build output row sets.
+
+    Always runs — downstream stages need ``detail_rows``. Reads are cheap
+    (SQLite only) so there is no gain from toggling this off. if the
+    cache is empty ( e.g Stages 2/3 were skipped before any prior run
+    populated it), this returns empty rows for the affected repos and
+    lets later stages no-op gracefully, rather than crash.
+    """
     repo_rows: List[Dict[str, Any]] = []
     detail_rows: List[Dict[str, Any]] = []
     total = len(repo_list)
     for idx, full_name in enumerate(repo_list, start=1):
         print(f"[{idx}/{total}] Augmenting {full_name}...", file=sys.stderr)
-
-        data = storage.read(full_name) or RepoData()
+        try:
+            data = storage.read(full_name) or RepoData()
+        except sqlite3.OperationalError as exc:
+            print(
+                f" Cache unavailable for {full_name} ({exc}). "
+                "Skipping row build - likely Stages 2/3 were disabled "
+                "before the cache was populated.",
+                file=sys.stderr,
+            )
+            data = RepoData()
         repo_rows.append(build_repo_row(full_name, data))
         detail_rows.extend(build_workflow_detail_rows(full_name, data))
+    return repo_rows, detail_rows
 
-    # ================================================================
-    # Stage 5: Write repo-level posture reports
-    # ================================================================
 
-    # 5. Write posture outputs
+def stage_5_write_posture_reports(
+    args: argparse.Namespace,
+    repo_rows: List[Dict[str, Any]],
+    detail_rows: List[Dict[str, Any]],
+) -> None:
+    """Stage 5: Write repo-level posture reports."""
     prefix = args.out_prefix
     repo_count = CsvCompiler.write_rows(f"{prefix}_repo_summary.csv", repo_rows)
     details_count = CsvCompiler.write_rows(
@@ -386,6 +445,7 @@ def main() -> None:
     print(f"Wrote {prefix}_workflow_details.csv ({details_count} rows)")
     write_summary(f"{prefix}_summary.txt", repo_rows, detail_rows)
 
+    total = len(repo_rows)
     print(
         f"\nDone. Scanned {total} repos, "
         f"found {sum(1 for r in repo_rows if r.get('has_workflows'))} using GitHub Actions "
@@ -393,10 +453,11 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    # ================================================================
-    # Stage 6: Parse workflow files to inventory action usage
-    # ================================================================
 
+def stage_6_actions_analysis(
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+) -> None:
+    """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
 
@@ -408,7 +469,7 @@ def main() -> None:
         all_actions.extend(actions)
         if (i + 1) % 100 == 0:
             print(f"  Parsed {i + 1} / {len(detail_rows)} workflow files")
-        time.sleep(0.1)
+            time.sleep(0.1)
 
     print(f"Total action references found: {len(all_actions)}")
 
@@ -481,7 +542,9 @@ def main() -> None:
             ),
         }
         for repo, counts in sorted(
-            repo_pinning.items(), key=lambda x: x[1]["unpinned"], reverse=True
+            repo_pinning.items(),
+            key=lambda x: x[1]["unpinned"],
+            reverse=True,
         )
     ]
 
@@ -497,11 +560,11 @@ def main() -> None:
         f"Repos fully pinned: {sum(1 for s in pinning_summary if s['unpinned'] == 0)}"
     )
 
-    # ================================================================
-    # Stage 7: Parse workflow files for permissions posture
-    # ================================================================
 
-    # 7. Workflow permissions check
+def stage_7_permissions_analysis(
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+) -> None:
+    """Stage 7: Parse workflow files for permissions posture."""
     print("\n--- Analysing workflow permissions ---")
 
     all_permissions: List[Dict[str, Any]] = []
@@ -510,10 +573,10 @@ def main() -> None:
             client, row["owner"], row["repo_name"], row["path"]
         )
         all_permissions.append(perm.model_dump())
-
         if (i + 1) % 100 == 0:
-            print(f" Checked {i + 1} / {len(detail_rows)} workflow files")
+            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
+
     perms_count = CsvCompiler.write_rows(
         "github_workflow_permissions.csv", all_permissions
     )
@@ -533,11 +596,11 @@ def main() -> None:
     print(f"Compliant (read-only): {compliant_count}")
     print(f"Could not load: {skipped}")
 
-    # ================================================================
-    # Stage 8: Assess OIDC vs long-lived credentials
-    # ================================================================
 
-    # 8. OIDC vs long-lived credentials assessment
+def stage_8_credentials_analysis(
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+) -> None:
+    """Stage 8: Assess OIDC vs long-lived credentials."""
     print("\n--- Assessing OIDC vs long-lived credentials ---")
 
     all_credential_findings: List[Dict[str, Any]] = []
@@ -546,9 +609,8 @@ def main() -> None:
             client, row["owner"], row["repo_name"], row["path"]
         )
         all_credential_findings.append(finding.model_dump())
-
         if (i + 1) % 100 == 0:
-            print(f" Checked {i + 1} / {len(detail_rows)} workflow files")
+            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
     cred_count = CsvCompiler.write_rows(
@@ -592,8 +654,8 @@ def main() -> None:
         "github_workflow_credential_posture_per_repo.csv", cred_repo_rows
     )
     print(
-        f"Wrote github_workflow_credential_posture_per_repo.csv"
-        f" ({cred_repo_count} rows)"
+        f"Wrote github_workflow_credential_posture_per_repo.csv "
+        f"({cred_repo_count} rows)"
     )
 
     oidc_only = sum(1 for f in all_credential_findings if f["posture"] == "oidc")
@@ -614,11 +676,11 @@ def main() -> None:
     print(f"No cloud auth detected: {no_cloud}")
     print(f"Could not load: {skipped}")
 
-    # ================================================================
-    # Stage 9: Analysing workflow trigger config risk
-    # ================================================================
 
-    # 9. Workflow trigger risk analysis
+def stage_9_trigger_risk_analysis(
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+) -> None:
+    """Stage 9: Analyse workflow trigger config risk."""
     print("\n--- Analysing workflow trigger risk ---")
 
     all_trigger_findings: List[Dict[str, Any]] = []
@@ -627,9 +689,8 @@ def main() -> None:
             client, row["owner"], row["repo_name"], row["path"]
         )
         all_trigger_findings.append(finding.model_dump())
-
         if (i + 1) % 100 == 0:
-            print(f"    Checked {i + 1} / {len(detail_rows)} workflow files")
+            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
     trigger_count = CsvCompiler.write_rows(
@@ -682,7 +743,8 @@ def main() -> None:
         "github_workflow_trigger_risk_per_repo.csv", trigger_repo_rows
     )
     print(
-        f"Wrote github_workflow_trigger_risk_per_repo.csv ({trigger_summary_count} rows)"
+        f"Wrote github_workflow_trigger_risk_per_repo.csv "
+        f"({trigger_summary_count} rows)"
     )
 
     high_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "high")
@@ -698,6 +760,74 @@ def main() -> None:
     print(f"Low risk: {low_count}")
     print(f"No risk: {no_risk_count}")
     print(f"Could not load: {could_not_load_count}")
+
+
+# --- Main orchestrator ----------------------------------------------------
+
+
+def _skip(stage_label: str, toggle_name: str) -> None:
+    print(
+        f"Skipping {stage_label}: {toggle_name} disabled in config",
+        file=sys.stderr,
+    )
+
+
+def main() -> None:
+    args = _parse_args()
+    config: AuditConfig = load_audit_config(args.config_file)
+    toggles = config.workflow_audit
+
+    client = GitHubHttpClient(auth_method=args.auth)
+    storage = SqliteRepoStorage(args.db)
+
+    # Stage 1 - mandatory
+    repo_list = stage_1_resolve_repo_list(args, client, config)
+
+    # Stage 2
+    if toggles.collect_baseline_data:
+        stage_2_collect_baseline(args, client, repo_list, storage)
+    else:
+        _skip("Stage 2", "collect_baseline_data")
+
+    # Stage 3
+    if toggles.collect_additional_data:
+        stage_3_collect_additional(args, client, repo_list, storage)
+    else:
+        _skip("Stage 3", "collect_additional_data")
+
+    # Stage 4 - always runs; reads from SQLite and produces detail_rows
+    # that later stages depend on. Cheap enough that a toggle adds no value.
+    repo_rows, detail_rows = stage_4_build_rows(repo_list, storage)
+
+    # Stage 5
+    if toggles.gen_posture_reports:
+        stage_5_write_posture_reports(args, repo_rows, detail_rows)
+    else:
+        _skip("Stage 5", "gen_posture_reports")
+
+    # Stage 6
+    if toggles.actions_analysis:
+        stage_6_actions_analysis(client, detail_rows)
+    else:
+        _skip("Stage 6", "actions_analysis")
+
+    # Stage 7
+    if toggles.permissions_analysis:
+        stage_7_permissions_analysis(client, detail_rows)
+    else:
+        _skip("Stage 7", "permissions_analysis")
+
+    # Stage 8
+    if toggles.credentials_analysis:
+        stage_8_credentials_analysis(client, detail_rows)
+    else:
+        _skip("Stage 8", "credentials_analysis")
+
+    # Stage 9
+    if toggles.trigger_risk_analysis:
+        stage_9_trigger_risk_analysis(client, detail_rows)
+    else:
+        _skip("Stage 9", "trigger_risk_analysis")
 
     print("--- Complete ---")
 
