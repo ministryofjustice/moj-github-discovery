@@ -298,7 +298,7 @@ def _parse_args() -> argparse.Namespace:
 # --- Stage functions ------------------------------------------------------
 
 
-def stage_1_resolve_repo_list(
+def resolve_repo_list(
     args: argparse.Namespace,
     client: GitHubHttpClient,
     config: AuditConfig,
@@ -344,7 +344,7 @@ def stage_1_resolve_repo_list(
     return repo_list
 
 
-def stage_2_collect_baseline(
+def collect_baseline(
     args: argparse.Namespace,
     client: GitHubHttpClient,
     repo_list: List[str],
@@ -363,7 +363,7 @@ def stage_2_collect_baseline(
     collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
 
-def stage_3_collect_additional(
+def collect_additional(
     args: argparse.Namespace,
     client: GitHubHttpClient,
     repo_list: List[str],
@@ -399,7 +399,7 @@ def stage_3_collect_additional(
         )
 
 
-def stage_4_build_rows(
+def build_rows(
     repo_list: List[str], storage: SqliteRepoStorage
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Stage 4: Read collected data and build output row sets.
@@ -430,7 +430,7 @@ def stage_4_build_rows(
     return repo_rows, detail_rows
 
 
-def stage_5_write_posture_reports(
+def write_posture_reports(
     args: argparse.Namespace,
     repo_rows: List[Dict[str, Any]],
     detail_rows: List[Dict[str, Any]],
@@ -454,7 +454,7 @@ def stage_5_write_posture_reports(
     )
 
 
-def stage_6_actions_analysis(
+def actions_analysis(
     client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
 ) -> None:
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
@@ -561,7 +561,7 @@ def stage_6_actions_analysis(
     )
 
 
-def stage_7_permissions_analysis(
+def permissions_analysis(
     client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
 ) -> None:
     """Stage 7: Parse workflow files for permissions posture."""
@@ -597,7 +597,7 @@ def stage_7_permissions_analysis(
     print(f"Could not load: {skipped}")
 
 
-def stage_8_credentials_analysis(
+def credentials_analysis(
     client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
 ) -> None:
     """Stage 8: Assess OIDC vs long-lived credentials."""
@@ -677,7 +677,7 @@ def stage_8_credentials_analysis(
     print(f"Could not load: {skipped}")
 
 
-def stage_9_trigger_risk_analysis(
+def trigger_risk_analysis(
     client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
 ) -> None:
     """Stage 9: Analyse workflow trigger config risk."""
@@ -780,52 +780,52 @@ def main() -> None:
     client = GitHubHttpClient(auth_method=args.auth)
     storage = SqliteRepoStorage(args.db)
 
-    # Stage 1 - mandatory
-    repo_list = stage_1_resolve_repo_list(args, client, config)
+    # Stage 1 - resolve_repo_lis. (mandatory)
+    repo_list = resolve_repo_list(args, client, config)
 
-    # Stage 2
+    # Stage 2 - collect_baseline
     if toggles.collect_baseline_data:
-        stage_2_collect_baseline(args, client, repo_list, storage)
+        collect_baseline(args, client, repo_list, storage)
     else:
         _skip("Stage 2", "collect_baseline_data")
 
-    # Stage 3
+    # Stage 3 - collect_additional
     if toggles.collect_additional_data:
-        stage_3_collect_additional(args, client, repo_list, storage)
+        collect_additional(args, client, repo_list, storage)
     else:
         _skip("Stage 3", "collect_additional_data")
 
     # Stage 4 - always runs; reads from SQLite and produces detail_rows
     # that later stages depend on. Cheap enough that a toggle adds no value.
-    repo_rows, detail_rows = stage_4_build_rows(repo_list, storage)
+    repo_rows, detail_rows = build_rows(repo_list, storage)
 
-    # Stage 5
+    # Stage 5 - write_posture_reports
     if toggles.gen_posture_reports:
-        stage_5_write_posture_reports(args, repo_rows, detail_rows)
+        write_posture_reports(args, repo_rows, detail_rows)
     else:
         _skip("Stage 5", "gen_posture_reports")
 
-    # Stage 6
+    # Stage 6 - actions_analysis
     if toggles.actions_analysis:
-        stage_6_actions_analysis(client, detail_rows)
+        actions_analysis(client, detail_rows)
     else:
         _skip("Stage 6", "actions_analysis")
 
-    # Stage 7
+    # Stage 7 - permissions_analysis
     if toggles.permissions_analysis:
-        stage_7_permissions_analysis(client, detail_rows)
+        permissions_analysis(client, detail_rows)
     else:
         _skip("Stage 7", "permissions_analysis")
 
-    # Stage 8
+    # Stage 8 - credentials_analysis
     if toggles.credentials_analysis:
-        stage_8_credentials_analysis(client, detail_rows)
+        credentials_analysis(client, detail_rows)
     else:
         _skip("Stage 8", "credentials_analysis")
 
-    # Stage 9
+    # Stage 9 - trigger_risk_analysis
     if toggles.trigger_risk_analysis:
-        stage_9_trigger_risk_analysis(client, detail_rows)
+        trigger_risk_analysis(client, detail_rows)
     else:
         _skip("Stage 9", "trigger_risk_analysis")
 

@@ -25,7 +25,7 @@ def test_explicit_repos_arg_wins(tmp_path, monkeypatch):
     config = AuditConfig()
     client = MagicMock()
 
-    result = github_workflow.stage_1_resolve_repo_list(args, client, config)
+    result = github_workflow.resolve_repo_list(args, client, config)
 
     assert result == ["ministryofjustice/foo", "ministryofjustice/bar"]
 
@@ -43,7 +43,7 @@ def test_repo_file_arg_used_when_no_repos(tmp_path, monkeypatch):
         "github_workflow.load_repo_list_file",
         return_value=["ministryofjustice/baz"],
     ) as mock_load:
-        result = github_workflow.stage_1_resolve_repo_list(args, client, config)
+        result = github_workflow.resolve_repo_list(args, client, config)
 
     mock_load.assert_called_once_with(str(repo_file))
     assert result == ["ministryofjustice/baz"]
@@ -62,7 +62,7 @@ def test_config_repo_list_file_used_when_no_cli_args(tmp_path, monkeypatch):
         "github_workflow.load_repo_list_file",
         return_value=["ministryofjustice/qux"],
     ) as mock_load:
-        result = github_workflow.stage_1_resolve_repo_list(args, client, config)
+        result = github_workflow.resolve_repo_list(args, client, config)
 
     mock_load.assert_called_once_with(str(config_repo_file))
     assert result == ["ministryofjustice/qux"]
@@ -84,7 +84,7 @@ def test_default_repo_list_yaml_in_cwd_used_when_no_cli_or_config(
         "github_workflow.load_repo_list_file",
         return_value=["ministryofjustice/default"],
     ) as mock_load:
-        result = github_workflow.stage_1_resolve_repo_list(args, client, config)
+        result = github_workflow.resolve_repo_list(args, client, config)
 
     mock_load.assert_called_once_with("repo_list.yaml")
     assert result == ["ministryofjustice/default"]
@@ -100,7 +100,7 @@ def test_falls_back_to_org_listing_when_nothing_else_available(tmp_path, monkeyp
         "github_workflow.list_org_repos",
         return_value=["ministryofjustice/from_api"],
     ) as mock_list:
-        result = github_workflow.stage_1_resolve_repo_list(args, client, config)
+        result = github_workflow.resolve_repo_list(args, client, config)
 
     mock_list.assert_called_once_with("ministryofjustice", client)
     assert result == ["ministryofjustice/from_api"]
@@ -117,4 +117,4 @@ def test_raises_when_org_listing_fails_and_no_other_source(tmp_path, monkeypatch
         side_effect=Exception("API down"),
     ):
         with pytest.raises(SystemExit, match="Unable to list repos"):
-            github_workflow.stage_1_resolve_repo_list(args, client, config)
+            github_workflow.resolve_repo_list(args, client, config)
