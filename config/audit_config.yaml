@@ -1,0 +1,18 @@
+# Default audit config for moj-github-discovery scripts.
+# Override by passing --config-file path/to/your.yaml on the CLI.
+
+# Global attributes used by all scripts
+repo_list_file: "repo_list.yaml"
+
+# Stage toggles for github_workflow.py.
+# Stages 2 and 3 collect the base data the later stages depend on,
+# so disabling them only makes sense when a previous run has already
+# populated the SQLite cache (default: github_workflow_posture.db).
+workflow_audit:
+  collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory
+  collect_additional_data: true  # stage 3 - Actions permissions + latest run
+  gen_posture_reports: true      # stage 4/5 - posture CSVs + summary.txt
+  actions_analysis: true         # stage 6 - action usage + SHA pinning
+  permissions_analysis: true     # stage 7 - workflow permissions
+  credentials_analysis: true     # stage 8 - OIDC vs long-lived
+  trigger_risk_analysis: true    # stage 9 - trigger config risk
