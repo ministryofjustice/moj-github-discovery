@@ -65,6 +65,7 @@ from core.models import (
     ReferenceItem,
     RepoArchivedAt,
     RepoDetails,
+    RepoRulesetsData,
     RepoTreeData,
     TriggerRiskFinding,
     WorkflowAnalysis,
@@ -431,7 +432,7 @@ class AlertsEndpoint(BaseEndpoint):
 
 
 class BranchProtectionEndpoint(BaseEndpoint):
-    """Default branch protection status and active settings.
+    """Default / Classic branch protection status and active settings.
 
     Migrated from ``utils.branch_protection``.
     """
@@ -458,12 +459,183 @@ class BranchProtectionEndpoint(BaseEndpoint):
                 settings.append("required_pr_reviews")
             if bp.get("enforce_admins", {}).get("enabled"):
                 settings.append("enforce_admins")
+
+            # Parse nested protection details from the branch response first.
+            enforce_admins_enabled = bool(
+                bp.get("enforce_admins", {}).get("enabled", False)
+            )
+            required_signatures_enabled = bool(
+                bp.get("required_signatures", {}).get("enabled", False)
+            )
+            pr_data = bp.get("required_pull_request_reviews") or {}
+
+            # Check for stale review dismissal setting being enabled
+            dismiss_stale_reviews = bool(
+                pr_data.get(
+                    "dismiss_stale_reviews",
+                    pr_data.get("dismiss_stale_reviews_on_push", False),
+                )
+            )
+            # check for code owner review requirement being enabled
+            require_code_owner_reviews = bool(
+                pr_data.get("require_code_owner_review", False)
+            )
+            # check for number of required approving reviews - default to 0 if not present
+            required_approving_review_count = int(
+                pr_data.get("required_approving_review_count", 0)
+            )
+
+            # Fallback to dedicated protection endpoints when nested details are not present.
+            if bp.get("enforce_admins") is None:
+                try:
+                    enforce_data = self.client.get(
+                        f"/repos/{owner}/{repo}/branches/{default_branch}/protection/enforce_admins"
+                    )
+                    enforce_admins_enabled = bool(enforce_data.get("enabled", False))
+                except Exception:
+                    pass
+
+            pr_keys = bp.get("required_pull_request_reviews")
+            if pr_keys is None or not all(
+                key in pr_keys
+                for key in (
+                    "dismiss_stale_reviews",
+                    "dismiss_stale_reviews_on_push",
+                    "require_code_owner_review",
+                    "required_approving_review_count",
+                )
+            ):
+                try:
+                    pr_data = self.client.get(
+                        f"/repos/{owner}/{repo}/branches/{default_branch}/protection/required_pull_request_reviews"
+                    )
+                    dismiss_stale_reviews = bool(
+                        pr_data.get("dismiss_stale_reviews_on_push", False)
+                    )
+                    require_code_owner_reviews = bool(
+                        pr_data.get("require_code_owner_review", False)
+                    )
+                    required_approving_review_count = int(
+                        pr_data.get("required_approving_review_count", 0)
+                    )
+                except Exception:
+                    pass
+
+            if bp.get("required_signatures") is None:
+                try:
+                    sig_data = self.client.get(
+                        f"/repos/{owner}/{repo}/branches/{default_branch}/protection/required_signatures"
+                    )
+                    required_signatures_enabled = bool(sig_data.get("enabled", False))
+                except Exception:
+                    pass
+
             return BranchProtection(
                 default_branch_protected=protected,
                 protection_settings=settings,
+                enforce_admins_enabled=enforce_admins_enabled,
+                dismiss_stale_reviews=dismiss_stale_reviews,
+                require_code_owner_reviews=require_code_owner_reviews,
+                required_approving_review_count=required_approving_review_count,
+                required_signatures_enabled=required_signatures_enabled,
             )
         except Exception as exc:
             return BranchProtection(branch_protection_access=str(exc))
+
+
+class RepoRulesetsEndpoint(BaseEndpoint):
+    """Repository-level rulesets targeting the default branch. Called if Classic branch protection is not enabled."""
+
+    @property
+    def name(self) -> str:
+        return "repo_rulesets"
+
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> RepoRulesetsData:
+        """Fetch full ruleset details for each branch ruleset targeting the default branch."""
+        try:
+            rulesets = self.client.get_paginated(f"/repos/{owner}/{repo}/rulesets")
+            if not isinstance(rulesets, list):
+                return RepoRulesetsData()
+
+            default_branch = repo_details.default_branch if repo_details else "main"
+            default_branch_names = {"~DEFAULT_BRANCH", default_branch, "main", "master"}
+
+            # Aggregate protection settings from all matching rulesets
+            enforce_admins = False
+            dismiss_stale_reviews = False
+            require_code_owner_reviews = False
+            required_approving_review_count = 0
+            required_signatures = False
+
+            # Process each ruleset targeting branches
+            for ruleset in rulesets:
+                if not isinstance(ruleset, dict):
+                    continue
+                if ruleset.get("target") != "branch":
+                    continue
+
+                conditions = ruleset.get("conditions", {})
+                ref_name = conditions.get("ref_name", {})
+                includes = ref_name.get("include", [])
+
+                ruleset_id = ruleset.get("id")
+                if not ruleset_id:
+                    continue
+
+                try:
+                    full_ruleset = self.client.get(
+                        f"/repos/{owner}/{repo}/rulesets/{ruleset_id}"
+                    )
+                    if not isinstance(full_ruleset, dict):
+                        continue
+
+                    rules = full_ruleset.get("rules", [])
+                    if not isinstance(rules, list):
+                        continue
+
+                    # Extract protection settings from rules
+                    for rule in rules:
+                        if not isinstance(rule, dict):
+                            continue
+
+                        rule_type = rule.get("type")
+                        if rule_type == "enforce_admins":
+                            enforce_admins = True
+                        elif rule_type == "required_signatures":
+                            required_signatures = True
+                        elif rule_type == "pull_request":
+                            params = rule.get("parameters", {})
+                            dismiss_stale_reviews = dismiss_stale_reviews or bool(
+                                params.get("dismiss_stale_reviews_on_push", False)
+                            )
+                            require_code_owner_reviews = (
+                                require_code_owner_reviews
+                                or bool(params.get("require_code_owner_review", False))
+                            )
+                            required_approving_review_count = max(
+                                required_approving_review_count,
+                                int(params.get("required_approving_review_count", 0)),
+                            )
+                except Exception as e:
+                    # If fetching full details fails, continue with next ruleset
+                    continue
+
+            result = RepoRulesetsData(
+                enforce_admins=enforce_admins,
+                dismiss_stale_reviews=dismiss_stale_reviews,
+                require_code_owner_reviews=require_code_owner_reviews,
+                required_approving_review_count=required_approving_review_count,
+                required_signatures=required_signatures,
+            )
+            return result
+
+        except Exception as exc:
+            return RepoRulesetsData(rulesets_access=str(exc))
 
 
 class CommunityProfileEndpoint(BaseEndpoint):
@@ -999,6 +1171,7 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
     RepoDetailsEndpoint,
     AlertsEndpoint,
     BranchProtectionEndpoint,
+    RepoRulesetsEndpoint,
     CommunityProfileEndpoint,
     CodeownersEndpoint,
     ForkTemplateEndpoint,
@@ -1010,6 +1183,7 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
 STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
     RepoDetailsEndpoint,
     BranchProtectionEndpoint,
+    RepoRulesetsEndpoint,
     AlertsEndpoint,
     CommunityProfileEndpoint,
     CodeownersEndpoint,
