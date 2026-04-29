@@ -1,0 +1,29 @@
+comparisons:
+  list_repos:
+    id_column: "full_name"
+    pat_file: "outputs/list_repos/list_repos_top_50_pat.xlsx"
+    app_file: "outputs/list_repos/list_repos_top_50_app.xlsx"
+    file_type: "excel"
+    comparison_level: "full"
+
+  archive_repos:
+    id_column: "full_name"
+    pat_file: "outputs/archive_repos/archivable_top_50_pat.csv"
+    app_file: "outputs/archive_repos/archivable_top_50_app.csv"
+    file_type: "csv"
+    comparison_level: "full"
+
+  org_security_posture:
+    id_column: "metric"
+    pat_file: "outputs/org_security_posture/moj-security-posture_pat.xlsx"
+    app_file: "outputs/org_security_posture/moj-security-posture_app.xlsx"
+    file_type: "excel"
+    sheet_name: "Summary"
+    comparison_level: "full"
+
+  alert_metrics:
+    id_column: "repo"
+    pat_file: "outputs/alert_metrics/alerts_top_50_pat.csv"
+    app_file: "outputs/alert_metrics/alerts_top_50_app.csv"
+    file_type: "csv"
+    comparison_level: "coverage" # only check repo coverage, skip field differences due to large data size

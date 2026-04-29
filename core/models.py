@@ -218,7 +218,7 @@ class ForkTemplateData(BaseModel):
     """Fork origin and template source details."""
 
     is_fork: bool = False
-    fork_source: Optional[str] = None
+    fork_source: Optional[str] = "N/A"
     is_generated_from_template: bool = False
     template_source: Optional[str] = None
 
