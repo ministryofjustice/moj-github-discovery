@@ -1,0 +1,24 @@
+name: Security Alert Check
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  security-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download security script
+        run: |
+          curl -L https://raw.githubusercontent.com/ministryofjustice/security-tools/main/alert_metrics.py -o alert_metrics.py
+          curl -L https://raw.githubusercontent.com/ministryofjustice/security-tools/main/sla_wrapper.py -o sla_wrapper.py
+          chmod +x alert_metrics.py sla_wrapper.py
+
+      - name: Run alert collector
+        run: ./alert_metrics.py --org xxx --output github_alerts_limited.csv
+
+      - name: Run SLA checker
+        run: ./sla_wrapper.py
