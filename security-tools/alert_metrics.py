@@ -186,7 +186,8 @@ def main() -> None:
     print(f"Done! Wrote {len(rows)} alerts to {args.output}")
     print(f"Repos with alerts: {len(repos_with_alerts)}")
 
-    summarise_results(args.output)
+    if rows:
+        summarise_results(args.output)
 
 
 if __name__ == "__main__":

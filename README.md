@@ -349,54 +349,12 @@ uv run python github_workflow.py --limit 50 --sort -workflow_count
 uv run python github_workflow.py --db custom.db --resume
 ```
 
-Assesses the posture of GitHub Actions workflows across repositories in an organization.
-It collects data on the following to identify repositories using Actions, archived repos with workflows, and candidates for disabling Actions:
-
-- workflow files
-- actions permissions
-- and latest workflow runs
-
-**Usage:**
-
-```bash
-uv run python github_workflow.py [options]
-```
-
-**Options:**
-
-- `--org` - GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)
-- `--repo-file` - YAML file with list of repos to scan (optional, defaults to scanning entire org)
-- `--db` - SQLite database path for caching (default: github_workflow_posture.db)
-- `--csv` - Export summary CSV
-- `--excel` - Export detailed Excel workbook
-- `--limit` - Limit number of repos to process
-- `--sort` - Sort repos by field (default: -workflow_count)
-- `--auth` - Specify auth method (pat, app, cli)
-- `--no-cache` - Ignore cached data
-- `--resume` - Resume from last interrupted run
-
 **Output:**
 
 - A human-readable summary report written to stdout and a file
 - CSV summary when `--csv` is provided
 - Excel workbook with detailed workflow data when `--excel` is provided
 - Cached results stored in the specified SQLite database
-
-**Examples:**
-
-```bash
-# Scan entire org and print summary
-uv run python github_workflow.py
-
-# Scan specific repos from file and export Excel
-uv run python github_workflow.py --repo-file repo_list.yaml --excel workflow_posture.xlsx
-
-# Limit to 50 repos and sort by workflow count
-uv run python github_workflow.py --limit 50 --sort -workflow_count
-
-# Use custom database and resume interrupted run
-uv run python github_workflow.py --db custom.db --resume
-```
 
 ### 7. `alert_metrics.py` - Assess GitHub Security Alerts
 

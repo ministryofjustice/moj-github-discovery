@@ -100,7 +100,7 @@ uv run python utils/audit_data_parity.py
 Custom config path:
 
 ```bash
-uv run python utils/audit_data_parity.py config/audit_parity_config.yaml
+uv run python utils/audit_data_parity.py
 ```
 
 ## Outputs

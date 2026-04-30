@@ -28,7 +28,9 @@ def compare_audit_data(config_path="config/audit_parity_config.yaml"):
 
     # Iterate through each comparison defined in the config
     for script_name, conf in config["comparisons"].items():
-        comparison_level = config.get("comparison_level", "full")
+        comparison_level = conf.get(
+            "comparison_level", config.get("comparison_level", "full")
+        )
         comparison_path = "audit_parity_output"
         if not os.path.exists(comparison_path):
             os.makedirs(comparison_path)
@@ -96,7 +98,7 @@ def compare_audit_data(config_path="config/audit_parity_config.yaml"):
                                 f"Field value differences found for {script_name}.py:"
                             )
                             diff_found = True
-                            diff_summary[col] = diffs[[id_column, pat_col, app_col]]
+                        diff_summary[col] = diffs[[id_column, pat_col, app_col]]
 
             if diff_found:
                 print(f"\nSummary of differences for {script_name}.py:")
