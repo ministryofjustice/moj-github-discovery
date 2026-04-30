@@ -53,6 +53,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Select GitHub authentication method explicitly",
     )
+    parser.add_argument("--repo", help="Scan only a single repository (owner/repo).")
     return parser.parse_args()
 
 
@@ -73,7 +74,10 @@ def main() -> None:
 
     # Configure GitHub connection and gather Repo Information
     client = GitHubHttpClient(auth_method=args.auth)
-    repos = list_org_repos(args.org, client)
+    if args.repo:
+        repos = [args.repo]
+    else:
+        repos = list_org_repos(args.org, client)
     if args.repo_limit:
         repos = repos[: args.repo_limit]
 
