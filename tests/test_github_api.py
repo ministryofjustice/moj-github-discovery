@@ -693,7 +693,9 @@ class TestForkTemplateEndpoint:
         )
         result = ForkTemplateEndpoint(client).fetch("o", "r")
         assert result.is_fork is False
-        assert result.fork_source is None
+        assert result.fork_source == "N/A"
+        assert result.is_generated_from_template is False
+        assert result.template_source == "N/A"
 
 
 # ── WorkflowsEndpoint ────────────────────────────────────────────────

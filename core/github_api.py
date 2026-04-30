@@ -699,11 +699,17 @@ class ForkTemplateEndpoint(BaseEndpoint):
             data = self.client.get(f"/repos/{owner}/{repo}")
             parent = data.get("parent") or data.get("source")
             template = data.get("template_repository")
+            is_fork = bool(data.get("fork"))
+            is_generated_from_template = bool(template)
             return ForkTemplateData(
-                is_fork=bool(data.get("fork")),
-                fork_source=parent["full_name"] if parent else None,
-                is_generated_from_template=bool(template),
-                template_source=template["full_name"] if template else None,
+                is_fork=is_fork,
+                fork_source=((parent or {}).get("full_name") if is_fork else "N/A"),
+                is_generated_from_template=is_generated_from_template,
+                template_source=(
+                    (template or {}).get("full_name")
+                    if is_generated_from_template
+                    else "N/A"
+                ),
             )
         except Exception:
             return ForkTemplateData()
