@@ -521,6 +521,9 @@ class BranchProtectionEndpoint(BaseEndpoint):
                 except Exception:
                     pass
 
+            if enforce_admins_enabled and "enforce_admins" not in settings:
+                settings.append("enforce_admins")
+
             if bp.get("required_signatures") is None:
                 try:
                     sig_data = self.client.get(
@@ -544,7 +547,10 @@ class BranchProtectionEndpoint(BaseEndpoint):
 
 
 class RepoRulesetsEndpoint(BaseEndpoint):
-    """Repository-level rulesets targeting the default branch. Called if Classic branch protection is not enabled."""
+    """Repository-level rulesets targeting the default branch.
+    This endpoint fetches repository rulesets information for the default
+    branch and may be collected alongside Classic branch protection data.
+    """
 
     @property
     def name(self) -> str:

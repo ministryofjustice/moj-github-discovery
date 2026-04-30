@@ -27,7 +27,7 @@ collection, storage, and report shaping.
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                CLI entry points                                                                 │
-│  list_repos.py  archive_repos.py  org_security_posture.py   github_workflow.py. alert_metrics.py  lfs_script.py │
+│  list_repos.py  archive_repos.py  org_security_posture.py   github_workflow.py, alert_metrics.py  lfs_script.py │
 │  dashboard.py / dashboard_cli.py (UI layers)                                                                    │
 └───────────────────────────────┬────────────────────┬────────────────────────────────────────────────────────────┘
         │                    │

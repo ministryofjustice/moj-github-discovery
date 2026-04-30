@@ -97,12 +97,6 @@ Default config path:
 uv run python utils/audit_data_parity.py
 ```
 
-Custom config path:
-
-```bash
-uv run python utils/audit_data_parity.py
-```
-
 ## Outputs
 
 Reports are written under `audit_parity_output/`:
@@ -131,5 +125,5 @@ Reports are written under `audit_parity_output/`:
 
 ## Implementation Note
 
-`comparison_level` is currently read from the top-level config object in `utils/audit_data_parity.py`, not per-script config entry.
-If per-script behavior is required, update the script to read `conf.get("comparison_level", "full")` inside the loop.
+`comparison_level` can be configured per comparison entry in `config/audit_parity_config.yaml`.
+`utils/audit_data_parity.py` reads this value from each comparison config entry using `conf.get(...)`.
