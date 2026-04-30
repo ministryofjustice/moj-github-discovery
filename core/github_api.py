@@ -496,14 +496,15 @@ class BranchProtectionEndpoint(BaseEndpoint):
                     pass
 
             pr_keys = bp.get("required_pull_request_reviews")
-            if pr_keys is None or not all(
-                key in pr_keys
-                for key in (
-                    "dismiss_stale_reviews",
-                    "dismiss_stale_reviews_on_push",
-                    "require_code_owner_review",
-                    "required_approving_review_count",
-                )
+            has_dismissal_key = pr_keys is not None and (
+                "dismiss_stale_reviews" in pr_keys
+                or "dismiss_stale_reviews_on_push" in pr_keys
+            )
+            if (
+                pr_keys is None
+                or not has_dismissal_key
+                or "require_code_owner_review" not in pr_keys
+                or "required_approving_review_count" not in pr_keys
             ):
                 try:
                     pr_data = self.client.get(
@@ -569,7 +570,6 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                 return RepoRulesetsData()
 
             default_branch = repo_details.default_branch if repo_details else "main"
-            default_branch_names = {"~DEFAULT_BRANCH", default_branch, "main", "master"}
 
             # Aggregate protection settings from all matching rulesets
             enforce_admins = False

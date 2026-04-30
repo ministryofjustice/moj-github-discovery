@@ -136,30 +136,30 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
             branch.default_branch_protected if branch else None
         ),
         "protection_settings": branch.protection_settings if branch else None,
-        "branch_protection_enforce_admins": branch.enforce_admins_enabled
-        if branch
-        else None,
-        "branch_protection_dismiss_stale_reviews": branch.dismiss_stale_reviews
-        if branch
-        else None,
-        "branch_protection_require_code_owner_reviews": branch.require_code_owner_reviews
-        if branch
-        else None,
-        "branch_protection_required_approving_review_count": branch.required_approving_review_count
-        if branch
-        else None,
-        "branch_protection_required_signatures": branch.required_signatures_enabled
-        if branch
-        else None,
-        "ruleset_enforce_admins": repo_rulesets.enforce_admins
-        if repo_rulesets
-        else None,
-        "ruleset_dismiss_stale_reviews": repo_rulesets.dismiss_stale_reviews
-        if repo_rulesets
-        else None,
-        "ruleset_require_code_owner_reviews": repo_rulesets.require_code_owner_reviews
-        if repo_rulesets
-        else None,
+        "branch_protection_enforce_admins": (
+            branch.enforce_admins_enabled if branch else None
+        ),
+        "branch_protection_dismiss_stale_reviews": (
+            branch.dismiss_stale_reviews if branch else None
+        ),
+        "branch_protection_require_code_owner_reviews": (
+            branch.require_code_owner_reviews if branch else None
+        ),
+        "branch_protection_required_approving_review_count": (
+            branch.required_approving_review_count if branch else None
+        ),
+        "branch_protection_required_signatures": (
+            branch.required_signatures_enabled if branch else None
+        ),
+        "ruleset_enforce_admins": (
+            repo_rulesets.enforce_admins if repo_rulesets else None
+        ),
+        "ruleset_dismiss_stale_reviews": (
+            repo_rulesets.dismiss_stale_reviews if repo_rulesets else None
+        ),
+        "ruleset_require_code_owner_reviews": (
+            repo_rulesets.require_code_owner_reviews if repo_rulesets else None
+        ),
         "ruleset_required_approving_review_count": repo_rulesets.required_approving_review_count
         if repo_rulesets
         else None,
