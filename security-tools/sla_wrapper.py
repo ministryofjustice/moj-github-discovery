@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 # SLA thresholds in days
 SLA = {
-    "critical": 7,
+    "critical": 0,
     "high": 14,
     "medium": 30,
     "low": 90,
