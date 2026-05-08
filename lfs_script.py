@@ -4,6 +4,7 @@ It collects repository data, checks blob sizes against predefined thresholds,
 and generates summary reports in CSV format.
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -29,6 +30,20 @@ OUTPUT_DIR = Path("repo_summaries")
 MASTER_CSV = Path("repos_exceeding_thresholds.xlsx")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse and return command-line arguments for later use within the LFS analysis script."""
+    parser = argparse.ArgumentParser(
+        description="Analyze GitHub repositories for large file storage (LFS) issues and generate summary reports."
+    )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        default=None,
+        help="Select GitHub authentication method explicitly (pat, app, or cli)",
+    )
+    return parser.parse_args()
 
 
 # Configuration for the master CSV file that summarizes repos exceeding thresholds
@@ -74,6 +89,7 @@ def main():
     and creates individual CSV summaries for each repository.
     """
     print("<LFS Analysis> Starting LFS analysis script", file=sys.stderr)
+    args = parse_args()
 
     # Ensure the repo list file exists
     if not YAML_FILE.exists():
@@ -94,6 +110,7 @@ def main():
     collector = RepoCollector(
         storage=storage,
         endpoints=[RepoDetailsEndpoint, GetRepoTreeEndpoint],
+        auth_method=args.auth,
     )
 
     # Collect data for the primary organization and specified repos, resuming if interrupted

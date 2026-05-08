@@ -26,6 +26,7 @@ from core.github_api import (
     RepoActionsPermissionsEndpoint,
     RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
+    RepoRulesetsEndpoint,
     WorkflowsEndpoint,
     dependency_supply_chain_summary,
     fetch_repo_alerts,
@@ -51,6 +52,7 @@ from core.models import (
     ReferenceData,
     RepoActionsPermissionsData,
     RepoDetails,
+    RepoRulesetsData,
     RepoTreeData,
     TriggerRiskFinding,
     WorkflowData,
@@ -288,7 +290,7 @@ class TestGetRepoTreeEndpoint:
 
 class TestEndpointRegistries:
     def test_repo_endpoints_count(self):
-        assert len(REPO_ENDPOINTS) == 9
+        assert len(REPO_ENDPOINTS) == 10
 
     def test_org_endpoints_count(self):
         assert len(ORG_ENDPOINTS) == 4
@@ -411,10 +413,21 @@ class TestBranchProtectionEndpoint:
                     "protection": {
                         "required_status_checks": {"strict": True},
                         "required_pull_request_reviews": {
-                            "dismiss_stale_reviews": True
+                            "dismiss_stale_reviews": True,
                         },
                         "enforce_admins": {"enabled": True},
                     },
+                },
+                "/repos/o/r/branches/main/protection/enforce_admins": {
+                    "enabled": True,
+                },
+                "/repos/o/r/branches/main/protection/required_pull_request_reviews": {
+                    "dismiss_stale_reviews_on_push": True,
+                    "require_code_owner_review": True,
+                    "required_approving_review_count": 2,
+                },
+                "/repos/o/r/branches/main/protection/required_signatures": {
+                    "enabled": True,
                 },
             }
         )
@@ -424,6 +437,38 @@ class TestBranchProtectionEndpoint:
         assert "required_status_checks" in result.protection_settings
         assert "required_pr_reviews" in result.protection_settings
         assert "enforce_admins" in result.protection_settings
+        assert result.enforce_admins_enabled is True
+        assert result.dismiss_stale_reviews is True
+        assert result.require_code_owner_reviews is True
+        assert result.required_approving_review_count == 2
+        assert result.required_signatures_enabled is True
+
+    def test_protected_branch_nested_review_settings_without_subendpoints(self):
+        details = RepoDetails(full_name="o/r", name="r", default_branch="main")
+        client = MockHttpClient(
+            {
+                "/repos/o/r/branches/main": {
+                    "protected": True,
+                    "protection": {
+                        "required_status_checks": {"strict": True},
+                        "required_pull_request_reviews": {
+                            "dismiss_stale_reviews": True,
+                            "require_code_owner_review": True,
+                            "required_approving_review_count": 2,
+                        },
+                        "enforce_admins": {"enabled": True},
+                        "required_signatures": {"enabled": True},
+                    },
+                },
+            }
+        )
+        result = BranchProtectionEndpoint(client).fetch("o", "r", details)
+        assert result.default_branch_protected is True
+        assert result.enforce_admins_enabled is True
+        assert result.dismiss_stale_reviews is True
+        assert result.require_code_owner_reviews is True
+        assert result.required_approving_review_count == 2
+        assert result.required_signatures_enabled is True
 
     def test_unprotected_branch(self):
         details = RepoDetails(full_name="o/r", name="r", default_branch="main")
@@ -438,6 +483,8 @@ class TestBranchProtectionEndpoint:
         result = BranchProtectionEndpoint(client).fetch("o", "r", details)
         assert result.default_branch_protected is False
         assert result.protection_settings == []
+        assert result.enforce_admins_enabled is False
+        assert result.dismiss_stale_reviews is False
 
     def test_api_error_returns_default(self):
         details = RepoDetails(full_name="o/r", name="r")
@@ -445,6 +492,103 @@ class TestBranchProtectionEndpoint:
         result = BranchProtectionEndpoint(client).fetch("o", "r", details)
         assert result.default_branch_protected is False
         assert result.branch_protection_access is not None
+
+
+# ── RepoRulesetsEndpoint ──────────────────────────────────────────────
+
+
+class TestRepoRulesetsEndpoint:
+    def test_rulesets_with_default_branch_protections(self):
+        details = RepoDetails(full_name="o/r", name="r", default_branch="main")
+        client = MockHttpClient(
+            {
+                "/repos/o/r/rulesets": [
+                    {
+                        "id": 1,
+                        "name": "Default branch rules",
+                        "target": "branch",
+                        "conditions": {"ref_name": {"include": ["main"]}},
+                        "rules": [],  # List endpoint doesn't include rules
+                    }
+                ],
+                "/repos/o/r/rulesets/1": {
+                    "id": 1,
+                    "name": "Default branch rules",
+                    "target": "branch",
+                    "conditions": {"ref_name": {"include": ["main"]}},
+                    "rules": [
+                        {"type": "required_signatures"},
+                        {
+                            "type": "pull_request",
+                            "parameters": {
+                                "dismiss_stale_reviews_on_push": True,
+                                "require_code_owner_review": True,
+                                "required_approving_review_count": 1,
+                            },
+                        },
+                        {"type": "enforce_admins"},
+                    ],
+                },
+            }
+        )
+        result = RepoRulesetsEndpoint(client).fetch("o", "r", details)
+        assert isinstance(result, RepoRulesetsData)
+        assert result.enforce_admins is True
+        assert result.required_signatures is True
+        assert result.dismiss_stale_reviews is True
+        assert result.require_code_owner_reviews is True
+        assert result.required_approving_review_count == 1
+
+    def test_rulesets_with_default_branch_placeholder(self):
+        details = RepoDetails(full_name="o/r", name="r", default_branch="main")
+        client = MockHttpClient(
+            {
+                "/repos/o/r/rulesets": [
+                    {
+                        "id": 1,
+                        "name": "Default branch rules",
+                        "target": "branch",
+                        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                        "rules": [],
+                    }
+                ],
+                "/repos/o/r/rulesets/1": {
+                    "id": 1,
+                    "name": "Default branch rules",
+                    "target": "branch",
+                    "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                    "rules": [{"type": "enforce_admins"}],
+                },
+            }
+        )
+        result = RepoRulesetsEndpoint(client).fetch("o", "r", details)
+        assert result.enforce_admins is True
+
+    def test_rulesets_not_targeting_default_branch(self):
+        details = RepoDetails(full_name="o/r", name="r", default_branch="main")
+        client = MockHttpClient(
+            {
+                "/repos/o/r/rulesets": [
+                    {
+                        "id": 1,
+                        "name": "Other branch rules",
+                        "target": "branch",
+                        "conditions": {"ref_name": {"include": ["develop"]}},
+                        "rules": [{"type": "required_signatures"}],
+                    }
+                ]
+            }
+        )
+        result = RepoRulesetsEndpoint(client).fetch("o", "r", details)
+        assert result.enforce_admins is False
+        assert result.required_signatures is False
+
+    def test_rulesets_api_error_returns_default(self):
+        details = RepoDetails(full_name="o/r", name="r")
+        client = MockHttpClient()  # no fixtures → raises
+        result = RepoRulesetsEndpoint(client).fetch("o", "r", details)
+        assert result.enforce_admins is False
+        assert result.rulesets_access is not None
 
 
 # ── CommunityProfileEndpoint ─────────────────────────────────────────
@@ -549,7 +693,9 @@ class TestForkTemplateEndpoint:
         )
         result = ForkTemplateEndpoint(client).fetch("o", "r")
         assert result.is_fork is False
-        assert result.fork_source is None
+        assert result.fork_source == "N/A"
+        assert result.is_generated_from_template is False
+        assert result.template_source == "N/A"
 
 
 # ── WorkflowsEndpoint ────────────────────────────────────────────────

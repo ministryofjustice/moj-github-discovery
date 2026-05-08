@@ -1,10 +1,12 @@
 # Repository Audit Tool
 
+[![Ministry of Justice Repository Compliance Badge](https://github-community.service.justice.gov.uk/repository-standards/api/moj-github-discovery/badge)](https://github-community.service.justice.gov.uk/repository-standards/moj-github-discovery)
+
 A comprehensive Python toolset for auditing GitHub repositories across organizations. Analyzes:
 
-- Security posture
-- CI/CD workflows
-- Branch Protection
+- Organisation Security posture
+- GitHub Actions Workflows
+- Repository Management Lifecycle (Archival Candidacy)
 - Security Alerts
 - Adherence to [MOJ Github community standards](https://github-community.service.justice.gov.uk/repository-standards/guidance).
 
@@ -23,11 +25,11 @@ The project is structured so CLI scripts stay thin while the `core/` package own
 collection, storage, and report shaping.
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                                CLI entry points                            │
-│  list_repos.py  archive_repos.py  org_security_posture.py                 │
-│  dashboard.py / dashboard_cli.py (UI layers)                              │
-└───────────────────────────────┬────────────────────┬───────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                CLI entry points                                                                 │
+│  list_repos.py  archive_repos.py  org_security_posture.py   github_workflow.py, alert_metrics.py  lfs_script.py │
+│  dashboard.py / dashboard_cli.py (UI layers)                                                                    │
+└───────────────────────────────┬────────────────────┬────────────────────────────────────────────────────────────┘
         │                    │
       ┌───────▼───────┐    ┌──────▼────────┐
       │  collector.py  │    │  compiler.py   │
@@ -292,6 +294,124 @@ uv run python testEnv.py
 # With custom token
 export GH_TOKEN=ghp_xxxx
 uv run python testEnv.py
+```
+
+### 6. `github_workflow.py` - Assess GitHub Actions Workflow Posture
+
+Assesses the posture of GitHub Actions workflows across repositories in an organization.
+It collects data on:
+
+- workflow files
+- actions permissions
+- latest runs
+
+to identify repositories using Actions, archived repos with workflows, and candidates for disabling Actions.
+
+**Usage:**
+
+```bash
+uv run python github_workflow.py [options]
+```
+
+**Options:**
+
+- `--org` - GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)
+- `--repo-file` - YAML file with list of repos to scan (optional, defaults to scanning entire org)
+- `--db` - SQLite database path for caching (default: github_workflow_posture.db)
+- `--csv` - Export summary CSV
+- `--excel` - Export detailed Excel workbook
+- `--limit` - Limit number of repos to process
+- `--sort` - Sort repos by field (default: -workflow_count)
+- `--auth` - Specify auth method (pat, app, cli)
+- `--no-cache` - Ignore cached data
+- `--resume` - Resume from last interrupted run
+
+**Output:**
+
+- A human-readable summary report written to stdout and a file
+- CSV summary when `--csv` is provided
+- Excel workbook with detailed workflow data when `--excel` is provided
+- Cached results stored in the specified SQLite database
+
+**Examples:**
+
+```bash
+# Scan entire org and print summary
+uv run python github_workflow.py
+
+# Scan specific repos from file and export Excel
+uv run python github_workflow.py --repo-file repo_list.yaml --excel workflow_posture.xlsx
+
+# Limit to 50 repos and sort by workflow count
+uv run python github_workflow.py --limit 50 --sort -workflow_count
+
+# Use custom database and resume interrupted run
+uv run python github_workflow.py --db custom.db --resume
+```
+
+**Output:**
+
+- A human-readable summary report written to stdout and a file
+- CSV summary when `--csv` is provided
+- Excel workbook with detailed workflow data when `--excel` is provided
+- Cached results stored in the specified SQLite database
+
+### 7. `alert_metrics.py` - Assess GitHub Security Alerts
+
+Exports repository-level alert metrics for code scanning, dependabot, and secret scanning alerts.
+
+**Usage:**
+
+```bash
+uv run python alert_metrics.py [options]
+```
+
+**Options:**
+
+- `--org` - GitHub organisation login (default: ministryofjustice)
+- `--output` - CSV output path (default: github_alerts_limited.csv)
+- `--max-alerts` - Maximum number of alert rows to export (default: 100000)
+- `--repo-limit` - Limit scanned repositories
+- `--auth` - Select GitHub authentication method explicitly (pat, app, cli)
+
+**Output:**
+
+- CSV file with alert details including id, type, repo, created_at, remediated_at, state, severity, ttr_days
+
+**Examples:**
+
+```bash
+# Export alerts for org to default CSV
+uv run python alert_metrics.py
+
+# Export to custom path with limits
+uv run python alert_metrics.py --output alerts.csv --max-alerts 5000 --repo-limit 100
+
+# Use specific auth method
+uv run python alert_metrics.py --auth pat
+```
+
+### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub
+
+Analyzes GitHub repositories for large file storage (LFS) issues by checking blob sizes against predefined thresholds (soft: 50MB, hard: 100MB).
+It generates a master Excel summary of repos exceeding thresholds and individual CSV summaries for each repository.
+
+**Usage:**
+
+```bash
+uv run python lfs_script.py
+```
+
+**Output:**
+
+- Master Excel file (`repos_exceeding_thresholds.xlsx`) summarizing repos with large files
+- Individual CSV files in `repo_summaries/` directory for each repository's blob details
+
+**Examples:**
+
+```bash
+# Run the LFS analysis
+uv run python lfs_script.py
 ```
 
 ## Database Schema

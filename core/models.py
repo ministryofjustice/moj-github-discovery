@@ -119,12 +119,29 @@ class AlertData(BaseModel):
 
 
 class BranchProtection(BaseModel):
-    """Default branch protection status and active settings."""
+    """Classic branch protection status and active settings."""
 
     default_branch_protected: bool = False
     protection_settings: list[str] = Field(default_factory=list)
+    enforce_admins_enabled: bool = False
+    dismiss_stale_reviews: bool = False
+    require_code_owner_reviews: bool = False
+    required_approving_review_count: int = 0
+    required_signatures_enabled: bool = False
     branch_protection_access: Optional[str] = None
     """Set to an error message when the API call failed (e.g. no admin access)."""
+
+
+class RepoRulesetsData(BaseModel):
+    """Repository-level rulesets targeting the default branch."""
+
+    enforce_admins: bool = False
+    dismiss_stale_reviews: bool = False
+    require_code_owner_reviews: bool = False
+    required_approving_review_count: int = 0
+    required_signatures: bool = False
+    rulesets_access: Optional[str] = None
+    """Set to an error message when the API call failed."""
 
 
 class CodeownersData(BaseModel):
@@ -365,6 +382,7 @@ class RepoData(BaseModel):
     repo_archived_at: Optional[RepoArchivedAt] = None
     alerts: Optional[AlertData] = None
     branch_protection: Optional[BranchProtection] = None
+    repo_rulesets: Optional[RepoRulesetsData] = None
     community: Optional[CommunityProfile] = None
     codeowners: Optional[CodeownersData] = None
     workflows: Optional[WorkflowData] = None

@@ -131,8 +131,7 @@ def main() -> None:
         STANDARD_REPO_AUDIT_ENDPOINTS if args.standard_endpoints else REPO_ENDPOINTS
     )
     collector = RepoCollector(
-        storage=storage,
-        endpoints=selected_endpoints,
+        storage=storage, endpoints=selected_endpoints, auth_method=args.auth
     )
 
     primary_org = repo_list[0].split("/", 1)[0]
