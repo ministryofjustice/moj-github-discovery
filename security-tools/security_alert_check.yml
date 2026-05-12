@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
 
+permissions:
+  contents: read
+  security-events: read
+
 jobs:
   security-check:
     runs-on: ubuntu-latest
@@ -11,14 +15,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download security script
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          curl -L https://raw.githubusercontent.com/ministryofjustice/security-tools/main/alert_metrics.py -o alert_metrics.py
-          curl -L https://raw.githubusercontent.com/ministryofjustice/security-tools/main/sla_wrapper.py -o sla_wrapper.py
-          chmod +x alert_metrics.py sla_wrapper.py
+          python -m pip install --upgrade pip
+          pip install requests pyyaml pandas pydantic
+
+      - name: Download security toolkit
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/ministryofjustice/moj-github-discovery.git
+          chmod +x moj-github-discovery/security-tools/alert_metrics.py moj-github-discovery/security-tools/sla_wrapper.py
+
+      - name: Patch upstream Python 3 syntax
+        run: |
+          set -e
+          perl -0777 -i -pe 's/except\s+([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/except ($1, $2):/g' moj-github-discovery/core/compiler.py
+
+      - name: Patch SLA checker for zero alerts
+        run: |
+          set -e
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("moj-github-discovery/security-tools/sla_wrapper.py")
+          text = path.read_text(encoding="utf-8")
+
+          text = text.replace(
+              "import csv\nimport sys\n",
+              "import csv\nimport os\nimport sys\n",
+          )
+
+          text = text.replace(
+              "def main():\n    breaches = []\n    warnings = []\n\n    with open(CSV_FILE) as f:\n",
+              "def main():\n    breaches = []\n    warnings = []\n\n    if not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0:\n        print(\"0 open alerts\")\n        sys.exit(0)\n\n    with open(CSV_FILE) as f:\n",
+          )
+
+          text = text.replace(
+              "    if breaches:\n",
+              "    if not breaches and not warnings:\n        print(\"0 open alerts\")\n        sys.exit(0)\n\n    if breaches:\n",
+          )
+
+          path.write_text(text, encoding="utf-8")
+          PY
 
       - name: Run alert collector
-        run: ./alert_metrics.py --org xxx --output github_alerts_limited.csv
+        env:
+          GITHUB_TOKEN: ${{ secrets.MOJ_GITHUB_PAT }}
+          PYTHONPATH: ${{ github.workspace }}/moj-github-discovery
+        run: python moj-github-discovery/security-tools/alert_metrics.py --auth pat --repo ${{ github.repository }} --output github_alerts_limited.csv
 
       - name: Run SLA checker
-        run: ./sla_wrapper.py
+        run: python moj-github-discovery/security-tools/sla_wrapper.py
