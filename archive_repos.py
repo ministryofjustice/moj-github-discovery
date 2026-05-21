@@ -22,10 +22,12 @@ from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
     DependencyGraphEndpoint,
+    GetRepoTreeEndpoint,
     RepoArchivedAtEndpoint,
     RepoDetailsEndpoint,
 )
-from core.models import RepoData
+from core.github_client import GitHubHttpClient
+from core.models import RepoData, RepoDetails
 from core.storage import SqliteRepoStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -88,6 +90,29 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Select GitHub authentication method explicitly",
     )
+    parser.add_argument(
+        "--namespace-crossref",
+        action="store_true",
+        help=(
+            "Cross-reference archived repositories against namespace folders "
+            "in a separate repository (opt-in)."
+        ),
+    )
+    parser.add_argument(
+        "--namespace-repo",
+        default="cloud-platform-environments",
+        help="Repository containing namespace folders (default: cloud-platform-environments).",
+    )
+    parser.add_argument(
+        "--namespace-branch",
+        default="main",
+        help="Branch to inspect in --namespace-repo (default: main).",
+    )
+    parser.add_argument(
+        "--namespace-root",
+        default="namespaces",
+        help="Top-level folder containing namespace directories (default: namespaces).",
+    )
     return parser.parse_args()
 
 
@@ -116,6 +141,114 @@ def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
         )
     )
     return [full_name for full_name, _ in repo_rows]
+
+
+def _list_archived_repo_names_from_storage(
+    org: str,
+    storage: SqliteRepoStorage,
+) -> set[str]:
+    archived_repo_names: set[str] = set()
+    for full_name, data in storage.read_all():
+        if not full_name.startswith(f"{org}/"):
+            continue
+        repo = data.repo_details
+        if repo and repo.archived:
+            archived_repo_names.add(full_name.split("/", 1)[-1])
+    return archived_repo_names
+
+
+def _extract_namespace_folders(
+    paths: list[tuple[str, str | None]],
+    namespace_root: str,
+) -> set[str]:
+    namespace_folders: set[str] = set()
+    root = namespace_root.strip("/")
+    if not root:
+        return namespace_folders
+
+    for path, item_type in paths:
+        if item_type != "tree":
+            continue
+        parts = path.split("/")
+        if len(parts) == 2 and parts[0] == root:
+            namespace_folders.add(parts[1])
+
+    return namespace_folders
+
+
+def _load_namespace_folders(
+    org: str,
+    namespace_repo: str,
+    namespace_branch: str,
+    namespace_root: str,
+    auth_method: str | None,
+) -> set[str]:
+    client = GitHubHttpClient(auth_method=auth_method)
+    endpoint = GetRepoTreeEndpoint(client)
+    repo_details = RepoDetails(
+        full_name=f"{org}/{namespace_repo}",
+        name=namespace_repo,
+        default_branch=namespace_branch,
+    )
+    repo_tree = endpoint.fetch(
+        org,
+        namespace_repo,
+        repo_details=repo_details,
+    )
+
+    if repo_tree.access != "ok":
+        raise RuntimeError(
+            f"Unable to load namespace tree for {org}/{namespace_repo}@{namespace_branch}: "
+            f"{repo_tree.access}"
+        )
+
+    tree_entries = [(item.path, item.type) for item in repo_tree.tree]
+    return _extract_namespace_folders(tree_entries, namespace_root)
+
+
+def _append_flag(flag_text: str | None, flag: str) -> str:
+    existing = [part.strip() for part in (flag_text or "").split(",") if part.strip()]
+    if flag not in existing:
+        existing.append(flag)
+    return ", ".join(existing)
+
+
+def _apply_namespace_crossref(
+    rows: list[dict[str, Any]],
+    namespace_folders: set[str],
+) -> None:
+    for row in rows:
+        repo_name = row.get("repo") or row.get("full_name", "").split("/", 1)[-1]
+        has_namespace_folder = repo_name in namespace_folders
+        archived_with_namespace_folder = (
+            bool(row.get("archived")) and has_namespace_folder
+        )
+
+        row["has_namespace_folder"] = has_namespace_folder
+        row["archived_with_namespace_folder"] = archived_with_namespace_folder
+
+        if archived_with_namespace_folder:
+            row["flags"] = _append_flag(
+                row.get("flags"),
+                "archived_with_namespace_folder",
+            )
+
+
+def _build_namespace_crossref_summary(
+    rows: list[dict[str, Any]],
+    namespace_folders: set[str],
+    orphaned: list[str],
+) -> dict[str, Any]:
+    archived_rows = [row for row in rows if bool(row.get("archived"))]
+    archived_with_namespace = [
+        row for row in archived_rows if bool(row.get("archived_with_namespace_folder"))
+    ]
+
+    return {
+        "namespace_folders_total": len(namespace_folders),
+        "archived_repos_with_namespace_folder": len(archived_with_namespace),
+        "orphaned_namespaces": orphaned,
+    }
 
 
 def _build_row(org: str, full_name: str, data: RepoData) -> dict[str, Any]:
@@ -275,12 +408,42 @@ def main() -> None:
         collector.collect(args.org, repos=repo_list, resume=True)
 
     rows: list[dict[str, Any]] = []
+    namespace_crossref_summary: dict[str, Any] | None = None
     for full_name in repo_list:
         print(f"Collecting data for repo: {full_name}", file=sys.stderr)
         data = storage.read(full_name)
         if data is None:
             continue
         rows.append(_build_row(args.org, full_name, data))
+
+    if args.namespace_crossref:
+        namespace_folders = _load_namespace_folders(
+            org=args.org,
+            namespace_repo=args.namespace_repo,
+            namespace_branch=args.namespace_branch,
+            namespace_root=args.namespace_root,
+            auth_method=args.auth,
+        )
+        _apply_namespace_crossref(rows, namespace_folders)
+
+        archived_repo_names = _list_archived_repo_names_from_storage(args.org, storage)
+        orphaned = sorted(namespace_folders.intersection(archived_repo_names))
+
+        print(
+            f"Namespace cross-reference enabled: {len(orphaned)} archived repo(s) "
+            "still have namespace folders",
+            file=sys.stderr,
+        )
+        if orphaned:
+            print("Archived repos with namespace folders:", file=sys.stderr)
+            for repo_name in orphaned:
+                print(f"- {repo_name}", file=sys.stderr)
+
+        namespace_crossref_summary = _build_namespace_crossref_summary(
+            rows=rows,
+            namespace_folders=namespace_folders,
+            orphaned=orphaned,
+        )
 
     df = _compute_derived_columns(pd.DataFrame(rows))
 
@@ -296,7 +459,23 @@ def main() -> None:
         df.to_csv(args.csv, index=False)
         print(f"Wrote {args.csv}", file=sys.stderr)
     elif not args.audit_db:
-        print(json.dumps(records, indent=2))
+        if args.namespace_crossref:
+            print(
+                json.dumps(
+                    {
+                        "records": records,
+                        "namespace_crossref_summary": namespace_crossref_summary
+                        or {
+                            "namespace_folders_total": 0,
+                            "archived_repos_with_namespace_folder": 0,
+                            "orphaned_namespaces": [],
+                        },
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print(json.dumps(records, indent=2))
 
     print(f"Processed {len(records)} repositories", file=sys.stderr)
 
