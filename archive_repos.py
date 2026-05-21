@@ -147,6 +147,15 @@ def _list_archived_repo_names_from_storage(
     org: str,
     storage: SqliteRepoStorage,
 ) -> set[str]:
+    """Extract names of archived repositories for the given organization from storage.
+
+    Args:
+        org: GitHub organization name to filter repos by.
+        storage: SqliteRepoStorage instance to read repo data from.
+
+    Returns:
+        Set of archived repository names (without org prefix) for the given org.
+    """
     archived_repo_names: set[str] = set()
     for full_name, data in storage.read_all():
         if not full_name.startswith(f"{org}/"):
@@ -161,6 +170,18 @@ def _extract_namespace_folders(
     paths: list[tuple[str, str | None]],
     namespace_root: str,
 ) -> set[str]:
+    """Extract namespace folder names from a list of repository tree paths.
+
+    Expects paths to be in format 'namespace_root/folder_name' and filters
+    for directory items (type='tree') only.
+
+    Args:
+        paths: List of (path, item_type) tuples from a GitHub repo tree.
+        namespace_root: Root folder name to search within (e.g., 'namespaces').
+
+    Returns:
+        Set of namespace folder names found under namespace_root.
+    """
     namespace_folders: set[str] = set()
     root = namespace_root.strip("/")
     if not root:
@@ -183,6 +204,24 @@ def _load_namespace_folders(
     namespace_root: str,
     auth_method: str | None,
 ) -> set[str]:
+    """Load namespace folder names from a GitHub repository tree.
+
+    Fetches the tree structure of a specified repository and branch, then
+    extracts folder names from within the namespace_root directory.
+
+    Args:
+        org: GitHub organization name.
+        namespace_repo: Repository name containing namespace folders.
+        namespace_branch: Branch to inspect in the namespace repository.
+        namespace_root: Top-level folder containing namespace directories.
+        auth_method: GitHub authentication method (e.g., 'github_app', 'token').
+
+    Returns:
+        Set of namespace folder names from the repository.
+
+    Raises:
+        RuntimeError: If the repository tree cannot be accessed.
+    """
     client = GitHubHttpClient(auth_method=auth_method)
     endpoint = GetRepoTreeEndpoint(client)
     repo_details = RepoDetails(
@@ -207,6 +246,15 @@ def _load_namespace_folders(
 
 
 def _append_flag(flag_text: str | None, flag: str) -> str:
+    """Append a flag to a comma-separated flag string, avoiding duplicates.
+
+    Args:
+        flag_text: Existing comma-separated flags or None.
+        flag: Flag to append.
+
+    Returns:
+        Updated comma-separated flag string.
+    """
     existing = [part.strip() for part in (flag_text or "").split(",") if part.strip()]
     if flag not in existing:
         existing.append(flag)
@@ -217,6 +265,20 @@ def _apply_namespace_crossref(
     rows: list[dict[str, Any]],
     namespace_folders: set[str],
 ) -> None:
+    """Apply namespace cross-reference logic to repository rows.
+
+    For each row, checks if the repository has a corresponding namespace
+    folder and marks archived repos that still have namespace folders with
+    the 'archived_with_namespace_folder' flag.
+
+    Args:
+        rows: List of repository record dictionaries to augment.
+        namespace_folders: Set of known namespace folder names.
+
+    Side effects:
+        Modifies each row to add 'has_namespace_folder' and
+        'archived_with_namespace_folder' keys and updates 'flags'.
+    """
     for row in rows:
         repo_name = row.get("repo") or row.get("full_name", "").split("/", 1)[-1]
         has_namespace_folder = repo_name in namespace_folders
@@ -239,6 +301,20 @@ def _build_namespace_crossref_summary(
     namespace_folders: set[str],
     orphaned: list[str],
 ) -> dict[str, Any]:
+    """Build a summary of namespace cross-reference analysis results.
+
+    Args:
+        rows: Repository records (typically after _apply_namespace_crossref).
+        namespace_folders: Set of known namespace folder names.
+        orphaned: List of archived repository names with namespace folders.
+
+    Returns:
+        Dictionary with keys:
+            - namespace_folders_total: Total number of namespace folders.
+            - archived_repos_with_namespace_folder: Count of archived repos
+              with matching namespace folders.
+            - orphaned_namespaces: List of archived repo names with folders.
+    """
     archived_rows = [row for row in rows if bool(row.get("archived"))]
     archived_with_namespace = [
         row for row in archived_rows if bool(row.get("archived_with_namespace_folder"))
