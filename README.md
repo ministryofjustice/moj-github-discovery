@@ -132,12 +132,17 @@ uv run python archive_repos.py <org> [options]
   - If provided without a path, it also defaults to `repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+- `--namespace-crossref` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
+- `--namespace-repo <name>` - Namespace repository name (default: `cloud-platform-environments`).
+- `--namespace-branch <name>` - Branch to inspect in namespace repository (default: `main`).
+- `--namespace-root <path>` - Top-level namespace directory path (default: `namespaces`).
 
 **Output:**
 
 - CSV when `--csv` is used
 - Core storage is persisted in SQLite (`repo_data` table)
 - JSON to stdout when `--csv` is not provided and `--audit-db` is not explicitly supplied
+- When `--namespace-crossref` is enabled and JSON is printed, output is an object with `records` and `namespace_crossref_summary`
 - Elapsed time and progress information on stderr
 
 **Useful fields in the output:**
@@ -145,6 +150,7 @@ uv run python archive_repos.py <org> [options]
 - `days_since_push` and `age_days` to identify stale repositories
 - archived-repo follow-up indicators such as open issues, stars, watchers, and references from other repositories
 - dependency graph and internal reference signals that help flag archives needing another review
+- `has_namespace_folder` and `archived_with_namespace_folder` when `--namespace-crossref` is enabled
 
 **Examples:**
 
@@ -163,6 +169,9 @@ uv run python archive_repos.py ministryofjustice --page-num 2 --audit-db
 
 # Sort by oldest last push and print JSON to stdout
 uv run python archive_repos.py ministryofjustice --sort days_since_push
+
+# Opt-in: identify archived repos that still have namespace folders
+uv run python archive_repos.py ministryofjustice --namespace-crossref
 ```
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
