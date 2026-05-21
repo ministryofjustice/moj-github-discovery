@@ -16,7 +16,7 @@ import os
 import sys
 import time
 import sqlite3
-from collections import Counter
+import pandas as pd
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -478,86 +478,134 @@ def actions_analysis(
     )
     print(f"Wrote github_actions_usage_detail.csv ({usage_detail_count} rows)")
 
-    action_counts = Counter(a["action_name"] for a in all_actions)
-    usage_summary = [
-        {"action_name": name, "times_used": count}
-        for name, count in action_counts.most_common()
-    ]
-    usage_summary_count = CsvCompiler.write_rows(
-        "github_actions_usage_summary.csv", usage_summary
-    )
-    print(f"Wrote github_actions_usage_summary.csv ({usage_summary_count} rows)")
+    # If nothing was parsed, write empty CSVs with the right headers and bail.
+    if not all_actions:
+        empty_usage = pd.DataFrame(columns=["action_name", "times_used"])
+        empty_owner = pd.DataFrame(columns=["owner", "actions_referenced"])
+        empty_pinning = pd.DataFrame(
+            columns=[
+                "repo",
+                "total_refs",
+                "pinned",
+                "unpinned",
+                "compliance_pct",
+            ]
+        )
+        empty_usage.to_csv(
+            "github_actions_usage_summary.csv", index=False, lineterminator="\r\n"
+        )
+        empty_owner.to_csv(
+            "github_actions_owner_summary.csv", index=False, lineterminator="\r\n"
+        )
+        empty_pinning.to_csv(
+            "github_actions_pinning_per_repo.csv", index=False, lineterminator="\r\n"
+        )
+        print("Wrote github_actions_usage_summary.csv (0 rows)")
+        print("Wrote github_actions_owner_summary.csv (0 rows)")
+        print("Wrote github_actions_pinning_per_repo.csv (0 rows)")
+        print("Unique actions: 0")
+        print("Unique owners: 0")
+        print("\n--- Analysing SHA pinning compliance ---")
+        print("Total action references: 0")
+        print("Pinned to SHA: 0")
+        print("Unpinned (mutable tag): 0")
+        print("Wrote github_actions_unpinned_detail.csv (0 rows)")
+        print("Repos with unpinned actions: 0")
+        print("Repos fully pinned: 0")
+        return
 
-    owner_counts = Counter(a["owner"] for a in all_actions)
-    owner_summary = [
-        {"owner": o, "actions_referenced": count}
-        for o, count in owner_counts.most_common()
-    ]
-    owner_summary_count = CsvCompiler.write_rows(
-        "github_actions_owner_summary.csv", owner_summary
-    )
-    print(f"Wrote github_actions_owner_summary.csv ({owner_summary_count} rows)")
+    # Build the master DataFrame once and reuse for every aggregation.
+    df = pd.DataFrame(all_actions)
 
-    print(f"Unique actions: {len(usage_summary)}")
-    print(f"Unique owners: {len(owner_summary)}")
+    # Action usage summary: count references per action_name, sort descending.
+    usage_summary_df = (
+        df.groupby("action_name", sort=False)
+        .size()
+        .reset_index(name="times_used")
+        .sort_values(by="times_used", ascending=False, kind="stable")
+        .reset_index(drop=True)
+    )
+    usage_summary_df.to_csv(
+        "github_actions_usage_summary.csv", index=False, lineterminator="\r\n"
+    )
+    print(f"Wrote github_actions_usage_summary.csv ({len(usage_summary_df)} rows)")
+
+    # Owner summary: count references per owner, sort descending.
+    owner_summary_df = (
+        df.groupby("owner", sort=False)
+        .size()
+        .reset_index(name="actions_referenced")
+        .sort_values(by="actions_referenced", ascending=False, kind="stable")
+        .reset_index(drop=True)
+    )
+    owner_summary_df.to_csv(
+        "github_actions_owner_summary.csv", index=False, lineterminator="\r\n"
+    )
+    print(f"Wrote github_actions_owner_summary.csv ({len(owner_summary_df)} rows)")
+
+    print(f"Unique actions: {len(usage_summary_df)}")
+    print(f"Unique owners: {len(owner_summary_df)}")
 
     # 6b. SHA pinning compliance
     print("\n--- Analysing SHA pinning compliance ---")
 
-    unpinned_actions = [
-        a for a in all_actions if not a["is_pinned"] and a["version"] != "none"
-    ]
-    pinned_actions = [a for a in all_actions if a["is_pinned"]]
+    # Unpinned detail: rows that have a version but aren't pinned to a SHA.
+    versioned = df[df["version"] != "none"]
+    unpinned_df = versioned[~versioned["is_pinned"]]
+    pinned_df = df[df["is_pinned"]]
 
-    print(f"Total action references: {len(all_actions)}")
-    print(f"Pinned to SHA: {len(pinned_actions)}")
-    print(f"Unpinned (mutable tag): {len(unpinned_actions)}")
+    print(f"Total action references: {len(df)}")
+    print(f"Pinned to SHA: {len(pinned_df)}")
+    print(f"Unpinned (mutable tag): {len(unpinned_df)}")
 
     unpinned_count = CsvCompiler.write_rows(
-        "github_actions_unpinned_detail.csv", unpinned_actions
+        "github_actions_unpinned_detail.csv", unpinned_df.to_dict("records")
     )
     print(f"Wrote github_actions_unpinned_detail.csv ({unpinned_count} rows)")
 
-    repo_pinning: Dict[str, Dict[str, int]] = {}
-    for a in all_actions:
-        if a["version"] == "none":
-            continue
-        repo = a["repo"]
-        if repo not in repo_pinning:
-            repo_pinning[repo] = {"total": 0, "pinned": 0, "unpinned": 0}
-        repo_pinning[repo]["total"] += 1
-        if a["is_pinned"]:
-            repo_pinning[repo]["pinned"] += 1
-        else:
-            repo_pinning[repo]["unpinned"] += 1
-
-    pinning_summary = [
-        {
-            "repo": repo,
-            "total_refs": counts["total"],
-            "pinned": counts["pinned"],
-            "unpinned": counts["unpinned"],
-            "compliance_pct": round(
-                counts["pinned"] / max(counts["total"], 1) * 100, 1
-            ),
-        }
-        for repo, counts in sorted(
-            repo_pinning.items(),
-            key=lambda x: x[1]["unpinned"],
-            reverse=True,
+    # Per-repo pinning compliance: total / pinned / unpinned / pct, sorted by
+    # most unpinned first.
+    if versioned.empty:
+        pinning_df = pd.DataFrame(
+            columns=[
+                "repo",
+                "total_refs",
+                "pinned",
+                "unpinned",
+                "compliance_pct",
+            ]
         )
-    ]
+    else:
+        pinning_df = (
+            versioned.groupby("repo", sort=False)
+            .agg(
+                total_refs=("is_pinned", "size"),
+                pinned=("is_pinned", "sum"),
+            )
+            .reset_index()
+        )
+        pinning_df["unpinned"] = pinning_df["total_refs"] - pinning_df["pinned"]
+        pinning_df["compliance_pct"] = (
+            (pinning_df["pinned"] / pinning_df["total_refs"].clip(lower=1)) * 100
+        ).round(1)
+        pinning_df = pinning_df[
+            ["repo", "total_refs", "pinned", "unpinned", "compliance_pct"]
+        ]
+        pinning_df = pinning_df.sort_values(
+            by="unpinned", ascending=False, kind="stable"
+        ).reset_index(drop=True)
 
-    pinning_count = CsvCompiler.write_rows(
-        "github_actions_pinning_per_repo.csv", pinning_summary
+    pinning_df.to_csv(
+        "github_actions_pinning_per_repo.csv", index=False, lineterminator="\r\n"
     )
-    print(f"Wrote github_actions_pinning_per_repo.csv ({pinning_count} rows)")
+    print(f"Wrote github_actions_pinning_per_repo.csv ({len(pinning_df)} rows)")
     print(
         f"Repos with unpinned actions: "
-        f"{sum(1 for s in pinning_summary if s['unpinned'] > 0)}"
+        f"{int((pinning_df['unpinned'] > 0).sum()) if not pinning_df.empty else 0}"
     )
     print(
-        f"Repos fully pinned: {sum(1 for s in pinning_summary if s['unpinned'] == 0)}"
+        f"Repos fully pinned: "
+        f"{int((pinning_df['unpinned'] == 0).sum()) if not pinning_df.empty else 0}"
     )
 
 
@@ -582,13 +630,17 @@ def permissions_analysis(
     )
     print(f"Wrote github_workflow_permissions.csv ({perms_count} rows)")
 
-    no_block = sum(1 for p in all_permissions if p["finding"] == "no_permissions_block")
-    write_all = sum(1 for p in all_permissions if p["finding"] == "write-all")
-    has_write_count = sum(
-        1 for p in all_permissions if p["finding"] == "has_write_scope"
-    )
-    compliant_count = sum(1 for p in all_permissions if p["finding"] == "compliant")
-    skipped = sum(1 for p in all_permissions if p["finding"] == "could_not_load")
+    # Tally findings via pandas value_counts for clarity.
+    if all_permissions:
+        finding_counts = pd.DataFrame(all_permissions)["finding"].value_counts()
+    else:
+        finding_counts = pd.Series(dtype=int)
+
+    no_block = int(finding_counts.get("no_permissions_block", 0))
+    write_all = int(finding_counts.get("write-all", 0))
+    has_write_count = int(finding_counts.get("has_write_scope", 0))
+    compliant_count = int(finding_counts.get("compliant", 0))
+    skipped = int(finding_counts.get("could_not_load", 0))
 
     print(f"No permissions block: {no_block}")
     print(f"permissions: write-all: {write_all}")
