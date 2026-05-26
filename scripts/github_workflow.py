@@ -21,6 +21,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
 from core.config import AuditConfig, load_audit_config

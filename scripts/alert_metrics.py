@@ -5,8 +5,13 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import pandas as pd
+import os
 import sys
 from typing import Any, Callable
+
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos

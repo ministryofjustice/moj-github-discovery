@@ -10,6 +10,10 @@ import sys
 import time
 from typing import Any, Literal
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 
 from core.collector import OrgEndpointCollector

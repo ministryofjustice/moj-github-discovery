@@ -19,6 +19,10 @@ import dash
 from dash import dcc, html, callback, Input, Output, State, ALL, callback_context
 import pandas as pd
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from core.collector import RepoCollector
 from core.github_api import (
     STANDARD_REPO_AUDIT_ENDPOINTS,

@@ -10,6 +10,10 @@ import sys
 import time
 from typing import Any
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 
 from core.collector import RepoCollector
@@ -22,7 +26,21 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DB_PATH = os.path.join(SCRIPT_DIR, "repo_audit.db")
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, PROJECT_ROOT)
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
+
+# Ensure output directories exist
+for directory in (OUTPUT_DIR, INTERNAL_DIR):
+    os.makedirs(directory, exist_ok=True)
+
+# Set Default Database Path
+DEFAULT_DB_PATH = os.path.join(INTERNAL_DIR, "repo_audit.db")
 
 __start_time: float | None = None
 
@@ -153,11 +171,12 @@ def main() -> None:
     summary = build_repo_summary_table(df)
 
     if args.excel:
+        excel_path = os.path.join(OUTPUT_DIR, args.excel)
         try:
-            with pd.ExcelWriter(args.excel, engine="openpyxl") as writer:
+            with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
                 df.to_excel(writer, index=False, sheet_name="Repos")
                 summary.to_excel(writer, index=False, sheet_name="Summary")
-            print(f"Wrote {args.excel}", file=sys.stderr)
+            print(f"Wrote {excel_path}", file=sys.stderr)
         except ImportError:
             print(
                 "Excel export requires the openpyxl package. "
