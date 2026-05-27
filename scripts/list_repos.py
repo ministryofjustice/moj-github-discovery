@@ -25,6 +25,7 @@ from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 
+# Base directory configurations
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
