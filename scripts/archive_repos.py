@@ -35,7 +35,18 @@ from core.models import RepoData, RepoDetails
 from core.storage import SqliteRepoStorage
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DB_PATH = os.path.join(SCRIPT_DIR, "repo_audit.db")
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
+
+# Ensure output directories exist
+for directory in (OUTPUT_DIR, INTERNAL_DIR):
+    os.makedirs(directory, exist_ok=True)
+
+# Set Default Database Path
+DEFAULT_DB_PATH = os.path.join(INTERNAL_DIR, "repo_audit.db")
 
 __start_time: float | None = None
 
@@ -536,8 +547,9 @@ def main() -> None:
     records = df.to_dict(orient="records")
 
     if args.csv:
-        df.to_csv(args.csv, index=False)
-        print(f"Wrote {args.csv}", file=sys.stderr)
+        csv_path = os.path.join(OUTPUT_DIR, args.csv)
+        df.to_csv(csv_path, index=False)
+        print(f"Wrote {csv_path}", file=sys.stderr)
     elif not args.audit_db:
         if args.namespace_crossref:
             print(
