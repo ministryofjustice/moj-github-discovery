@@ -21,7 +21,19 @@ from core.github_client import GitHubHttpClient
 
 DEFAULT_ORG = "ministryofjustice"
 DEFAULT_MAX_ALERTS = 100000
-DEFAULT_OUTPUT = "github_alerts_limited.csv"
+
+# Base directory configurations
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, PROJECT_ROOT)
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+DEFAULT_OUTPUT = os.path.join(OUTPUT_DIR, "github_alerts_limited.csv")
 
 # Alerts Config
 
