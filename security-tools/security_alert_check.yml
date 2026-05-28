@@ -29,7 +29,7 @@ jobs:
         run: |
           set -e
           git clone --depth 1 https://github.com/ministryofjustice/moj-github-discovery.git
-          chmod +x moj-github-discovery/security-tools/alert_metrics.py moj-github-discovery/security-tools/sla_wrapper.py
+          chmod +x moj-github-discovery/scripts/alert_metrics.py moj-github-discovery/security-tools/sla_wrapper.py
 
       - name: Patch upstream Python 3 syntax
         run: |
@@ -67,7 +67,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.MOJ_GITHUB_PAT }}
           PYTHONPATH: ${{ github.workspace }}/moj-github-discovery
-        run: python moj-github-discovery/security-tools/alert_metrics.py --auth pat --repo ${{ github.repository }} --output github_alerts_limited.csv
+        run: python moj-github-discovery/scripts/alert_metrics.py --auth pat --repo ${{ github.repository }} --output github_alerts_limited.csv
 
       - name: Run SLA checker
         run: python moj-github-discovery/security-tools/sla_wrapper.py
