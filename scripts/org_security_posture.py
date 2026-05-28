@@ -35,9 +35,25 @@ from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
 
+# Base Directory Configurations
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ORG_CACHE_DB_PATH = os.path.join(SCRIPT_DIR, "org_posture_cache.db")
-DEFAULT_REPO_FILE = os.path.join(SCRIPT_DIR, "repo_list.yaml")
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, PROJECT_ROOT)
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
+
+# Ensure output directories exist
+for directory in (OUTPUT_DIR, INTERNAL_DIR):
+    os.makedirs(directory, exist_ok=True)
+
+# Set Default Cache and Repo List Paths
+ORG_CACHE_DB_PATH = os.path.join(INTERNAL_DIR, "org_posture_cache.db")
+DEFAULT_REPO_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
+
 __start_time: float | None = None
 
 
@@ -370,7 +386,8 @@ def main() -> None:
             print(f"  {key}: {summary[key]}", file=sys.stderr)
 
     if args.excel:
-        write_excel(report, args.excel)
+        excel_path = os.path.join(OUTPUT_DIR, args.excel)
+        write_excel(report, excel_path)
 
 
 if __name__ == "__main__":
