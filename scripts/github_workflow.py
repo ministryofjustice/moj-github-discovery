@@ -474,8 +474,27 @@ def actions_analysis(
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
-    actions_analysis_path = os.path.join(OUTPUT_DIR, "actions_analysis")
-    os.makedirs(actions_analysis_path, exist_ok=True)
+
+    # Organise Output Paths
+    actions_analysis_path_base = os.path.join(OUTPUT_DIR, "actions_analysis")
+    os.makedirs(actions_analysis_path_base, exist_ok=True)
+    # Actions Usage and Ownership
+    action_usage_detail_path = os.path.join(
+        actions_analysis_path_base, "github_actions_usage_detail.csv"
+    )
+    action_usage_summary_path = os.path.join(
+        actions_analysis_path_base, "github_actions_usage_summary.csv"
+    )
+    action_owner_summary_path = os.path.join(
+        actions_analysis_path_base, "github_actions_owner_summary.csv"
+    )
+    action_pinning_path = os.path.join(
+        actions_analysis_path_base, "github_actions_pinning_per_repo.csv"
+    )
+    action_unpinned_detail_path = os.path.join(
+        actions_analysis_path_base, "github_actions_unpinned_detail.csv"
+    )
+
     all_actions: List[Dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         actions = parse_actions_from_workflow(
@@ -489,12 +508,10 @@ def actions_analysis(
     print(f"Total action references found: {len(all_actions)}")
 
     usage_detail_count = CsvCompiler.write_rows(
-        os.path.join(actions_analysis_path, "github_actions_usage_detail.csv"),
+        action_usage_detail_path,
         all_actions,
     )
-    print(
-        f"Wrote {os.path.join(actions_analysis_path, 'github_actions_usage_detail.csv')} ({usage_detail_count} rows)"
-    )
+    print(f"Wrote {action_usage_detail_path} ({usage_detail_count} rows)")
 
     # If nothing was parsed, write empty CSVs with the right headers and bail.
     if not all_actions:
@@ -510,38 +527,30 @@ def actions_analysis(
             ]
         )
         empty_usage.to_csv(
-            os.path.join(actions_analysis_path, "github_actions_usage_summary.csv"),
+            action_usage_summary_path,
             index=False,
             lineterminator="\r\n",
         )
         empty_owner.to_csv(
-            os.path.join(actions_analysis_path, "github_actions_owner_summary.csv"),
+            action_owner_summary_path,
             index=False,
             lineterminator="\r\n",
         )
         empty_pinning.to_csv(
-            os.path.join(actions_analysis_path, "github_actions_pinning_per_repo.csv"),
+            action_pinning_path,
             index=False,
             lineterminator="\r\n",
         )
-        print(
-            f"Wrote {os.path.join(actions_analysis_path, 'github_actions_usage_summary.csv')} (0 rows)"
-        )
-        print(
-            f"Wrote {os.path.join(actions_analysis_path, 'github_actions_owner_summary.csv')} (0 rows)"
-        )
-        print(
-            f"Wrote {os.path.join(actions_analysis_path, 'github_actions_pinning_per_repo.csv')} (0 rows)"
-        )
+        print(f"Wrote {action_usage_summary_path} (0 rows)")
+        print(f"Wrote {action_owner_summary_path} (0 rows)")
+        print(f"Wrote {action_pinning_path} (0 rows)")
         print("Unique actions: 0")
         print("Unique owners: 0")
         print("\n--- Analysing SHA pinning compliance ---")
         print("Total action references: 0")
         print("Pinned to SHA: 0")
         print("Unpinned (mutable tag): 0")
-        print(
-            f"Wrote {os.path.join(actions_analysis_path, 'github_actions_unpinned_detail.csv')} (0 rows)"
-        )
+        print(f"Wrote {action_unpinned_detail_path} (0 rows)")
         print("Repos with unpinned actions: 0")
         print("Repos fully pinned: 0")
         return
@@ -558,13 +567,11 @@ def actions_analysis(
         .reset_index(drop=True)
     )
     usage_summary_df.to_csv(
-        os.path.join(actions_analysis_path, "github_actions_usage_summary.csv"),
+        action_usage_summary_path,
         index=False,
         lineterminator="\r\n",
     )
-    print(
-        f"Wrote {os.path.join(actions_analysis_path, 'github_actions_usage_summary.csv')} ({len(usage_summary_df)} rows)"
-    )
+    print(f"Wrote {action_usage_summary_path} ({len(usage_summary_df)} rows)")
 
     # Owner summary: count references per owner, sort descending.
     owner_summary_df = (
@@ -575,13 +582,11 @@ def actions_analysis(
         .reset_index(drop=True)
     )
     owner_summary_df.to_csv(
-        os.path.join(actions_analysis_path, "github_actions_owner_summary.csv"),
+        action_owner_summary_path,
         index=False,
         lineterminator="\r\n",
     )
-    print(
-        f"Wrote {os.path.join(actions_analysis_path, 'github_actions_owner_summary.csv')} ({len(owner_summary_df)} rows)"
-    )
+    print(f"Wrote {action_owner_summary_path} ({len(owner_summary_df)} rows)")
 
     print(f"Unique actions: {len(usage_summary_df)}")
     print(f"Unique owners: {len(owner_summary_df)}")
@@ -599,12 +604,10 @@ def actions_analysis(
     print(f"Unpinned (mutable tag): {len(unpinned_df)}")
 
     unpinned_count = CsvCompiler.write_rows(
-        os.path.join(actions_analysis_path, "github_actions_unpinned_detail.csv"),
+        action_unpinned_detail_path,
         unpinned_df.to_dict("records"),
     )
-    print(
-        f"Wrote {os.path.join(actions_analysis_path, 'github_actions_unpinned_detail.csv')} ({unpinned_count} rows)"
-    )
+    print(f"Wrote {action_unpinned_detail_path} ({unpinned_count} rows)")
 
     # Per-repo pinning compliance: total / pinned / unpinned / pct, sorted by
     # most unpinned first.
@@ -639,13 +642,11 @@ def actions_analysis(
         ).reset_index(drop=True)
 
     pinning_df.to_csv(
-        os.path.join(actions_analysis_path, "github_actions_pinning_per_repo.csv"),
+        action_pinning_path,
         index=False,
         lineterminator="\r\n",
     )
-    print(
-        f"Wrote {os.path.join(actions_analysis_path, 'github_actions_pinning_per_repo.csv')} ({len(pinning_df)} rows)"
-    )
+    print(f"Wrote {action_pinning_path} ({len(pinning_df)} rows)")
     print(
         f"Repos with unpinned actions: "
         f"{int((pinning_df['unpinned'] > 0).sum()) if not pinning_df.empty else 0}"
@@ -661,8 +662,8 @@ def permissions_analysis(
 ) -> None:
     """Stage 7: Parse workflow files for permissions posture."""
     print("\n--- Analysing workflow permissions ---")
-    permissions_analysis_path = os.path.join(OUTPUT_DIR, "permissions_analysis")
-    os.makedirs(permissions_analysis_path, exist_ok=True)
+    permissions_analysis_path_base = os.path.join(OUTPUT_DIR, "permissions_analysis")
+    os.makedirs(permissions_analysis_path_base, exist_ok=True)
     all_permissions: List[Dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         perm = check_workflow_permissions(
@@ -673,13 +674,14 @@ def permissions_analysis(
             print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
+    permissions_analysis_path = os.path.join(
+        permissions_analysis_path_base, "github_workflow_permissions.csv"
+    )
     perms_count = CsvCompiler.write_rows(
-        os.path.join(permissions_analysis_path, "github_workflow_permissions.csv"),
+        permissions_analysis_path,
         all_permissions,
     )
-    print(
-        f"Wrote {os.path.join(permissions_analysis_path, 'github_workflow_permissions.csv')} ({perms_count} rows)"
-    )
+    print(f"Wrote {permissions_analysis_path} ({perms_count} rows)")
 
     # Tally findings via pandas value_counts for clarity.
     if all_permissions:
@@ -716,18 +718,17 @@ def credentials_analysis(
             print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
-    credentials_analysis_path = os.path.join(OUTPUT_DIR, "credentials_analysis")
-    os.makedirs(credentials_analysis_path, exist_ok=True)
+    credentials_analysis_path_base = os.path.join(OUTPUT_DIR, "credentials_analysis")
+    os.makedirs(credentials_analysis_path_base, exist_ok=True)
+    credentials_analysis_path = os.path.join(
+        credentials_analysis_path_base, "github_workflow_credential_posture.csv"
+    )
 
     cred_count = CsvCompiler.write_rows(
-        os.path.join(
-            credentials_analysis_path, "github_workflow_credential_posture.csv"
-        ),
+        credentials_analysis_path,
         all_credential_findings,
     )
-    print(
-        f"Wrote {os.path.join(credentials_analysis_path, 'github_workflow_credential_posture.csv')} ({cred_count} rows)"
-    )
+    print(f"Wrote {credentials_analysis_path} ({cred_count} rows)")
 
     repo_cred_summary: Dict[str, Dict[str, int]] = {}
     for f in all_credential_findings:
@@ -761,16 +762,15 @@ def credentials_analysis(
         )
     ]
 
+    cred_repo_analysis_path = os.path.join(
+        credentials_analysis_path_base,
+        "github_workflow_credential_posture_per_repo.csv",
+    )
     cred_repo_count = CsvCompiler.write_rows(
-        os.path.join(
-            credentials_analysis_path, "github_workflow_credential_posture_per_repo.csv"
-        ),
+        cred_repo_analysis_path,
         cred_repo_rows,
     )
-    print(
-        f"Wrote {os.path.join(credentials_analysis_path, 'github_workflow_credential_posture_per_repo.csv')} "
-        f"({cred_repo_count} rows)"
-    )
+    print(f"Wrote {cred_repo_analysis_path} ({cred_repo_count} rows)")
 
     oidc_only = sum(1 for f in all_credential_findings if f["posture"] == "oidc")
     long_lived = sum(
@@ -810,13 +810,14 @@ def trigger_risk_analysis(
     trigger_analysis_path = os.path.join(OUTPUT_DIR, "trigger_analysis")
     os.makedirs(trigger_analysis_path, exist_ok=True)
 
+    trigger_csv_path = os.path.join(
+        trigger_analysis_path, "github_workflow_trigger_risk.csv"
+    )
     trigger_count = CsvCompiler.write_rows(
-        os.path.join(trigger_analysis_path, "github_workflow_trigger_risk.csv"),
+        trigger_csv_path,
         all_trigger_findings,
     )
-    print(
-        f"Wrote {os.path.join(trigger_analysis_path, 'github_workflow_trigger_risk.csv')} ({trigger_count} rows)"
-    )
+    print(f"Wrote {trigger_csv_path} ({trigger_count} rows)")
 
     repo_trigger_summary: Dict[str, Dict[str, int]] = {}
     for f in all_trigger_findings:
@@ -859,16 +860,14 @@ def trigger_risk_analysis(
         )
     ]
 
+    trigger_repo_analysis_path = os.path.join(
+        trigger_analysis_path, "github_workflow_trigger_risk_per_repo.csv"
+    )
     trigger_summary_count = CsvCompiler.write_rows(
-        os.path.join(
-            trigger_analysis_path, "github_workflow_trigger_risk_per_repo.csv"
-        ),
+        trigger_repo_analysis_path,
         trigger_repo_rows,
     )
-    print(
-        f"Wrote {os.path.join(trigger_analysis_path, 'github_workflow_trigger_risk_per_repo.csv')} "
-        f"({trigger_summary_count} rows)"
-    )
+    print(f"Wrote {trigger_repo_analysis_path} ({trigger_summary_count} rows)")
 
     high_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "high")
     medium_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "medium")
