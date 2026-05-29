@@ -207,7 +207,7 @@ uv run python scripts/org_security_posture.py <org> [--excel path] [--repo-file 
 
 - A summary printed to stderr
 - Excel workbook output when `--excel` is supplied
-- Cached results stored in `org_posture_cache.db` for reuse on later runs
+- Cached results stored in `internal/rg_posture_cache.db` for reuse on later runs
 
 **Examples:**
 
@@ -326,7 +326,7 @@ uv run python scripts/github_workflow.py [options]
 
 - `--org` - GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)
 - `--repo-file` - YAML file with list of repos to scan (optional, defaults to scanning entire org)
-- `--db` - SQLite database path for caching (default: github_workflow_posture.db)
+- `--db` - SQLite database path for caching (default: `internal/github_workflow_posture.db`)
 - `--csv` - Export summary CSV
 - `--excel` - Export detailed Excel workbook
 - `--limit` - Limit number of repos to process
