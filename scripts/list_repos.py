@@ -26,8 +26,8 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.utils import base_directory_setup
 
-# Base Directory Setup for Outputs and Internal Files
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR = base_directory_setup()
+# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
 OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "list_repos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -38,6 +38,7 @@ DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
 __start_time: float | None = None
 
 
+# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time

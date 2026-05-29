@@ -16,4 +16,5 @@ def base_directory_setup():
     for directory in (base_output_dir, base_internal_dir):
         os.makedirs(directory, exist_ok=True)
 
-    return base_output_dir, base_internal_dir
+    # TODO: remove project_root once scripts configured to use audit_config.yaml for repo_list with CLI override
+    return base_output_dir, base_internal_dir, project_root

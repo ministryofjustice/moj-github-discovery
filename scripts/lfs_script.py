@@ -21,29 +21,25 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.compiler import ExcelCompiler
 from core.transforms import RepoTreeTransform
+from core.utils import base_directory_setup
 
 # GitHub thresholds (bytes)
 SOFT_LIMIT = 50 * 1024 * 1024
 HARD_LIMIT = 100 * 1024 * 1024
 
 # Base directory configurations
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, PROJECT_ROOT)
+# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
 # Configure Output Directories
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
-INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
-
-# Ensure output directories exist
-for directory in (OUTPUT_DIR, INTERNAL_DIR):
-    os.makedirs(directory, exist_ok=True)
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "lfs_analysis")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # File paths for input and output
+# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
 YAML_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
-DB_FILE = os.path.join(INTERNAL_DIR, "repo_list.db")
+
+DB_FILE = os.path.join(BASE_INTERNAL_DIR, "repo_list.db")
 REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
 MASTER_CSV = os.path.join(OUTPUT_DIR, "repos_exceeding_thresholds.xlsx")
 

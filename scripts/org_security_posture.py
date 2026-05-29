@@ -34,29 +34,25 @@ from core.github_client import GitHubHttpClient
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
+from core.utils import base_directory_setup
 
-# Base Directory Configurations
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, PROJECT_ROOT)
+# TODO:
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
 # Configure Output Directories
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
-INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
-
-# Ensure output directories exist
-for directory in (OUTPUT_DIR, INTERNAL_DIR):
-    os.makedirs(directory, exist_ok=True)
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "org_security_posture")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Set Default Cache and Repo List Paths
-ORG_CACHE_DB_PATH = os.path.join(INTERNAL_DIR, "org_posture_cache.db")
+ORG_CACHE_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "org_posture_cache.db")
+
+# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
 DEFAULT_REPO_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
 
 __start_time: float | None = None
 
 
+# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
