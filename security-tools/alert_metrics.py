@@ -4,18 +4,24 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import pandas as pd
 import sys
+from pathlib import Path
 from typing import Any, Callable
+
+import pandas as pd
 
 from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # Defaults
 
 DEFAULT_ORG = "ministryofjustice"
-DEFAULT_MAX_ALERTS = 100000
+DEFAULT_MAX_ALERTS = 10000
 DEFAULT_OUTPUT = "github_alerts_limited.csv"
 
 # Alerts Config
@@ -63,6 +69,65 @@ def parse_iso(value: str | None) -> dt.datetime | None:
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
 
+def build_archive_status_lookup(
+    client: GitHubHttpClient, org: str, repos: list[str]
+) -> dict[str, str]:
+    """Return repo archive status keyed by full repo name.
+
+    Archive status is used to annotate alerts, helping analysts understand whether
+    issues were found in active or archived repositories. This function uses a
+    two-stage lookup: first attempt bulk fetch via org/repos endpoint, then fall back
+    to individual repo lookups for any repos not found in the bulk response.
+    """
+    status_lookup: dict[str, str] = {}
+    repo_set = set(repos)
+
+    if repo_set:
+        # Stage 1: Bulk fetch all org repos and match against the repos we need.
+        # This is more efficient than individual requests when available.
+        try:
+            repo_items = client.get_paginated(f"/orgs/{org}/repos?type=all&sort=pushed")
+        except Exception:
+            # If the bulk fetch fails, gracefully continue with individual lookups below.
+            repo_items = []
+
+        # Extract archive status from the bulk response for matching repos.
+        for repo_item in repo_items:
+            if not isinstance(repo_item, dict):
+                continue
+            full_name = repo_item.get("full_name")
+            if not isinstance(full_name, str) or full_name not in repo_set:
+                continue
+            # Store as "archived" or "non_archived" based on the API response.
+            status_lookup[full_name] = (
+                "archived" if repo_item.get("archived", False) else "non_archived"
+            )
+
+    # Stage 2: For any repos not yet resolved, try individual API calls.
+    # This handles edge cases where a repo may not be in the bulk response
+    # (e.g., private repos, recently created repos, or API permission issues).
+    for repo_full in repos:
+        if repo_full in status_lookup:
+            continue
+        owner, repo = repo_full.split("/", 1)
+        try:
+            repo_item = client.get(f"/repos/{owner}/{repo}")
+        except Exception:
+            # If the individual request fails, mark status as unknown.
+            # Alerts from unknown-status repos will still be tracked but flagged.
+            status_lookup[repo_full] = "unknown"
+            continue
+        if isinstance(repo_item, dict):
+            status_lookup[repo_full] = (
+                "archived" if repo_item.get("archived", False) else "non_archived"
+            )
+        else:
+            # Mark as unknown if the response is not a valid dictionary.
+            status_lookup[repo_full] = "unknown"
+
+    return status_lookup
+
+
 def summarise_results(output_file: str) -> None:
     """Utility function: print summary of results to console after processing"""
     # Load the CSV file containing GitHub alert data
@@ -89,6 +154,10 @@ def summarise_results(output_file: str) -> None:
     # --- Type breakdown ---
     print("\nAlerts by type:")
     print(df["type"].value_counts())
+
+    if "archive_status" in df.columns:
+        print("\nAlerts by repo archive status:")
+        print(df["archive_status"].value_counts())
 
     # --- Time‑to‑Remediate (TTR) statistics ---
     # Assumes the CSV includes a numeric column `ttr_days`
@@ -124,6 +193,9 @@ def main() -> None:
         repos = list_org_repos(args.org, client)
     if args.repo_limit:
         repos = repos[: args.repo_limit]
+    # Pre-build archive status lookup so we can annotate each alert with repo status.
+    # This helps distinguish between alerts in active vs. archived repositories.
+    archive_status_lookup = build_archive_status_lookup(client, args.org, repos)
 
     rows: list[dict[str, Any]] = []
     repos_with_alerts: set[str] = set()
@@ -169,6 +241,11 @@ def main() -> None:
                         "id": alert.get("number") or alert.get("id"),
                         "type": kind,
                         "repo": repo_full,
+                        # Include archive status from pre-built lookup; defaults to "unknown" if not found.
+                        # Archived repos may have different SLA or remediation expectations.
+                        "archive_status": archive_status_lookup.get(
+                            repo_full, "unknown"
+                        ),
                         "created_at": created.isoformat() if created else "",
                         "remediated_at": remediated.isoformat() if remediated else "",
                         "state": alert.get("state"),
