@@ -81,7 +81,7 @@ uv run python scripts/list_repos.py --repo-file <file> [options]
 **Options:**
 
 - `--repo-file <file>` - Repositories to audit. Preferred format is YAML (`repos:` list of `owner/repo` strings) and comments are supported.
-- `--db <path>` - SQLite path for core storage (default: `repo_audit.db` in project root).
+- `--db <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
 - `--excel <path>` - Export results to Excel file. Requires `openpyxl`.
 - `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
@@ -128,8 +128,8 @@ uv run python scripts/archive_repos.py <org> [options]
 - `--limit <N>` - Limit the number of repositories loaded from the organisation.
 - `--page-num <N>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed).
 - `--sort [-]column` - Sort by a result column. Default is `days_since_push` ascending. Prefix with `-` for descending.
-- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script.
-  - If provided without a path, it also defaults to `repo_audit.db`.
+- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `internal/repo_audit.db` beside the script if present.
+  - If provided without a path, it also defaults to `internal/repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 - `--namespace-crossref` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
@@ -240,7 +240,7 @@ uv run python scripts/dashboard.py [options]
 
 **Options:**
 
-- `--db <path>` - Custom database path (default: `repo_audit.db`)
+- `--db <path>` - Custom database path (default: `internal/repo_audit.db`)
 
 **Examples:**
 
@@ -508,7 +508,7 @@ EOF
 
 # Audit them
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
 
 # View in dashboard
 uv run python scripts/dashboard.py
@@ -519,7 +519,7 @@ uv run python scripts/dashboard.py
 ```bash
 # Re-run audits to update the core storage database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
 
 # Dashboard automatically shows updated data
 uv run python scripts/dashboard.py
@@ -565,7 +565,7 @@ uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 20 --exce
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 2 --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 2 --db ./path/to/repo_audit.db
 uv run python scripts/dashboard.py
 # Select each repo and click "Run Audit" for updated details in core storage
 ```
@@ -574,7 +574,7 @@ uv run python scripts/dashboard.py
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
 uv run python scripts/dashboard.py
 # Filter by "Show only repos with flags"
 ```
