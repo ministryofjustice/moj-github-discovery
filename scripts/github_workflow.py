@@ -449,18 +449,15 @@ def write_posture_reports(
 ) -> None:
     """Stage 5: Write repo-level posture reports."""
     prefix = args.out_prefix
-    posture_summary_path = os.path.join(OUTPUT_DIR, f"{prefix}_repo_summary.csv")
-    repo_count = CsvCompiler.write_rows(posture_summary_path, repo_rows)
-    details_count = CsvCompiler.write_rows(
-        os.path.join(OUTPUT_DIR, f"{prefix}_workflow_details.csv"), detail_rows
-    )
-    print(f"Wrote {posture_summary_path} ({repo_count} rows)")
-    print(
-        f"Wrote {os.path.join(OUTPUT_DIR, f'{prefix}_workflow_details.csv')} ({details_count} rows)"
-    )
-    write_summary(
-        f"{os.path.join(OUTPUT_DIR, f'{prefix}_summary.txt')}", repo_rows, detail_rows
-    )
+    repo_summary_path = os.path.join(OUTPUT_DIR, f"{prefix}_repo_summary.csv")
+    workflow_details_path = os.path.join(OUTPUT_DIR, f"{prefix}_workflow_details.csv")
+    summary_text_report_path = os.path.join(OUTPUT_DIR, f"{prefix}_summary.txt")
+
+    repo_count = CsvCompiler.write_rows(repo_summary_path, repo_rows)
+    details_count = CsvCompiler.write_rows(workflow_details_path, detail_rows)
+    print(f"Wrote {repo_summary_path} ({repo_count} rows)")
+    print(f"Wrote {workflow_details_path} ({details_count} rows)")
+    write_summary(summary_text_report_path, repo_rows, detail_rows)
 
     total = len(repo_rows)
     print(

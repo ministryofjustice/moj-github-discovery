@@ -36,5 +36,5 @@ node_modules
 .ds_store
 *.pem
 
-input/
+internal/
 output/
