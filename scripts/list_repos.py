@@ -24,24 +24,16 @@ from core.github_api import (
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
+from core.utils import base_directory_setup
 
-# Base directory configurations
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+# Base Directory Setup for Outputs and Internal Files
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR = base_directory_setup()
 
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, PROJECT_ROOT)
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
-INTERNAL_DIR = os.path.join(PROJECT_ROOT, "internal")
-
-# Ensure output directories exist
-for directory in (OUTPUT_DIR, INTERNAL_DIR):
-    os.makedirs(directory, exist_ok=True)
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "list_repos")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Set Default Database Path
-DEFAULT_DB_PATH = os.path.join(INTERNAL_DIR, "repo_audit.db")
+DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
 
 __start_time: float | None = None
 
