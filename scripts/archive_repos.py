@@ -18,6 +18,10 @@ from typing import Any
 
 import pandas as pd
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
@@ -29,13 +33,23 @@ from core.github_api import (
 from core.github_client import GitHubHttpClient
 from core.models import RepoData, RepoDetails
 from core.storage import SqliteRepoStorage
+from core.utils import base_directory_setup
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DB_PATH = os.path.join(SCRIPT_DIR, "repo_audit.db")
+# Base Directory Setup for Outputs and Internal Files
+# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "archive_repos")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Set Default Database Path
+DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
 
 __start_time: float | None = None
 
 
+# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
@@ -532,8 +546,9 @@ def main() -> None:
     records = df.to_dict(orient="records")
 
     if args.csv:
-        df.to_csv(args.csv, index=False)
-        print(f"Wrote {args.csv}", file=sys.stderr)
+        csv_path = os.path.join(OUTPUT_DIR, args.csv)
+        df.to_csv(csv_path, index=False)
+        print(f"Wrote {csv_path}", file=sys.stderr)
     elif not args.audit_db:
         if args.namespace_crossref:
             print(

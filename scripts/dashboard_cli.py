@@ -5,6 +5,10 @@ import argparse
 import os
 import sys
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 
 from core.presenters import build_dashboard_dataframe

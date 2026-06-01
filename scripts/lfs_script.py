@@ -7,7 +7,10 @@ and generates summary reports in CSV format.
 import argparse
 import os
 import sys
-from pathlib import Path
+
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
@@ -18,18 +21,27 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.compiler import ExcelCompiler
 from core.transforms import RepoTreeTransform
+from core.utils import base_directory_setup
 
 # GitHub thresholds (bytes)
 SOFT_LIMIT = 50 * 1024 * 1024
 HARD_LIMIT = 100 * 1024 * 1024
 
-# File paths for input and output
-YAML_FILE = Path("repo_list.yaml")
-DB_FILE = Path("repo_list.db")
-OUTPUT_DIR = Path("repo_summaries")
-MASTER_CSV = Path("repos_exceeding_thresholds.xlsx")
+# Base directory configurations
+# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
-OUTPUT_DIR.mkdir(exist_ok=True)
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "lfs_analysis")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# File paths for input and output
+# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
+YAML_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
+
+DB_FILE = os.path.join(BASE_INTERNAL_DIR, "repo_list.db")
+REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
+MASTER_CSV = os.path.join(OUTPUT_DIR, "repos_exceeding_thresholds.xlsx")
 
 
 def parse_args() -> argparse.Namespace:
@@ -92,7 +104,7 @@ def main():
     args = parse_args()
 
     # Ensure the repo list file exists
-    if not YAML_FILE.exists():
+    if not os.path.exists(YAML_FILE):
         print(
             f"<LFS Analysis> ERROR: Missing repo list file: {YAML_FILE}",
             file=sys.stderr,
@@ -133,11 +145,12 @@ def main():
     print(f"<LFS Analysis> Master summary saved to {MASTER_CSV}", file=sys.stderr)
 
     # Ensure output directory exists
-    if not os.path.isdir(OUTPUT_DIR):
+    if not os.path.isdir(REPO_SUMMARIES_DIR):
         print(
-            f"<LFS Analysis> Creating output directory: {OUTPUT_DIR}", file=sys.stderr
+            f"<LFS Analysis> Creating output directory: {REPO_SUMMARIES_DIR}",
+            file=sys.stderr,
         )
-        os.makedirs(OUTPUT_DIR)
+        os.makedirs(REPO_SUMMARIES_DIR)
 
     # Generate individual CSV summaries for each repository
     print("<LFS Analysis> Generating individual CSV summaries", file=sys.stderr)
@@ -167,7 +180,9 @@ def main():
         ]
 
         # Save the blob data to a CSV file
-        output_file = OUTPUT_DIR / f"{full_repo_name.replace('/', '_')}_summary.csv"
+        output_file = os.path.join(
+            REPO_SUMMARIES_DIR, f"{full_repo_name.replace('/', '_')}_summary.csv"
+        )
         pd.DataFrame(blob_rows).to_csv(output_file, index=False)
         print(
             f"<LFS Analysis> Saved summary for {full_repo_name} to {output_file}",
