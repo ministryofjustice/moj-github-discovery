@@ -10,6 +10,10 @@ import sys
 import time
 from typing import Any, Literal
 
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 
 from core.collector import OrgEndpointCollector
@@ -30,13 +34,25 @@ from core.github_client import GitHubHttpClient
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
+from core.utils import base_directory_setup
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ORG_CACHE_DB_PATH = os.path.join(SCRIPT_DIR, "org_posture_cache.db")
-DEFAULT_REPO_FILE = os.path.join(SCRIPT_DIR, "repo_list.yaml")
+# TODO:
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "org_security_posture")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Set Default Cache and Repo List Paths
+ORG_CACHE_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "org_posture_cache.db")
+
+# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
+DEFAULT_REPO_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
+
 __start_time: float | None = None
 
 
+# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
 def _report_elapsed() -> None:
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
@@ -366,7 +382,8 @@ def main() -> None:
             print(f"  {key}: {summary[key]}", file=sys.stderr)
 
     if args.excel:
-        write_excel(report, args.excel)
+        excel_path = os.path.join(OUTPUT_DIR, args.excel)
+        write_excel(report, excel_path)
 
 
 if __name__ == "__main__":

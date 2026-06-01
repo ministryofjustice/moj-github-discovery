@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-gh_diag.py — Diagnose why `gh` auth differs between terminal and Jupyter (Codespaces).
+testEnv.py — Diagnose why `gh` auth differs between terminal and Jupyter (Codespaces).
 
 Usage:
-  python gh_diag.py
-  GH_TOKEN=... python gh_diag.py
-  !python gh_diag.py   (in Jupyter)
+  python testEnv.py
+  GH_TOKEN=... python testEnv.py
+  !python testEnv.py   (in Jupyter)
 
 It will:
 - print PATH/HOME details
@@ -23,7 +23,7 @@ import subprocess
 import sys
 from typing import Dict, Tuple, Optional
 
-ORG = os.environ.get("GH_DIAG_ORG", "ministryofjustice")  # override if needed
+ORG = os.environ.get("GITHUB_ORG", "ministryofjustice")  # override if needed
 
 
 def sha256_prefix(s: str, n: int = 10) -> str:
@@ -53,7 +53,7 @@ def print_kv(title: str, kv: Dict[str, str]):
 
 
 def main() -> int:
-    print("### gh_diag.py")
+    print("### testEnv.py")
     print("Python:", sys.version.replace("\n", " "))
     print("CWD:", os.getcwd())
 

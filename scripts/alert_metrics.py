@@ -5,21 +5,34 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import pandas as pd
+import os
 import sys
 from typing import Any, Callable
+
+# add project root to path for core imports
+# TODO: Remove once pyproject.toml is build-system configured
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
+from core.utils import base_directory_setup
 
 # Defaults
 
 DEFAULT_ORG = "ministryofjustice"
 DEFAULT_MAX_ALERTS = 100000
-DEFAULT_OUTPUT = "github_alerts_limited.csv"
+
+# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
+BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
+
+# Configure Output Directories
+OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "github_alerts")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+DEFAULT_OUTPUT = os.path.join(OUTPUT_DIR, "github_alerts_limited.csv")
 
 # Alerts Config
-
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
 ALERT_SPECS: list[AlertSpec] = [
     (

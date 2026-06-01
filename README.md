@@ -75,13 +75,13 @@ the core SQLite storage, and optionally exports an Excel workbook.
 **Usage:**
 
 ```bash
-uv run python list_repos.py --repo-file <file> [options]
+uv run python scripts/list_repos.py --repo-file <file> [options]
 ```
 
 **Options:**
 
 - `--repo-file <file>` - Repositories to audit. Preferred format is YAML (`repos:` list of `owner/repo` strings) and comments are supported.
-- `--db <path>` - SQLite path for core storage (default: `repo_audit.db` in project root).
+- `--db <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
 - `--excel <path>` - Export results to Excel file. Requires `openpyxl`.
 - `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
 - `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
@@ -93,22 +93,22 @@ uv run python list_repos.py --repo-file <file> [options]
 
 ```bash
 # Audit all repos from file and print JSON output
-uv run python list_repos.py --repo-file repo_list.yaml
+uv run python scripts/list_repos.py --repo-file repo_list.yaml
 
 # Audit all repos from file and print JSON output, authenticating via PAT specifically
-uv run python list_repos.py --repo-file repo_list.yaml --auth pat
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --auth pat
 
 # Export to Excel
-uv run python list_repos.py --repo-file repo_list.yaml --excel report.xlsx
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel report.xlsx
 
 # Limit processing to first 50 repos in file
-uv run python list_repos.py --repo-file repo_list.yaml --limit 50
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 50
 
 # Use a custom core storage database path
-uv run python list_repos.py --repo-file repo_list.yaml --db /tmp/audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db /tmp/audit.db
 
 # Sort output by stars ascending
-uv run python list_repos.py --repo-file repo_list.yaml --sort +stargazers
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --sort +stargazers
 ```
 
 ### 2. `archive_repos.py` - Find Archive Candidates
@@ -119,7 +119,7 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-uv run python archive_repos.py <org> [options]
+uv run python scripts/archive_repos.py <org> [options]
 ```
 
 **Options:**
@@ -128,8 +128,8 @@ uv run python archive_repos.py <org> [options]
 - `--limit <N>` - Limit the number of repositories loaded from the organisation.
 - `--page-num <N>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed).
 - `--sort [-]column` - Sort by a result column. Default is `days_since_push` ascending. Prefix with `-` for descending.
-- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `repo_audit.db` beside the script.
-  - If provided without a path, it also defaults to `repo_audit.db`.
+- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `internal/repo_audit.db` beside the script if present.
+  - If provided without a path, it also defaults to `internal/repo_audit.db`.
 - `--cache-only` - Do not call the GitHub API. Use only existing local caches.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 - `--namespace-crossref` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
@@ -156,22 +156,22 @@ uv run python archive_repos.py <org> [options]
 
 ```bash
 # Export archive candidates to CSV
-uv run python archive_repos.py ministryofjustice --csv archivable.csv
+uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
 
 # Export archive candidates to CSV, authenticating via PAT specifically
-uv run python archive_repos.py ministryofjustice --csv archivable.csv --auth pat
+uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv --auth pat
 
 # Reuse local caches only for a fast rerun
-uv run python archive_repos.py ministryofjustice --cache-only --csv archivable.csv
+uv run python scripts/archive_repos.py ministryofjustice --cache-only --csv archivable.csv
 
 # Process only page 2 of the org inventory and write to the audit database
-uv run python archive_repos.py ministryofjustice --page-num 2 --audit-db
+uv run python scripts/archive_repos.py ministryofjustice --page-num 2 --audit-db
 
 # Sort by oldest last push and print JSON to stdout
-uv run python archive_repos.py ministryofjustice --sort days_since_push
+uv run python scripts/archive_repos.py ministryofjustice --sort days_since_push
 
 # Opt-in: identify archived repos that still have namespace folders
-uv run python archive_repos.py ministryofjustice --namespace-crossref
+uv run python scripts/archive_repos.py ministryofjustice --namespace-crossref
 ```
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
@@ -193,7 +193,7 @@ Performs an organisation-level audit that complements the per-repo scripts. It c
 **Usage:**
 
 ```bash
-uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] [--no-cache]
+uv run python scripts/org_security_posture.py <org> [--excel path] [--repo-file [path]] [--no-cache]
 ```
 
 **Options:**
@@ -207,25 +207,25 @@ uv run python org_security_posture.py <org> [--excel path] [--repo-file [path]] 
 
 - A summary printed to stderr
 - Excel workbook output when `--excel` is supplied
-- Cached results stored in `org_posture_cache.db` for reuse on later runs
+- Cached results stored in `internal/rg_posture_cache.db` for reuse on later runs
 
 **Examples:**
 
 ```bash
 # Export a workbook for review
-uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
 
 # Export a workbook for review, authenticating via PAT specifically
-uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
+uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
 
 # Limit supply-chain checks to repos from repo_list.yaml
-uv run python org_security_posture.py ministryofjustice --repo-file
+uv run python scripts/org_security_posture.py ministryofjustice --repo-file
 
 # Limit supply-chain checks to repos from a custom list file
-uv run python org_security_posture.py ministryofjustice --repo-file custom_repos.yaml --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py ministryofjustice --repo-file custom_repos.yaml --excel moj-security-posture.xlsx
 
 # Force a fresh pull instead of using the local cache
-uv run python org_security_posture.py ministryofjustice --no-cache
+uv run python scripts/org_security_posture.py ministryofjustice --no-cache
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard
@@ -235,22 +235,22 @@ Launches an interactive Dash web dashboard to browse and manage repository audit
 **Usage:**
 
 ```bash
-uv run python dashboard.py [options]
+uv run python scripts/dashboard.py [options]
 ```
 
 **Options:**
 
-- `--db <path>` - Custom database path (default: `repo_audit.db`)
+- `--db <path>` - Custom database path (default: `internal/repo_audit.db`)
 
 **Examples:**
 
 ```bash
 # Start dashboard with default database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python dashboard.py
+uv run python scripts/dashboard.py
 
 # Start with custom database
-uv run python dashboard.py --db /tmp/audit.db
+uv run python scripts/dashboard.py --db /tmp/audit.db
 ```
 
 **Features:**
@@ -278,7 +278,7 @@ Diagnoses why `gh` authentication might differ between environments (e.g., termi
 **Usage:**
 
 ```bash
-uv run python testEnv.py
+uv run python utils/testEnv.py
 ```
 
 **Output:**
@@ -295,14 +295,14 @@ uv run python testEnv.py
 
 ```bash
 # Diagnose auth in current environment
-uv run python testEnv.py
+uv run python utils/testEnv.py
 
 # In Jupyter cell
-!uv run python testEnv.py
+!uv run python utils/testEnv.py
 
 # With custom token
 export GH_TOKEN=ghp_xxxx
-uv run python testEnv.py
+uv run python utils/testEnv.py
 ```
 
 ### 6. `github_workflow.py` - Assess GitHub Actions Workflow Posture
@@ -319,14 +319,14 @@ to identify repositories using Actions, archived repos with workflows, and candi
 **Usage:**
 
 ```bash
-uv run python github_workflow.py [options]
+uv run python scripts/github_workflow.py [options]
 ```
 
 **Options:**
 
 - `--org` - GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)
 - `--repo-file` - YAML file with list of repos to scan (optional, defaults to scanning entire org)
-- `--db` - SQLite database path for caching (default: github_workflow_posture.db)
+- `--db` - SQLite database path for caching (default: `internal/github_workflow_posture.db`)
 - `--csv` - Export summary CSV
 - `--excel` - Export detailed Excel workbook
 - `--limit` - Limit number of repos to process
@@ -346,16 +346,16 @@ uv run python github_workflow.py [options]
 
 ```bash
 # Scan entire org and print summary
-uv run python github_workflow.py
+uv run python scripts/github_workflow.py
 
 # Scan specific repos from file and export Excel
-uv run python github_workflow.py --repo-file repo_list.yaml --excel workflow_posture.xlsx
+uv run python scripts/github_workflow.py --repo-file repo_list.yaml --excel workflow_posture.xlsx
 
 # Limit to 50 repos and sort by workflow count
-uv run python github_workflow.py --limit 50 --sort -workflow_count
+uv run python scripts/github_workflow.py --limit 50 --sort -workflow_count
 
 # Use custom database and resume interrupted run
-uv run python github_workflow.py --db custom.db --resume
+uv run python scripts/github_workflow.py --db custom.db --resume
 ```
 
 **Output:**
@@ -372,7 +372,7 @@ Exports repository-level alert metrics for code scanning, dependabot, and secret
 **Usage:**
 
 ```bash
-uv run python alert_metrics.py [options]
+uv run python scripts/alert_metrics.py [options]
 ```
 
 **Options:**
@@ -391,13 +391,13 @@ uv run python alert_metrics.py [options]
 
 ```bash
 # Export alerts for org to default CSV
-uv run python alert_metrics.py
+uv run python scripts/alert_metrics.py
 
 # Export to custom path with limits
-uv run python alert_metrics.py --output alerts.csv --max-alerts 5000 --repo-limit 100
+uv run python scripts/alert_metrics.py --output alerts.csv --max-alerts 5000 --repo-limit 100
 
 # Use specific auth method
-uv run python alert_metrics.py --auth pat
+uv run python scripts/alert_metrics.py --auth pat
 ```
 
 ### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub
@@ -408,7 +408,7 @@ It generates a master Excel summary of repos exceeding thresholds and individual
 **Usage:**
 
 ```bash
-uv run python lfs_script.py
+uv run python scripts/lfs_script.py
 ```
 
 **Output:**
@@ -420,7 +420,7 @@ uv run python lfs_script.py
 
 ```bash
 # Run the LFS analysis
-uv run python lfs_script.py
+uv run python scripts/lfs_script.py
 ```
 
 ## Database Schema
@@ -458,10 +458,10 @@ Each repo is assigned risk flags:
 ```bash
 # 1. Audit all repos in organization
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --excel audit_results.xlsx
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel audit_results.xlsx
 
 # 2. Launch dashboard to explore results
-uv run python dashboard.py
+uv run python scripts/dashboard.py
 
 # 3. Click on repos to view details or run deeper audits
 ```
@@ -470,26 +470,26 @@ uv run python dashboard.py
 
 ```bash
 # 1. Generate a CSV of old or archived repositories
-uv run python archive_repos.py ministryofjustice --csv archivable.csv
+uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
 
 # 2. Re-run quickly from the local caches while refining filters
-uv run python archive_repos.py ministryofjustice --cache-only --csv archivable.csv
+uv run python scripts/archive_repos.py ministryofjustice --cache-only --csv archivable.csv
 
 # 3. Optionally persist to a custom SQLite file for downstream analysis
-uv run python archive_repos.py ministryofjustice --audit-db /tmp/archive-audit.db
+uv run python scripts/archive_repos.py ministryofjustice --audit-db /tmp/archive-audit.db
 ```
 
 ### Organisation Security Posture Review
 
 ```bash
 # 1. Generate an organisation-wide posture workbook
-uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
 
 # 2. Re-run without cache when you need fresh data
-uv run python org_security_posture.py ministryofjustice --no-cache
+uv run python scripts/org_security_posture.py ministryofjustice --no-cache
 
 # 3. Limit supply-chain checks to repos listed in repo_list.yaml
-uv run python org_security_posture.py ministryofjustice --repo-file --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py ministryofjustice --repo-file --excel moj-security-posture.xlsx
 ```
 
 ### Batch Audit Using File
@@ -508,10 +508,10 @@ EOF
 
 # Audit them
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
 
 # View in dashboard
-uv run python dashboard.py
+uv run python scripts/dashboard.py
 ```
 
 ### Continuous Monitoring
@@ -519,10 +519,10 @@ uv run python dashboard.py
 ```bash
 # Re-run audits to update the core storage database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --db repo_audit.db
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
 
 # Dashboard automatically shows updated data
-uv run python dashboard.py
+uv run python scripts/dashboard.py
 ```
 
 ## Troubleshooting
@@ -536,7 +536,7 @@ uv run python dashboard.py
 ### Authentication Issues Between Environments
 
 ```bash
-uv run python testEnv.py
+uv run python utils/testEnv.py
 ```
 
 This will diagnose differences in PATH, HOME, and token availability.
@@ -558,15 +558,15 @@ This will diagnose differences in PATH, HOME, and token availability.
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --limit 20 --excel github_audit.xlsx
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 20 --excel github_audit.xlsx
 ```
 
 ### Audit specific critical repos
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --limit 2 --db repo_audit.db
-uv run python dashboard.py
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 2 --db ./path/to/repo_audit.db
+uv run python scripts/dashboard.py
 # Select each repo and click "Run Audit" for updated details in core storage
 ```
 
@@ -574,23 +574,23 @@ uv run python dashboard.py
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python list_repos.py --repo-file repo_list.yaml --db repo_audit.db
-uv run python dashboard.py
+uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
+uv run python scripts/dashboard.py
 # Filter by "Show only repos with flags"
 ```
 
 ### Export archive candidate data
 
 ```bash
-uv run python archive_repos.py ministryofjustice --csv archivable.csv
-uv run python archive_repos.py ministryofjustice --cache-only --sort -days_since_push
+uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
+uv run python scripts/archive_repos.py ministryofjustice --cache-only --sort -days_since_push
 ```
 
 ### Export organisation posture report
 
 ```bash
-uv run python org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-uv run python org_security_posture.py ministryofjustice --repo-file
+uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py ministryofjustice --repo-file
 ```
 
 ## License
