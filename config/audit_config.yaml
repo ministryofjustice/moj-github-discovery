@@ -2,7 +2,6 @@
 # Override by passing --config-file path/to/your.yaml on the CLI.
 
 # Global attributes used by all/multiple scripts
-authentication_method: "app"
 github_organisation: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
 

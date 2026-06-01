@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import sys
 import yaml
 from pydantic import BaseModel, Field
 
@@ -51,14 +52,22 @@ def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
       partial config only needs to list the toggles being changed.
     """
     if config_path is None:
+        print(
+            f"No config file specified, looking for default at {DEFAULT_CONFIG_PATH}...",
+            file=sys.stderr,
+        )
         resolved = DEFAULT_CONFIG_PATH
         if not resolved.exists():
+            print(f"Default config file not found: {resolved}", file=sys.stderr)
             return AuditConfig()
     else:
+        print(f"Loading config from {config_path}...", file=sys.stderr)
         resolved = Path(config_path)
         if not resolved.exists():
+            print(f"Config file not found: {resolved}", file=sys.stderr)
             raise FileNotFoundError(f"Config file not found: {resolved}")
 
+    print(f"Reading config from {resolved}...", file=sys.stderr)
     with resolved.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
 
