@@ -1,8 +1,20 @@
 # Default audit config for moj-github-discovery scripts.
 # Override by passing --config-file path/to/your.yaml on the CLI.
 
-# Global attributes used by all scripts
+# Global attributes used by all/multiple scripts
+authentication_method: "app"
+github_organisation: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
+
+# Stage Toggles for list_repos.py.
+
+list_repos:
+  database_file: "repo_audit.db"
+  output_file_format: "excel"
+  repo_limit: 400
+  resume: true
+  sort_by_field: "pushed_at"
+  sort_order: "descending"
 
 # Stage toggles for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,
