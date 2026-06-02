@@ -64,6 +64,7 @@ collection, storage, and report shaping.
 - Register endpoint classes in the endpoint registries consumed by collectors.
 - Keep output shaping in `core/presenters.py` and data enrichment in `core/transforms.py`.
 - Add focused unit tests first (`tests/test_github_api.py`, `tests/test_collector.py`, `tests/test_presenters.py`, `tests/test_transforms.py`).
+- Add any script-specific config to `config/audit-config.yaml` with a corresponding model in `core/config.py`
 
 ## Scripts
 

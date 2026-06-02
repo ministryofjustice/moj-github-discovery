@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
+from argparse import BooleanOptionalAction
 from core.collector import RepoCollector
 from core.config import AuditConfig, load_audit_config
 from core.github_api import (
@@ -36,11 +37,8 @@ BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "list_repos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Set Default Config File Path
-DEFAULT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "audit_config.yaml")
 # Set Default Database Path
 DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
-
 
 __start_time: float | None = None
 
@@ -68,7 +66,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-path",
-        default=DEFAULT_DB_PATH,
+        default=None,
         help=f"SQLite path for core storage (default: {DEFAULT_DB_PATH}).",
     )
     parser.add_argument(
@@ -86,7 +84,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--sort-ascending",
-        type=bool,
+        type=BooleanOptionalAction,
+        default=None,
         help="Sort order for --sort-by field (default: false [descending]).",
     )
     parser.add_argument(
@@ -99,7 +98,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--resume",
-        action="store_true",
+        type=BooleanOptionalAction,
+        default=None,
         help=(
             "Skip endpoints already collected in the database for each repo. "
             "Safe to use after an interrupted run."
@@ -113,14 +113,9 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--config-file",
-        default=DEFAULT_CONFIG_PATH,
+        default=None,
         type=Path,
-        help=(
-            "Path to audit config YAML file. If not provided, the script will "
-            "look for the default config at config/audit_config.yaml. If the "
-            "default config file is missing, a fully-defaulted config will be "
-            "used (all stages on)."
-        ),
+        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
     )
     return parser.parse_args()
 
@@ -136,14 +131,18 @@ def main() -> None:
 
     # Define Variables from Config and/or Args
     database_path = args.db_path if args.db_path else list_repos_config.database_path
+    if database_path is not None and not Path(database_path).is_absolute():
+        database_path = str(Path(PROJECT_ROOT) / database_path)
     output_filename = (
         args.output_filename
         if args.output_filename
         else list_repos_config.output_filename
     )
     repo_file = args.repo_file if args.repo_file else config.repo_list_file
+    if repo_file is not None and not Path(repo_file).is_absolute():
+        repo_file = str(Path(PROJECT_ROOT) / repo_file)
     repo_limit = args.limit if args.limit is not None else list_repos_config.repo_limit
-    resume = args.resume if args.resume else list_repos_config.resume
+    resume = args.resume if args.resume is not None else list_repos_config.resume
     sort_by_field = args.sort_by if args.sort_by else list_repos_config.sort_by_field
     sort_asc = (
         args.sort_ascending
@@ -212,7 +211,7 @@ def main() -> None:
 
     summary = build_repo_summary_table(df)
 
-    excel_path = os.path.join(OUTPUT_DIR, args.output_filename)
+    excel_path = os.path.join(OUTPUT_DIR, output_filename)
     try:
         with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Repos")

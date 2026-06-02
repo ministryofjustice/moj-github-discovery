@@ -20,7 +20,9 @@ DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 class ListReposConfig(BaseModel):
     """Config for ``list_repos.py`` script."""
 
-    database_filename: str = "repo_audit.db"  # SQLite cache file for repo audit data
+    database_path: str = (
+        "internal/repo_audit.db"  # SQLite cache file for repo audit data
+    )
     output_filename: str = "list_repos.xlsx"  # output file for repo summary data
     repo_limit: Optional[int] = 400
     resume: bool = (
