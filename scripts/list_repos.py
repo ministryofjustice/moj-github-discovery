@@ -61,6 +61,12 @@ def _parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--config-file",
+        default=None,
+        type=Path,
+        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
+    )
+    parser.add_argument(
         "--repo-file",
         help="Path to repo list file (YAML preferred).",
     )
@@ -110,12 +116,6 @@ def _parse_args() -> argparse.Namespace:
         choices=["pat", "app", "cli"],
         default=None,
         help="Select GitHub authentication method explicitly",
-    )
-    parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
     )
     return parser.parse_args()
 

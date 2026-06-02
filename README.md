@@ -81,11 +81,16 @@ uv run python scripts/list_repos.py --repo-file <file> [options]
 
 **Options:**
 
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
+
+**Options: CLI Overrides:**
+
 - `--repo-file <file>` - Repositories to audit. Preferred format is YAML (`repos:` list of `owner/repo` strings) and comments are supported.
-- `--db <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `--excel <path>` - Export results to Excel file. Requires `openpyxl`.
+- `--db-path <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
+- `--output-filename <path>` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
-- `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
+- `--sort-by [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
+- `--sort-ascending <true/false>` - Sort order for `--sort-by` field, defaults to `false` / descending
 - `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
