@@ -2,18 +2,17 @@
 # Override by passing --config-file path/to/your.yaml on the CLI.
 
 # Global attributes used by all/multiple scripts
-github_organisation: "ministryofjustice"
+github_organization: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
 
 # Stage Toggles for list_repos.py.
-
 list_repos:
-  database_file: "repo_audit.db"
-  output_file_format: "excel"
+  database_path: "internal/repo_audit.db"
+  output_filename: "list_repos.xlsx"
   repo_limit: 400
   resume: true
   sort_by_field: "pushed_at"
-  sort_order: "descending"
+  sort_ascending: false
 
 # Stage toggles for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,

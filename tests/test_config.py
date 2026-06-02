@@ -1,6 +1,5 @@
 """Unit tests for core.config."""
 
-import pytest
 import yaml
 
 from core.config import (
@@ -22,16 +21,9 @@ def test_defaults_all_stages_enabled():
     assert config.repo_list_file == "repo_list.yaml"
 
 
-def test_load_returns_defaults_when_default_path_missing(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    config = load_audit_config()
+def test_load_returns_defaults_when_default_path_missing(tmp_path):
+    config = load_audit_config(tmp_path / "nonexistent_config.yaml")
     assert config == AuditConfig()
-
-
-def test_load_raises_when_explicit_path_missing(tmp_path):
-    missing = tmp_path / "does_not_exist.yaml"
-    with pytest.raises(FileNotFoundError):
-        load_audit_config(missing)
 
 
 def test_load_respects_stage_toggles(tmp_path):

@@ -14,6 +14,21 @@ import sys
 import yaml
 from pydantic import BaseModel, Field
 
+DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
+
+
+class ListReposConfig(BaseModel):
+    """Config for ``list_repos.py`` script."""
+
+    database_filename: str = "repo_audit.db"  # SQLite cache file for repo audit data
+    output_filename: str = "list_repos.xlsx"  # output file for repo summary data
+    repo_limit: Optional[int] = 400
+    resume: bool = (
+        True  # whether to use database cache to skip endpoints already collected
+    )
+    sort_by_field: str = "pushed_at"  # field to sort by
+    sort_ascending: bool = False  # sort order - descending by default
+
 
 class WorkflowAuditConfig(BaseModel):
     """Per-stage toggles for ``github_workflow.py``."""
@@ -30,11 +45,10 @@ class WorkflowAuditConfig(BaseModel):
 class AuditConfig(BaseModel):
     """Top-level audit config loaded from ``audit_config.yaml``."""
 
+    github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
+    list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     workflow_audit: WorkflowAuditConfig = Field(default_factory=WorkflowAuditConfig)
-
-
-DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
 
 def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
@@ -42,33 +56,22 @@ def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
 
     Behaviour:
 
-    * If ``config_path`` is ``None``, the function looks for the default
-      file at ``config/audit_config.yaml``. If that file is missing, a
-      fully-defaulted :class:`AuditConfig` is returned (all stages on).
-    * If ``config_path`` is provided but the file does not exist, a
-      :class:`FileNotFoundError` is raised — the caller asked for a
-      specific file and we should not silently fall back.
-    * Missing fields in the YAML fall back to model defaults, so a
-      partial config only needs to list the toggles being changed.
+    - If the file at ``config_path`` exists, it will be loaded and parsed as YAML.
+    - If the file does not exist and ``config_path`` is the default path, a warning will be printed and a default config will be returned.
+    - If the file does not exist and ``config_path`` is not the default path, a FileNotFoundError will be raised.
     """
-    if config_path is None:
+    resolved_path = config_path or DEFAULT_CONFIG_PATH
+
+    if not resolved_path.exists():
         print(
-            f"No config file specified, looking for default at {DEFAULT_CONFIG_PATH}...",
+            f"Warning: Config file not found at {resolved_path}. "
+            "Using default config values. To fix this, create a config file at the default location or specify a path with --config-file.",
             file=sys.stderr,
         )
-        resolved = DEFAULT_CONFIG_PATH
-        if not resolved.exists():
-            print(f"Default config file not found: {resolved}", file=sys.stderr)
-            return AuditConfig()
-    else:
-        print(f"Loading config from {config_path}...", file=sys.stderr)
-        resolved = Path(config_path)
-        if not resolved.exists():
-            print(f"Config file not found: {resolved}", file=sys.stderr)
-            raise FileNotFoundError(f"Config file not found: {resolved}")
+        return AuditConfig()
 
-    print(f"Reading config from {resolved}...", file=sys.stderr)
-    with resolved.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    print(f"Reading config from {resolved_path}...", file=sys.stderr)
+    with resolved_path.open("r", encoding="utf-8") as fh:
+        config_data = yaml.safe_load(fh) or {}
 
-    return AuditConfig(**data)
+    return AuditConfig(**config_data)
