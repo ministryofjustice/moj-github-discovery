@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-import sys
 import yaml
 from pydantic import BaseModel, Field
 
@@ -54,26 +53,18 @@ class AuditConfig(BaseModel):
 
 
 def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
-    """Load an :class:`AuditConfig` from disk.
+    if config_path is not None:
+        # Explicit override via CLI - must exist if provided
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found at {config_path}")
+        resolved_path = config_path
+    else:
+        # No CLI override - fall back to default config file, then defaults if not found
+        resolved_path = DEFAULT_CONFIG_PATH
+        if not resolved_path.exists():
+            return AuditConfig()  # return defaults if no config file found
 
-    Behaviour:
-
-    - If the file at ``config_path`` exists, it will be loaded and parsed as YAML.
-    - If the file does not exist and ``config_path`` is the default path, a warning will be printed and a default config will be returned.
-    - If the file does not exist and ``config_path`` is not the default path, a FileNotFoundError will be raised.
-    """
-    resolved_path = config_path or DEFAULT_CONFIG_PATH
-
-    if not resolved_path.exists():
-        print(
-            f"Warning: Config file not found at {resolved_path}. "
-            "Using default config values. To fix this, create a config file at the default location or specify a path with --config-file.",
-            file=sys.stderr,
-        )
-        return AuditConfig()
-
-    print(f"Reading config from {resolved_path}...", file=sys.stderr)
-    with resolved_path.open("r", encoding="utf-8") as fh:
-        config_data = yaml.safe_load(fh) or {}
+    with resolved_path.open() as fh:
+        config_data = yaml.safe_load(fh) or {}  # handle empty file case gracefully
 
     return AuditConfig(**config_data)

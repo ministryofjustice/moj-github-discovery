@@ -84,7 +84,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--sort-ascending",
-        type=BooleanOptionalAction,
+        action=BooleanOptionalAction,
         default=None,
         help="Sort order for --sort-by field (default: false [descending]).",
     )
@@ -98,7 +98,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--resume",
-        type=BooleanOptionalAction,
+        action=BooleanOptionalAction,
         default=None,
         help=(
             "Skip endpoints already collected in the database for each repo. "

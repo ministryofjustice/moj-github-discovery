@@ -5,7 +5,7 @@ Refactored to use core modules:
     - Repo discovery / loading      core.github_api.list_org_repos, core.repo_list
     - HTTP transport                core.github_client.GitHubHttpClient
     - Workflow + repo data          RepoCollector with typed repo-scoped endpoints
-    - Stage toggles                 core.config.load_audit_config
+    - Stage workflow_config                 core.config.load_audit_config
 
 Not yet in core (local implementations retained):
     - Workflow YAML uses: parsing
@@ -897,7 +897,7 @@ def _skip(stage_label: str, toggle_name: str) -> None:
 def main() -> None:
     args = _parse_args()
     config: AuditConfig = load_audit_config(args.config_file)
-    toggles = config.workflow_audit
+    workflow_config = config.workflow_audit
 
     client = GitHubHttpClient(auth_method=args.auth)
     storage = SqliteRepoStorage(args.db)
@@ -906,13 +906,13 @@ def main() -> None:
     repo_list = resolve_repo_list(args, client, config)
 
     # Stage 2 - collect_baseline
-    if toggles.collect_baseline_data:
+    if workflow_config.collect_baseline_data:
         collect_baseline(args, client, repo_list, storage)
     else:
         _skip("Stage 2", "collect_baseline_data")
 
     # Stage 3 - collect_additional
-    if toggles.collect_additional_data:
+    if workflow_config.collect_additional_data:
         collect_additional(args, client, repo_list, storage)
     else:
         _skip("Stage 3", "collect_additional_data")
@@ -922,31 +922,31 @@ def main() -> None:
     repo_rows, detail_rows = build_rows(repo_list, storage)
 
     # Stage 5 - write_posture_reports
-    if toggles.gen_posture_reports:
+    if workflow_config.gen_posture_reports:
         write_posture_reports(args, repo_rows, detail_rows)
     else:
         _skip("Stage 5", "gen_posture_reports")
 
     # Stage 6 - actions_analysis
-    if toggles.actions_analysis:
+    if workflow_config.actions_analysis:
         actions_analysis(client, detail_rows)
     else:
         _skip("Stage 6", "actions_analysis")
 
     # Stage 7 - permissions_analysis
-    if toggles.permissions_analysis:
+    if workflow_config.permissions_analysis:
         permissions_analysis(client, detail_rows)
     else:
         _skip("Stage 7", "permissions_analysis")
 
     # Stage 8 - credentials_analysis
-    if toggles.credentials_analysis:
+    if workflow_config.credentials_analysis:
         credentials_analysis(client, detail_rows)
     else:
         _skip("Stage 8", "credentials_analysis")
 
     # Stage 9 - trigger_risk_analysis
-    if toggles.trigger_risk_analysis:
+    if workflow_config.trigger_risk_analysis:
         trigger_risk_analysis(client, detail_rows)
     else:
         _skip("Stage 9", "trigger_risk_analysis")
