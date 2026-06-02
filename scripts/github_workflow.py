@@ -5,7 +5,7 @@ Refactored to use core modules:
     - Repo discovery / loading      core.github_api.list_org_repos, core.repo_list
     - HTTP transport                core.github_client.GitHubHttpClient
     - Workflow + repo data          RepoCollector with typed repo-scoped endpoints
-    - Stage workflow_config                 core.config.load_audit_config
+    - Script config                 core.config.load_audit_config
 
 Not yet in core (local implementations retained):
     - Workflow YAML uses: parsing

@@ -181,7 +181,7 @@ def main() -> None:
 
     if not repo_list:
         print(
-            "No repositories found in repo file after applying --limit.",
+            "No repositories found in repo file (after applying any limit).",
             file=sys.stderr,
         )
         return

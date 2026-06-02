@@ -53,6 +53,20 @@ class AuditConfig(BaseModel):
 
 
 def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
+    """
+    Load an :class:`AuditConfig` from disk.
+
+    Behaviour:
+
+    * If ``config_path`` is ``None``, the function looks for the default
+      file at ``config/audit_config.yaml``. If that file is missing, a
+      fully-defaulted :class:`AuditConfig` is returned (all stages on).
+    * If ``config_path`` is provided but the file does not exist, a
+      :class:`FileNotFoundError` is raised — the caller asked for a
+      specific file and we should not silently fall back.
+    * Missing fields in the YAML fall back to model defaults, so a
+      partial config only needs to list the toggles being changed.
+    """
     if config_path is not None:
         # Explicit override via CLI - must exist if provided
         if not config_path.exists():
