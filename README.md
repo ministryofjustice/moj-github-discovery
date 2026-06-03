@@ -212,7 +212,7 @@ uv run python scripts/org_security_posture.py --config-file /path/to/config.yaml
 
 ```bash
 # Export a workbook for review (org + output file come from config), authenticating via PAT specifically
- uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml --auth pat
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml --auth pat
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard
@@ -473,7 +473,7 @@ uv run python scripts/archive_repos.py ministryofjustice --audit-db /tmp/archive
 uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 
 # 2. Set `use_cache: false` in config/audit_config.yaml to run without cache when you need fresh data
-uv run python scripts/org_security_posture.py ministryofjustice --no-cache
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 
 # 3. Limit supply-chain checks to repos listed in repo_list.yaml - adjust repo_list_file for alternate lists
 uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
