@@ -16,6 +16,17 @@ from pydantic import BaseModel, Field
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
 
+class LfsScriptConfig(BaseModel):
+    """Config for ``lfs_audit.py`` script."""
+
+    database_path: str = "internal/lfs_audit.db"  # SQLite cache file for LFS audit data
+    soft_limit_mb: int = 50  # soft file size limit in megabytes
+    hard_limit_mb: int = 100  # hard file size limit in megabytes
+    output_csv_filename: str = (
+        "repos_exceeding_thresholds.xlsx"  # output file for repos exceeding limits
+    )
+
+
 class ListReposConfig(BaseModel):
     """Config for ``list_repos.py`` script."""
 
@@ -65,6 +76,7 @@ class AuditConfig(BaseModel):
 
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
+    lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(
         default_factory=OrgSecurityPostureConfig
