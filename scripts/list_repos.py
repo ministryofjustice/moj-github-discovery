@@ -112,7 +112,7 @@ def main() -> None:
     print(f"Sort by field: {sort_by_field}", file=sys.stderr)
     print(f"Sort ascending: {sort_asc}", file=sys.stderr)
     print(
-        f"Standard endpoints only: {list_repos_config.standard_endpoints}",
+        f"Standard endpoints only: {list_repos_config.standard_endpoints_only}",
         file=sys.stderr,
     )
 
@@ -140,7 +140,7 @@ def main() -> None:
     storage = SqliteRepoStorage(database_path)
     selected_endpoints = (
         STANDARD_REPO_AUDIT_ENDPOINTS
-        if list_repos_config.standard_endpoints
+        if list_repos_config.standard_endpoints_only
         else REPO_ENDPOINTS
     )
     collector = RepoCollector(

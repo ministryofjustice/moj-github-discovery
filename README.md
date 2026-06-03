@@ -66,6 +66,11 @@ collection, storage, and report shaping.
 - Add focused unit tests first (`tests/test_github_api.py`, `tests/test_collector.py`, `tests/test_presenters.py`, `tests/test_transforms.py`).
 - Add any script-specific config to `config/audit_config.yaml` with a corresponding model in `core/config.py`.
 
+## Global Config Attributes
+
+- `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
+- `repo_list_file` - Path to the repo list YAML file to be referenced by the scripts - defaults to `repo_list.yaml` at project root.
+
 ## Scripts
 
 ### 1. `list_repos.py` - Audit Repositories From a File
@@ -83,6 +88,16 @@ uv run python scripts/list_repos.py --repo-file <file> [options]
 
 - `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+
+**Config Parameters:**
+
+- `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
+- `output-filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
+- `resume: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
+- `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
+- `sort_ascending: <true/false>` - Sort order for `sort_by` field, defaults to `false` / descending
 
 **Examples:**
 

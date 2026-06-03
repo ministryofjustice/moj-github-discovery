@@ -27,7 +27,7 @@ class ListReposConfig(BaseModel):
     resume: bool = (
         True  # whether to use database cache to skip endpoints already collected
     )
-    standard_endpoints: bool = (
+    standard_endpoints_only: bool = (
         True  # whether to limit to standard audit endpoints or collect all available
     )
     sort_by_field: str = "pushed_at"  # field to sort by

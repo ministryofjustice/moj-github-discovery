@@ -11,7 +11,7 @@ list_repos:
   output_filename: "list_repos.xlsx"
   repo_limit: 50
   resume: true
-  standard_endpoints: true
+  standard_endpoints_only: true
   sort_by_field: "pushed_at"
   sort_ascending: false
 
