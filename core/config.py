@@ -43,9 +43,9 @@ class OrgSecurityPostureConfig(BaseModel):
     output_filename: str = (
         "org_security_posture.xlsx"  # output file for org posture summary data
     )
-    resume: bool = (
-        True  # whether to use database cache to skip endpoints already collected
-    )
+    # resume: bool = (
+    #     True  # whether to use database cache to skip endpoints already collected
+    # )
 
 
 class WorkflowAuditConfig(BaseModel):
