@@ -341,9 +341,12 @@ def main() -> None:
     org_security_posture_config = config.org_security_posture
 
     # Define Variables from Config
-    database_path = org_security_posture_config.database_path
-    if database_path is not None and not Path(database_path).is_absolute():
-        database_path = str(Path(PROJECT_ROOT) / database_path)
+    database_path = Path(org_security_posture_config.database_path)
+    if not database_path.is_absolute():
+        database_path = Path(PROJECT_ROOT) / database_path
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    global ORG_CACHE_DB_PATH
+    ORG_CACHE_DB_PATH = str(database_path)
     github_organization = config.github_organization
     output_filename = org_security_posture_config.output_filename
     repo_file = config.repo_list_file

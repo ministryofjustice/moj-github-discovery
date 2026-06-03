@@ -41,6 +41,14 @@ def test_load_returns_config_from_file(tmp_path):
     assert config.repo_list_file == "custom_repos.yaml"
 
 
+# TODO: add similar test to test_load_respects_stage_toggles to check list_repos
+# toggles are respected
+
+# TODO: add similar test to test_load_respects_stage_toggles to check org_security_posture
+# toggles are respected
+
+
+# TODO: rename to focus on workflow_audit toggles
 def test_load_respects_stage_toggles(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
     config_file.write_text(

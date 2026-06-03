@@ -44,7 +44,7 @@ class OrgSecurityPostureConfig(BaseModel):
         "org_security_posture.xlsx"  # output file for org posture summary data
     )
     resume: bool = (
-        True  # whether to use database cache to skip endpoints already collected
+        True  # whether to reuse cached posture data from the org posture database
     )
 
 
