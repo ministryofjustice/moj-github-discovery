@@ -92,7 +92,7 @@ uv run python scripts/list_repos.py --config-file config/audit_config.yaml --aut
 **Config Parameters:**
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `output-filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
 - `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
@@ -199,20 +199,20 @@ uv run python scripts/org_security_posture.py --config-file /path/to/config.yaml
 **Config Parameters:**
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/org_security_posture.db`).
-- `output-filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `use_cache: true/false` - Skip endpoints already persisted in the database for supply-chain analysis
 
 **Output:**
 
 - A summary printed to stderr
 - Excel workbook output to `output/org_security_posture/`
-- Cached results stored in `internal/org_posture_cache.db` for reuse on later runs
+- Cached results stored in `internal/org_security_posture.db` for reuse on later runs
 
 **Examples:**
 
 ```bash
-# Export a workbook for review, authenticating via PAT specifically
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
+# Export a workbook for review (org + output file come from config), authenticating via PAT specifically
+ uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml --auth pat
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard

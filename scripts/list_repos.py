@@ -148,7 +148,7 @@ def main() -> None:
     )
 
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, use_cache=use_cache)
+    collector.collect(primary_org, repos=repo_list, resume=use_cache)
 
     rows: list[dict[str, Any]] = []
     for full_name in repo_list:
