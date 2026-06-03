@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
-from argparse import BooleanOptionalAction
 from core.collector import RepoCollector
 from core.config import AuditConfig, load_audit_config
 from core.github_api import (
@@ -67,51 +66,6 @@ def _parse_args() -> argparse.Namespace:
         help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
     )
     parser.add_argument(
-        "--repo-file",
-        help="Path to repo list file (YAML preferred).",
-    )
-    parser.add_argument(
-        "--db-path",
-        default=None,
-        help=f"SQLite path for core storage (default: {DEFAULT_DB_PATH}).",
-    )
-    parser.add_argument(
-        "--output-filename",
-        help="Output filename for Excel export (default: list_repos.xlsx in output directory).",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        help="Only process the first N repos from --repo-file.",
-    )
-    parser.add_argument(
-        "--sort-by",
-        help=("Field to sort by.  Default: pushed_at descending."),
-    )
-    parser.add_argument(
-        "--sort-ascending",
-        action=BooleanOptionalAction,
-        default=None,
-        help="Sort order for --sort-by field (default: false [descending]).",
-    )
-    parser.add_argument(
-        "--standard-endpoints",
-        action="store_true",
-        help=(
-            "Use the reduced standard endpoint set (faster). "
-            "By default, all repo endpoints are collected."
-        ),
-    )
-    parser.add_argument(
-        "--resume",
-        action=BooleanOptionalAction,
-        default=None,
-        help=(
-            "Skip endpoints already collected in the database for each repo. "
-            "Safe to use after an interrupted run."
-        ),
-    )
-    parser.add_argument(
         "--auth",
         choices=["pat", "app", "cli"],
         default=None,
@@ -130,25 +84,17 @@ def main() -> None:
     list_repos_config = config.list_repos
 
     # Define Variables from Config and/or Args
-    database_path = args.db_path if args.db_path else list_repos_config.database_path
+    database_path = list_repos_config.database_path
     if database_path is not None and not Path(database_path).is_absolute():
         database_path = str(Path(PROJECT_ROOT) / database_path)
-    output_filename = (
-        args.output_filename
-        if args.output_filename
-        else list_repos_config.output_filename
-    )
-    repo_file = args.repo_file if args.repo_file else config.repo_list_file
+    output_filename = list_repos_config.output_filename
+    repo_file = config.repo_list_file
     if repo_file is not None and not Path(repo_file).is_absolute():
         repo_file = str(Path(PROJECT_ROOT) / repo_file)
-    repo_limit = args.limit if args.limit is not None else list_repos_config.repo_limit
-    resume = args.resume if args.resume is not None else list_repos_config.resume
-    sort_by_field = args.sort_by if args.sort_by else list_repos_config.sort_by_field
-    sort_asc = (
-        args.sort_ascending
-        if args.sort_ascending is not None
-        else list_repos_config.sort_ascending
-    )
+    repo_limit = list_repos_config.repo_limit
+    resume = list_repos_config.resume
+    sort_by_field = list_repos_config.sort_by_field
+    sort_asc = list_repos_config.sort_ascending
 
     # List Repos Config Debug
     print(section_break, file=sys.stderr)
@@ -158,12 +104,17 @@ def main() -> None:
     )
 
     print(section_break, file=sys.stderr)
+
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
     print(f"Resume: {resume}", file=sys.stderr)
     print(f"Sort by field: {sort_by_field}", file=sys.stderr)
     print(f"Sort ascending: {sort_asc}", file=sys.stderr)
+    print(
+        f"Standard endpoints only: {list_repos_config.standard_endpoints}",
+        file=sys.stderr,
+    )
 
     print(sub_section_break, file=sys.stderr)
 
@@ -188,7 +139,9 @@ def main() -> None:
 
     storage = SqliteRepoStorage(database_path)
     selected_endpoints = (
-        STANDARD_REPO_AUDIT_ENDPOINTS if args.standard_endpoints else REPO_ENDPOINTS
+        STANDARD_REPO_AUDIT_ENDPOINTS
+        if list_repos_config.standard_endpoints
+        else REPO_ENDPOINTS
     )
     collector = RepoCollector(
         storage=storage, endpoints=selected_endpoints, auth_method=args.auth

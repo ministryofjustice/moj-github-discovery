@@ -79,42 +79,16 @@ the core SQLite storage, and optionally exports an Excel workbook.
 uv run python scripts/list_repos.py --repo-file <file> [options]
 ```
 
-**Options:**
+**CLI Options:**
 
 - `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-
-**Options: CLI Overrides:**
-
-- `--repo-file <file>` - Repositories to audit. Preferred format is YAML (`repos:` list of `owner/repo` strings) and comments are supported.
-- `--db-path <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `--output-filename <path>` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
-- `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
-- `--sort-by [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
-- `--sort-ascending <true/false>` - Sort order for `--sort-by` field, defaults to `false` / descending
-- `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
-- `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Examples:**
 
 ```bash
-# Audit all repos from file and print JSON output
-uv run python scripts/list_repos.py --repo-file repo_list.yaml
-
-# Audit all repos from file and print JSON output, authenticating via PAT specifically
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --auth pat
-
-# Export to Excel
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel report.xlsx
-
-# Limit processing to first 50 repos in file
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 50
-
-# Use a custom core storage database path
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db /tmp/audit.db
-
-# Sort output by stars ascending
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --sort +stargazers
+# Audit all repos from file
+uv run python scripts/list_repos.py --config-file config/audit_config.yaml --auth app
 ```
 
 ### 2. `archive_repos.py` - Find Archive Candidates
