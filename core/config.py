@@ -24,7 +24,7 @@ class ListReposConfig(BaseModel):
     )
     output_filename: str = "list_repos.xlsx"  # output file for repo summary data
     repo_limit: Optional[int] = 400
-    resume: bool = (
+    use_cache: bool = (
         True  # whether to use database cache to skip endpoints already collected
     )
     standard_endpoints_only: bool = (
@@ -43,7 +43,7 @@ class OrgSecurityPostureConfig(BaseModel):
     output_filename: str = (
         "org_security_posture.xlsx"  # output file for org posture summary data
     )
-    resume: bool = (
+    use_cache: bool = (
         True  # whether to reuse cached posture data from the org posture database
     )
 

@@ -41,15 +41,57 @@ def test_load_returns_config_from_file(tmp_path):
     assert config.repo_list_file == "custom_repos.yaml"
 
 
-# TODO: add similar test to test_load_respects_stage_toggles to check list_repos
-# toggles are respected
+def test_load_respects_org_security_posture_config_overrides(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "repo_list_file": "custom_repos.yaml",
+                "org_security_posture": {
+                    "database_path": "custom_org_posture.db",
+                    "output_filename": "custom_org_posture.xlsx",
+                    "use_cache": False,
+                },
+            }
+        )
+    )
 
-# TODO: add similar test to test_load_respects_stage_toggles to check org_security_posture
-# toggles are respected
+    config = load_audit_config(config_file)
+
+    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.org_security_posture.database_path == "custom_org_posture.db"
+    assert config.org_security_posture.output_filename == "custom_org_posture.xlsx"
+    assert config.org_security_posture.use_cache is False
 
 
-# TODO: rename to focus on workflow_audit toggles
-def test_load_respects_stage_toggles(tmp_path):
+def test_load_respects_list_repos_config_overrides(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "repo_list_file": "custom_list_repos_repos.yaml",
+                "list_repos": {
+                    "output_filename": "custom_list_repos_output.xlsx",
+                    "use_cache": False,
+                    "standard_endpoints_only": False,
+                    "sort_by_field": "created_at",
+                    "sort_ascending": True,
+                },
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.repo_list_file == "custom_list_repos_repos.yaml"
+    assert config.list_repos.output_filename == "custom_list_repos_output.xlsx"
+    assert config.list_repos.use_cache is False
+    assert config.list_repos.standard_endpoints_only is False
+    assert config.list_repos.sort_by_field == "created_at"
+    assert config.list_repos.sort_ascending is True
+
+
+def test_load_respects_workflow_audit_config_overrides(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
     config_file.write_text(
         yaml.safe_dump(

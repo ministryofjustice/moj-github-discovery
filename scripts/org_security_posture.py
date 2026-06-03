@@ -350,7 +350,7 @@ def main() -> None:
     github_organization = config.github_organization
     output_filename = org_security_posture_config.output_filename
     repo_file = config.repo_list_file
-    resume = org_security_posture_config.resume
+    use_cache = org_security_posture_config.use_cache
 
     if repo_file is not None and not Path(repo_file).is_absolute():
         repo_file = str(Path(PROJECT_ROOT) / repo_file)
@@ -370,7 +370,7 @@ def main() -> None:
     print(f"GitHub Organization: {github_organization}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"Output filename: {output_filename}", file=sys.stderr)
-    print(f"Resume: {resume}", file=sys.stderr)
+    print(f"Use Cache: {use_cache}", file=sys.stderr)
 
     print(sub_section_break, file=sys.stderr)
 
@@ -396,7 +396,7 @@ def main() -> None:
         github_organization,
         args.auth,
         repo_full_names=repo_scope,
-        use_cache=resume,
+        use_cache=use_cache,
     )
 
     print("\n Audit complete. Building summary...", file=sys.stderr)

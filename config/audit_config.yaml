@@ -10,16 +10,16 @@ list_repos:
   database_path: "internal/repo_audit.db"
   output_filename: "list_repos.xlsx"
   repo_limit: 50
-  resume: true
   standard_endpoints_only: true
   sort_by_field: "pushed_at"
   sort_ascending: false
+  use_cache: true
 
 # Script config for org_security_posture.py.
 org_security_posture:
   database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
-  resume: true
+  use_cache: true
 
 # Script config for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,

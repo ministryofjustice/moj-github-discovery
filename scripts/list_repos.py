@@ -92,7 +92,7 @@ def main() -> None:
     if repo_file is not None and not Path(repo_file).is_absolute():
         repo_file = str(Path(PROJECT_ROOT) / repo_file)
     repo_limit = list_repos_config.repo_limit
-    resume = list_repos_config.resume
+    use_cache = list_repos_config.use_cache
     sort_by_field = list_repos_config.sort_by_field
     sort_asc = list_repos_config.sort_ascending
 
@@ -108,7 +108,7 @@ def main() -> None:
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
-    print(f"Resume: {resume}", file=sys.stderr)
+    print(f"use_cache: {use_cache}", file=sys.stderr)
     print(f"Sort by field: {sort_by_field}", file=sys.stderr)
     print(f"Sort ascending: {sort_asc}", file=sys.stderr)
     print(
@@ -148,7 +148,7 @@ def main() -> None:
     )
 
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=resume)
+    collector.collect(primary_org, repos=repo_list, use_cache=use_cache)
 
     rows: list[dict[str, Any]] = []
     for full_name in repo_list:
