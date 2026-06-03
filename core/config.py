@@ -34,6 +34,20 @@ class ListReposConfig(BaseModel):
     sort_ascending: bool = False  # sort order - descending by default
 
 
+class OrgSecurityPostureConfig(BaseModel):
+    """Config for ``org_security_posture.py`` script."""
+
+    database_path: str = (
+        "internal/org_security_posture.db"  # SQLite cache file for org posture data
+    )
+    output_filename: str = (
+        "org_security_posture.xlsx"  # output file for org posture summary data
+    )
+    resume: bool = (
+        True  # whether to use database cache to skip endpoints already collected
+    )
+
+
 class WorkflowAuditConfig(BaseModel):
     """Per-stage toggles for ``github_workflow.py``."""
 
@@ -52,6 +66,9 @@ class AuditConfig(BaseModel):
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
+    org_security_posture: OrgSecurityPostureConfig = Field(
+        default_factory=OrgSecurityPostureConfig
+    )
     workflow_audit: WorkflowAuditConfig = Field(default_factory=WorkflowAuditConfig)
 
 
