@@ -77,11 +77,6 @@ def _parse_args() -> argparse.Namespace:
         help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
     )
     parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Ignore on-disk posture cache and fetch fresh data.",
-    )
-    parser.add_argument(
         "--auth",
         choices=["pat", "app", "cli"],
         default=None,
@@ -119,7 +114,7 @@ def run_full_audit(
     org: str,
     auth_method: Literal["pat", "app", "cli"] | None = None,
     repo_full_names: list[str] | None = None,
-    use_cache: bool = True,
+    use_cache: bool = False,
 ) -> dict[str, Any]:
     """Run a full audit for the given organization."""
     cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
@@ -352,6 +347,7 @@ def main() -> None:
     github_organization = config.github_organization
     output_filename = org_security_posture_config.output_filename
     repo_file = config.repo_list_file
+    resume = org_security_posture_config.resume
 
     if repo_file is not None and not Path(repo_file).is_absolute():
         repo_file = str(Path(PROJECT_ROOT) / repo_file)
@@ -366,12 +362,12 @@ def main() -> None:
 
     print(section_break, file=sys.stderr)
 
+    print(f"Auth method: {args.auth}", file=sys.stderr)
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"GitHub Organization: {github_organization}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"Output filename: {output_filename}", file=sys.stderr)
-    print(f"No-cache: {args.no_cache}", file=sys.stderr)
-    print(f"Auth method: {args.auth}", file=sys.stderr)
+    print(f"Resume: {resume}", file=sys.stderr)
 
     print(sub_section_break, file=sys.stderr)
 
@@ -397,11 +393,15 @@ def main() -> None:
         github_organization,
         args.auth,
         repo_full_names=repo_scope,
-        use_cache=not args.no_cache,
+        use_cache=resume,
     )
 
     print("\n Audit complete. Building summary...", file=sys.stderr)
     summary = build_org_security_summary(report)
+
+    # Keys considered safe to print in full without redaction - i.e. not expected to contain sensitive info and
+    # useful for debugging/summary purposes. This is not an exhaustive list of all non-sensitive keys,
+    # just a curated subset for quick reference in logs.
     _SAFE_SUMMARY_KEYS = (
         "org_name",
         "public_repos",
@@ -426,6 +426,7 @@ def main() -> None:
         "installed_github_apps",
         "org_rulesets_count",
     )
+
     print("\n=== SECURITY POSTURE SUMMARY ===", file=sys.stderr)
     for key in _SAFE_SUMMARY_KEYS:
         if key in summary:

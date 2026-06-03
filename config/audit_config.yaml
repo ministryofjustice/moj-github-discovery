@@ -19,7 +19,7 @@ list_repos:
 org_security_posture:
   database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
-  # resume: true
+  resume: true
 
 # Script config for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,
