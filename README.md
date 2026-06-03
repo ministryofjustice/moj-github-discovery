@@ -470,13 +470,13 @@ uv run python scripts/archive_repos.py ministryofjustice --audit-db /tmp/archive
 
 ```bash
 # 1. Generate an organisation-wide posture workbook
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 
-# 2. Re-run without cache when you need fresh data
+# 2. Set `use_cache: false` in config/audit_config.yaml to run without cache when you need fresh data
 uv run python scripts/org_security_posture.py ministryofjustice --no-cache
 
-# 3. Limit supply-chain checks to repos listed in repo_list.yaml
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file --excel moj-security-posture.xlsx
+# 3. Limit supply-chain checks to repos listed in repo_list.yaml - adjust repo_list_file for alternate lists
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 ```
 
 ### Batch Audit Using File
@@ -576,8 +576,7 @@ uv run python scripts/archive_repos.py ministryofjustice --cache-only --sort -da
 ### Export organisation posture report
 
 ```bash
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file
+uv run python scripts/org_security_posture.py
 ```
 
 ## License
