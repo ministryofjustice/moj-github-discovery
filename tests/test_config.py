@@ -34,6 +34,13 @@ def test_load_raises_when_explicit_path_missing(tmp_path):
         load_audit_config(missing)
 
 
+def test_load_returns_config_from_file(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text("repo_list_file: custom_repos.yaml")
+    config = load_audit_config(config_file)
+    assert config.repo_list_file == "custom_repos.yaml"
+
+
 def test_load_respects_stage_toggles(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
     config_file.write_text(

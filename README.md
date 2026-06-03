@@ -64,6 +64,12 @@ collection, storage, and report shaping.
 - Register endpoint classes in the endpoint registries consumed by collectors.
 - Keep output shaping in `core/presenters.py` and data enrichment in `core/transforms.py`.
 - Add focused unit tests first (`tests/test_github_api.py`, `tests/test_collector.py`, `tests/test_presenters.py`, `tests/test_transforms.py`).
+- Add any script-specific config to `config/audit_config.yaml` with a corresponding model in `core/config.py`.
+
+## Global Config Attributes
+
+- `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
+- `repo_list_file` - Path to the repo list YAML file to be referenced by the scripts - defaults to `repo_list.yaml` at project root.
 
 ## Scripts
 
@@ -78,37 +84,26 @@ the core SQLite storage, and optionally exports an Excel workbook.
 uv run python scripts/list_repos.py --repo-file <file> [options]
 ```
 
-**Options:**
+**CLI Options:**
 
-- `--repo-file <file>` - Repositories to audit. Preferred format is YAML (`repos:` list of `owner/repo` strings) and comments are supported.
-- `--db <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `--excel <path>` - Export results to Excel file. Requires `openpyxl`.
-- `--limit <N>` - Crop the loaded `--repo-file` list to the first N entries before collection.
-- `--sort [-]column` - Sort by repo field (`-` prefix for descending). Defaults to last updated (`pushed_at` desc).
-- `--standard-endpoints` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
-- `--resume` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+
+**Config Parameters:**
+
+- `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
+- `output-filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
+- `resume: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
+- `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
+- `sort_ascending: <true/false>` - Sort order for `sort_by` field, defaults to `false` / descending
 
 **Examples:**
 
 ```bash
-# Audit all repos from file and print JSON output
-uv run python scripts/list_repos.py --repo-file repo_list.yaml
-
-# Audit all repos from file and print JSON output, authenticating via PAT specifically
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --auth pat
-
-# Export to Excel
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel report.xlsx
-
-# Limit processing to first 50 repos in file
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 50
-
-# Use a custom core storage database path
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db /tmp/audit.db
-
-# Sort output by stars ascending
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --sort +stargazers
+# Audit all repos from file
+uv run python scripts/list_repos.py --config-file config/audit_config.yaml --auth app
 ```
 
 ### 2. `archive_repos.py` - Find Archive Candidates

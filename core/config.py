@@ -13,6 +13,26 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, Field
 
+DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
+
+
+class ListReposConfig(BaseModel):
+    """Config for ``list_repos.py`` script."""
+
+    database_path: str = (
+        "internal/repo_audit.db"  # SQLite cache file for repo audit data
+    )
+    output_filename: str = "list_repos.xlsx"  # output file for repo summary data
+    repo_limit: Optional[int] = 400
+    resume: bool = (
+        True  # whether to use database cache to skip endpoints already collected
+    )
+    standard_endpoints_only: bool = (
+        True  # whether to limit to standard audit endpoints or collect all available
+    )
+    sort_by_field: str = "pushed_at"  # field to sort by
+    sort_ascending: bool = False  # sort order - descending by default
+
 
 class WorkflowAuditConfig(BaseModel):
     """Per-stage toggles for ``github_workflow.py``."""
@@ -29,15 +49,15 @@ class WorkflowAuditConfig(BaseModel):
 class AuditConfig(BaseModel):
     """Top-level audit config loaded from ``audit_config.yaml``."""
 
+    github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
+    list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     workflow_audit: WorkflowAuditConfig = Field(default_factory=WorkflowAuditConfig)
 
 
-DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
-
-
 def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
-    """Load an :class:`AuditConfig` from disk.
+    """
+    Load an :class:`AuditConfig` from disk.
 
     Behaviour:
 
@@ -50,16 +70,18 @@ def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
     * Missing fields in the YAML fall back to model defaults, so a
       partial config only needs to list the toggles being changed.
     """
-    if config_path is None:
-        resolved = DEFAULT_CONFIG_PATH
-        if not resolved.exists():
-            return AuditConfig()
+    if config_path is not None:
+        # Explicit override via CLI - must exist if provided
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found at {config_path}")
+        resolved_path = config_path
     else:
-        resolved = Path(config_path)
-        if not resolved.exists():
-            raise FileNotFoundError(f"Config file not found: {resolved}")
+        # No CLI override - fall back to default config file, then defaults if not found
+        resolved_path = DEFAULT_CONFIG_PATH
+        if not resolved_path.exists():
+            return AuditConfig()  # return defaults if no config file found
 
-    with resolved.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    with resolved_path.open() as fh:
+        config_data = yaml.safe_load(fh) or {}  # handle empty file case gracefully
 
-    return AuditConfig(**data)
+    return AuditConfig(**config_data)
