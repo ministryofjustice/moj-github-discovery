@@ -8,7 +8,6 @@ import atexit
 import os
 import sys
 import time
-from pathlib import Path
 from typing import Any, Literal
 
 # add project root to path for core imports
@@ -18,7 +17,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 
 from core.collector import OrgEndpointCollector
-from core.config import load_audit_config, AuditConfig
 from core.github_api import (
     OrgActionsEndpoint,
     OrgAuditLogEndpoint,
@@ -38,9 +36,6 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
 from core.utils import base_directory_setup
 
-section_break = "\n" + ("=" * 80) + "\n"
-sub_section_break = "\n" + ("-" * 80) + "\n"
-
 # TODO:
 BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
@@ -51,11 +46,15 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Set Default Cache and Repo List Paths
 ORG_CACHE_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "org_posture_cache.db")
 
+# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
+DEFAULT_REPO_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
+
 __start_time: float | None = None
 
 
 # TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
 def _report_elapsed() -> None:
+    """Report elapsed time on script exit."""
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
@@ -65,14 +64,25 @@ atexit.register(_report_elapsed)
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
         description="Audit organisation security posture using core collectors."
     )
+    parser.add_argument("org", help="GitHub organisation login.")
+    parser.add_argument("--excel", help="Write Excel workbook output.")
     parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
+        "--repo-file",
+        nargs="?",
+        const=DEFAULT_REPO_FILE,
+        help=(
+            "Limit supply-chain checks to repos in a file. "
+            "Pass a path, or use --repo-file without a value to default to repo_list.yaml."
+        ),
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignore on-disk posture cache and fetch fresh data.",
     )
     parser.add_argument(
         "--auth",
@@ -84,6 +94,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
+    """Load cached posture data for an org, if available and not expired."""
     try:
         cached = storage.read_cache(org)
         if cached is None:
@@ -101,6 +112,7 @@ def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
 
 
 def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage) -> None:
+    """Save posture data to cache with current timestamp."""
     updated_at = time.time()
     storage.upsert_cache(org, cache, updated_at)
     print(f"  Saved cache: {ORG_CACHE_DB_PATH}", file=sys.stderr)
@@ -112,13 +124,10 @@ def run_full_audit(
     repo_full_names: list[str] | None = None,
     use_cache: bool = True,
 ) -> dict[str, Any]:
+    """Run a full audit for the given organization."""
     cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
     cache_storage.init()
-    cache = (
-        _load_cache(org, cache_storage)
-        if use_cache
-        else {print("  use_cache is False, fetching fresh data...", file=sys.stderr)}
-    )
+    cache = _load_cache(org, cache_storage) if use_cache else {}
     client = GitHubHttpClient(auth_method)
 
     report: dict[str, Any] = {
@@ -126,6 +135,7 @@ def run_full_audit(
         "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
+    print(f"\nCollecting data for org: {org}", file=sys.stderr)
     collector = OrgEndpointCollector(
         client=client,
         endpoints=[
@@ -147,6 +157,7 @@ def run_full_audit(
 
     report["org_overview"] = org_data["org_overview"].data
 
+    print("\n Collecting High-Level Org Settings...", file=sys.stderr)
     report["1_org_settings"] = {
         "total_members": {
             "access": "ok",
@@ -171,10 +182,14 @@ def run_full_audit(
         },
     }
 
+    print("\n Collecting GHAS Alert Data...", file=sys.stderr)
+
     report["2_ghas_alerts"] = {
         "code_scanning": org_data["org_code_scanning_alerts"].model_dump(),
         "secret_scanning": org_data["org_secret_scanning_alerts"].model_dump(),
     }
+
+    print("\n Collecting Dependency Supply Chain Data...", file=sys.stderr)
 
     section3_col_name = "3_dependency_supply_chain"
     if section3_col_name in cache:
@@ -193,6 +208,8 @@ def run_full_audit(
         print(f"  done ({time.monotonic() - t0:.1f}s)", file=sys.stderr)
         cache[section3_col_name] = report[section3_col_name]
         _save_cache(org, cache, cache_storage)
+
+    print("\n Collecting GitHub Actions Posture Data...", file=sys.stderr)
 
     report["4_actions_posture"] = {
         "details": {
@@ -219,6 +236,7 @@ def run_full_audit(
         }
     }
 
+    print("\n Collecting Webhooks and GitHub Apps Data...", file=sys.stderr)
     report["5_webhooks_integrations"] = {
         "details": {
             "webhooks": {
@@ -237,6 +255,8 @@ def run_full_audit(
         }
     }
 
+    print("\n Collecting Organization Rulesets Data...", file=sys.stderr)
+
     report["6_rulesets"] = {
         "details": {
             "access": "ok",
@@ -249,6 +269,7 @@ def run_full_audit(
 
 
 def write_excel(report: dict[str, Any], path: str) -> None:
+    """Write the org security posture report to an Excel file."""
     summary = build_org_security_summary(report)
     summary_df = pd.DataFrame(list(summary.items()), columns=["metric", "value"])
 
@@ -288,101 +309,65 @@ def write_excel(report: dict[str, Any], path: str) -> None:
         report.get("6_rulesets", {}).get("details", {}).get("rulesets", [])
     )
 
+    # Map sheet names to DataFrames for writing
+    sheet_to_df_mapping = {
+        "Summary": summary_df,
+        "Org Settings": overview_df,
+        "2FA Disabled": mfa_df,
+        "Outside Collaborators": collabs_df,
+        "Teams": teams_df,
+        "Code Scanning Alerts": code_df,
+        "Secret Scanning Alerts": secret_df,
+        "Supply Chain": deps_df,
+        "Runners": runners_df,
+        "Org Credentials": credentials_df,
+        "Webhooks": hooks_df,
+        "GitHub Apps": apps_df,
+        "Rulesets": rulesets_df,
+    }
+
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        summary_df.to_excel(writer, index=False, sheet_name="Summary")
-        if not overview_df.empty:
-            overview_df.to_excel(writer, index=False, sheet_name="Org Settings")
-        if not mfa_df.empty:
-            mfa_df.to_excel(writer, index=False, sheet_name="2FA Disabled")
-        if not collabs_df.empty:
-            collabs_df.to_excel(writer, index=False, sheet_name="Outside Collaborators")
-        if not teams_df.empty:
-            teams_df.to_excel(writer, index=False, sheet_name="Teams")
-        if not code_df.empty:
-            code_df.to_excel(writer, index=False, sheet_name="Code Scanning Alerts")
-        if not secret_df.empty:
-            secret_df.to_excel(writer, index=False, sheet_name="Secret Scanning Alerts")
-        if not deps_df.empty:
-            deps_df.to_excel(writer, index=False, sheet_name="Supply Chain")
-        if not runners_df.empty:
-            runners_df.to_excel(writer, index=False, sheet_name="Runners")
-        if not credentials_df.empty:
-            credentials_df.to_excel(writer, index=False, sheet_name="Org Credentials")
-        if not hooks_df.empty:
-            hooks_df.to_excel(writer, index=False, sheet_name="Webhooks")
-        if not apps_df.empty:
-            apps_df.to_excel(writer, index=False, sheet_name="GitHub Apps")
-        if not rulesets_df.empty:
-            rulesets_df.to_excel(writer, index=False, sheet_name="Rulesets")
+        for sheet_name, df in sheet_to_df_mapping.items():
+            if not df.empty:
+                print(f"Writing sheet: {sheet_name} ({len(df)} rows)", file=sys.stderr)
+                df.to_excel(writer, index=False, sheet_name=sheet_name)
+            else:
+                print(f"Skipping empty sheet: {sheet_name}", file=sys.stderr)
 
     print(f"Wrote {path}", file=sys.stderr)
 
 
 def main() -> None:
+    """Main entry point for org security posture audit script."""
     global __start_time
     __start_time = time.monotonic()
 
     args = _parse_args()
 
-    config: AuditConfig = load_audit_config(args.config_file)
-
-    org_security_posture_config = config.org_security_posture
-
-    # Define Variables from Config
-    database_path = org_security_posture_config.database_path
-    if database_path is not None and not Path(database_path).is_absolute():
-        database_path = str(Path(PROJECT_ROOT) / database_path)
-    github_organization = config.github_organization
-    output_filename = org_security_posture_config.output_filename
-    repo_file = config.repo_list_file
-    if repo_file is not None and not Path(repo_file).is_absolute():
-        repo_file = str(Path(PROJECT_ROOT) / repo_file)
-    resume = org_security_posture_config.resume
-
-    # Org Security Posture Debug
-    print(section_break, file=sys.stderr)
-
-    print(
-        "org_security_posture to be executed with the following config values:",
-        file=sys.stderr,
-    )
-
-    print(section_break, file=sys.stderr)
-
-    print(f"Database Path: {database_path}", file=sys.stderr)
-    print(f"GitHub Organization: {github_organization}", file=sys.stderr)
-    print(f"Output Filename: {output_filename}", file=sys.stderr)
-    print(f"Repo File: {repo_file}", file=sys.stderr)
-    print(f"Resume: {resume}", file=sys.stderr)
-
-    print(sub_section_break, file=sys.stderr)
-
     repo_scope: list[str] | None = None
-    if repo_file:
+    if args.repo_file:
         try:
-            repo_scope = load_repo_list_file(repo_file)
+            repo_scope = load_repo_list_file(args.repo_file)
         except Exception as exc:
             print(f"Failed to read repo file: {exc}", file=sys.stderr)
             sys.exit(2)
 
-        org_prefix = f"{github_organization}/"
+        org_prefix = f"{args.org}/"
         repo_scope = [name for name in repo_scope if name.startswith(org_prefix)]
         print(
-            f"Using {len(repo_scope)} repos from {repo_file} for supply-chain checks",
+            f"Using {len(repo_scope)} repos from {args.repo_file} for supply-chain checks",
             file=sys.stderr,
         )
 
-    print(
-        f"Running org security posture audit for: {github_organization}",
-        file=sys.stderr,
-    )
+    print(f"Running org security posture audit for: {args.org}", file=sys.stderr)
     report = run_full_audit(
-        github_organization,
+        args.org,
         args.auth,
         repo_full_names=repo_scope,
-        use_cache=resume,
+        use_cache=not args.no_cache,
     )
 
+    print("\n Audit complete. Building summary...", file=sys.stderr)
     summary = build_org_security_summary(report)
     _SAFE_SUMMARY_KEYS = (
         "org_name",
@@ -413,8 +398,9 @@ def main() -> None:
         if key in summary:
             print(f"  {key}: {summary[key]}", file=sys.stderr)
 
-    excel_path = os.path.join(OUTPUT_DIR, output_filename)
-    write_excel(report, excel_path)
+    if args.excel:
+        excel_path = os.path.join(OUTPUT_DIR, args.excel)
+        write_excel(report, excel_path)
 
 
 if __name__ == "__main__":
