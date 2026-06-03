@@ -207,20 +207,8 @@ uv run python scripts/org_security_posture.py <org> [--excel path] [--repo-file 
 **Examples:**
 
 ```bash
-# Export a workbook for review
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-
 # Export a workbook for review, authenticating via PAT specifically
 uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
-
-# Limit supply-chain checks to repos from repo_list.yaml
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file
-
-# Limit supply-chain checks to repos from a custom list file
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file custom_repos.yaml --excel moj-security-posture.xlsx
-
-# Force a fresh pull instead of using the local cache
-uv run python scripts/org_security_posture.py ministryofjustice --no-cache
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard

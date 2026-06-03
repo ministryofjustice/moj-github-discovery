@@ -8,6 +8,7 @@ import atexit
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any, Literal
 
 # add project root to path for core imports
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 
 from core.collector import OrgEndpointCollector
+from core.config import load_audit_config, AuditConfig
 from core.github_api import (
     OrgActionsEndpoint,
     OrgAuditLogEndpoint,
@@ -36,6 +38,9 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
 from core.utils import base_directory_setup
 
+section_break = "\n" + ("=" * 80) + "\n"
+sub_section_break = "\n" + ("-" * 80) + "\n"
+
 # TODO:
 BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
@@ -45,9 +50,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Set Default Cache and Repo List Paths
 ORG_CACHE_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "org_posture_cache.db")
-
-# TODO: Remove hardcoded YAML_FILE once repo list loading updated to use audit_config.yaml for default with CLI override
-DEFAULT_REPO_FILE = os.path.join(PROJECT_ROOT, "repo_list.yaml")
 
 __start_time: float | None = None
 
@@ -66,21 +68,11 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Audit organisation security posture using core collectors."
     )
-    parser.add_argument("org", help="GitHub organisation login.")
-    parser.add_argument("--excel", help="Write Excel workbook output.")
     parser.add_argument(
-        "--repo-file",
-        nargs="?",
-        const=DEFAULT_REPO_FILE,
-        help=(
-            "Limit supply-chain checks to repos in a file. "
-            "Pass a path, or use --repo-file without a value to default to repo_list.yaml."
-        ),
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Ignore on-disk posture cache and fetch fresh data.",
+        "--config-file",
+        default=None,
+        type=Path,
+        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
     )
     parser.add_argument(
         "--auth",
@@ -122,7 +114,11 @@ def run_full_audit(
 ) -> dict[str, Any]:
     cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
     cache_storage.init()
-    cache = _load_cache(org, cache_storage) if use_cache else {}
+    cache = (
+        _load_cache(org, cache_storage)
+        if use_cache
+        else {print("  use_cache is False, fetching fresh data...", file=sys.stderr)}
+    )
     client = GitHubHttpClient(auth_method)
 
     report: dict[str, Any] = {
@@ -328,27 +324,63 @@ def main() -> None:
 
     args = _parse_args()
 
+    config: AuditConfig = load_audit_config(args.config_file)
+
+    org_security_posture_config = config.org_security_posture
+
+    # Define Variables from Config
+    database_path = org_security_posture_config.database_path
+    if database_path is not None and not Path(database_path).is_absolute():
+        database_path = str(Path(PROJECT_ROOT) / database_path)
+    github_organization = config.github_organization
+    output_filename = org_security_posture_config.output_filename
+    repo_file = config.repo_list_file
+    if repo_file is not None and not Path(repo_file).is_absolute():
+        repo_file = str(Path(PROJECT_ROOT) / repo_file)
+    resume = org_security_posture_config.resume
+
+    # Org Security Posture Debug
+    print(section_break, file=sys.stderr)
+
+    print(
+        "org_security_posture to be executed with the following config values:",
+        file=sys.stderr,
+    )
+
+    print(section_break, file=sys.stderr)
+
+    print(f"Database Path: {database_path}", file=sys.stderr)
+    print(f"GitHub Organization: {github_organization}", file=sys.stderr)
+    print(f"Output Filename: {output_filename}", file=sys.stderr)
+    print(f"Repo File: {repo_file}", file=sys.stderr)
+    print(f"Resume: {resume}", file=sys.stderr)
+
+    print(sub_section_break, file=sys.stderr)
+
     repo_scope: list[str] | None = None
-    if args.repo_file:
+    if repo_file:
         try:
-            repo_scope = load_repo_list_file(args.repo_file)
+            repo_scope = load_repo_list_file(repo_file)
         except Exception as exc:
             print(f"Failed to read repo file: {exc}", file=sys.stderr)
             sys.exit(2)
 
-        org_prefix = f"{args.org}/"
+        org_prefix = f"{github_organization}/"
         repo_scope = [name for name in repo_scope if name.startswith(org_prefix)]
         print(
-            f"Using {len(repo_scope)} repos from {args.repo_file} for supply-chain checks",
+            f"Using {len(repo_scope)} repos from {repo_file} for supply-chain checks",
             file=sys.stderr,
         )
 
-    print(f"Running org security posture audit for: {args.org}", file=sys.stderr)
+    print(
+        f"Running org security posture audit for: {github_organization}",
+        file=sys.stderr,
+    )
     report = run_full_audit(
-        args.org,
+        github_organization,
         args.auth,
         repo_full_names=repo_scope,
-        use_cache=not args.no_cache,
+        use_cache=resume,
     )
 
     summary = build_org_security_summary(report)
@@ -381,9 +413,8 @@ def main() -> None:
         if key in summary:
             print(f"  {key}: {summary[key]}", file=sys.stderr)
 
-    if args.excel:
-        excel_path = os.path.join(OUTPUT_DIR, args.excel)
-        write_excel(report, excel_path)
+    excel_path = os.path.join(OUTPUT_DIR, output_filename)
+    write_excel(report, excel_path)
 
 
 if __name__ == "__main__":
