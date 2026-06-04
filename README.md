@@ -459,7 +459,7 @@ Each repo is assigned risk flags:
 ```bash
 # 1. Audit all repos in organization
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel audit_results.xlsx
+uv run python scripts/list_repos.py --config-file config/audit_config.yaml
 
 # 2. Launch dashboard to explore results
 uv run python scripts/dashboard.py

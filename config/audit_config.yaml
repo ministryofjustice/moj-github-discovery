@@ -29,7 +29,9 @@ org_security_posture:
   use_cache: true
 archive_repos:
   database_path: "internal/repo_audit.db"
-  repo_limit: 400
+  output_filename: "archive_repos.csv"
+  page_num: None # None for all pages, or set to an integer to limit
+  repo_limit: None # None for no limit, or set to an integer to limit
   sort_by_field: "days_since_push"
   sort_ascending: false
   use_cache: true
@@ -38,6 +40,7 @@ archive_repos:
     target_repo: "cloud-platform-environments"
     target_branch: "main"
     root_folder: "namespaces"
+  
 
 
 # Script config for github_workflow.py.

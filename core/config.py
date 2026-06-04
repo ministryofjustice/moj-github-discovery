@@ -45,6 +45,47 @@ class AlertMetricsConfig(BaseModel):
         return value
 
 
+class NamespaceCrossrefConfig(BaseModel):
+    """Config for cross-referencing repos with external namespace data."""
+
+    enabled: bool = False  # whether to perform cross-referencing
+    target_repo: str = ""
+    target_branch: str = "main"
+    root_folder: str = ""
+
+    @model_validator(mode="after")
+    def validate_crossref(self) -> "NamespaceCrossrefConfig":
+        for field_name in ["target_repo", "target_branch", "root_folder"]:
+            if self.enabled and not self.__dict__.get(field_name):
+                raise ValueError(
+                    f"Namespace crossref is enabled but '{field_name}' is not set"
+                )
+        return self
+
+
+class ArchiveReposConfig(BaseModel):
+    """Config for ``archive_repos.py`` script."""
+
+    database_path: str = (
+        "internal/repo_audit.db"  # SQLite cache file for repo audit data
+    )
+    output_filename: str = "archive_repos.csv"  # output file for archived repo data
+    page_num: Optional[int] = (
+        None  # page number to process (for pagination of large orgs)
+    )
+    repo_limit: Optional[int] = (
+        None  # limit total number of repos to process (for testing) - set to None for no limit
+    )
+    sort_by_field: str = "days_since_push"
+    sort_ascending: bool = False  # sort order - descending by default
+    use_cache: bool = (
+        True  # whether to use database cache to skip endpoints already collected
+    )
+    namespace_crossref: NamespaceCrossrefConfig = Field(
+        default_factory=NamespaceCrossrefConfig
+    )
+
+
 class ListReposConfig(BaseModel):
     """Config for ``list_repos.py`` script."""
 
@@ -96,6 +137,7 @@ class AuditConfig(BaseModel):
     repo_list_file: str = "repo_list.yaml"
     lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
+    archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(
         default_factory=OrgSecurityPostureConfig
