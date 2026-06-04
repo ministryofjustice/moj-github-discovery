@@ -30,11 +30,11 @@ org_security_posture:
 archive_repos:
   database_path: "internal/repo_audit.db"
   output_filename: "archive_repos.csv"
-  page_num: None # None for all pages, or set to an integer to limit
-  repo_limit: None # None for no limit, or set to an integer to limit
+  # page_num: None # None for all pages, or set to an integer to limit
+  # repo_limit: None # None for no limit, or set to an integer to limit
   sort_by_field: "days_since_push"
   sort_ascending: false
-  use_cache: true
+  # use_cache: true
   namespace_crossref:
     enabled: true
     target_repo: "cloud-platform-environments"

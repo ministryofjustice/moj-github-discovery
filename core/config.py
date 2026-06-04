@@ -70,17 +70,17 @@ class ArchiveReposConfig(BaseModel):
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
     )
     output_filename: str = "archive_repos.csv"  # output file for archived repo data
-    page_num: Optional[int] = (
-        None  # page number to process (for pagination of large orgs)
-    )
-    repo_limit: Optional[int] = (
-        None  # limit total number of repos to process (for testing) - set to None for no limit
-    )
+    # page_num: Optional[int] = (
+    #     None  # page number to process (for pagination of large orgs)
+    # )
+    # repo_limit: Optional[int] = (
+    #     None  # limit total number of repos to process (for testing) - set to None for no limit
+    # )
     sort_by_field: str = "days_since_push"
     sort_ascending: bool = False  # sort order - descending by default
-    use_cache: bool = (
-        True  # whether to use database cache to skip endpoints already collected
-    )
+    # use_cache: bool = (
+    #     True  # whether to use database cache to skip endpoints already collected
+    # )
     namespace_crossref: NamespaceCrossrefConfig = Field(
         default_factory=NamespaceCrossrefConfig
     )

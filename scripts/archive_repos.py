@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -22,6 +23,7 @@ import pandas as pd
 # TODO: Remove once pyproject.toml is build-system configured
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core.config import AuditConfig, load_audit_config
 from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
@@ -65,8 +67,12 @@ def _parse_args() -> argparse.Namespace:
             "Build an archive-candidate inventory using shared core collectors."
         )
     )
-    parser.add_argument("org", help="GitHub organisation login.")
-    parser.add_argument("--csv", help="Export results to CSV.")
+    parser.add_argument(
+        "--config-file",
+        default=None,
+        type=Path,
+        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
+    )
     parser.add_argument(
         "--limit",
         type=int,
@@ -76,13 +82,6 @@ def _parse_args() -> argparse.Namespace:
         "--page-num",
         type=int,
         help="Process one page only (100 repos per page, 0-indexed).",
-    )
-    parser.add_argument(
-        "--sort",
-        help=(
-            "Sort by column. Prefix with '-' for descending or '+' for ascending. "
-            "Default: days_since_push ascending."
-        ),
     )
     parser.add_argument(
         "--audit-db",
@@ -128,16 +127,6 @@ def _parse_args() -> argparse.Namespace:
         help="Top-level folder containing namespace directories (default: namespaces).",
     )
     return parser.parse_args()
-
-
-def _derive_sort(raw_sort: str | None) -> tuple[str, bool]:
-    if not raw_sort:
-        return "days_since_push", True
-    if raw_sort.startswith("-"):
-        return raw_sort[1:], False
-    if raw_sort.startswith("+"):
-        return raw_sort[1:], True
-    return raw_sort, True
 
 
 def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
@@ -446,6 +435,24 @@ def main() -> None:
 
     args = _parse_args()
 
+    config: AuditConfig = load_audit_config(args.config_file)
+
+    archive_repos_config = config.archive_repos
+
+    # Define Variables from Config and/or Args
+    github_org = config.github_organization
+    output_filename = archive_repos_config.output_filename
+    sort_by_field = archive_repos_config.sort_by_field
+    sort_asc = archive_repos_config.sort_ascending
+    storage_db_path = archive_repos_config.database_path
+
+    # Debug Config
+    print(f"GitHub Organization: {github_org}", file=sys.stderr)
+    print(f"Output Filename: {output_filename}", file=sys.stderr)
+    print(f"Sort By Field: {sort_by_field}", file=sys.stderr)
+    print(f"Sort Ascending: {sort_asc}", file=sys.stderr)
+    print(f"Storage DB Path: {storage_db_path}", file=sys.stderr)
+
     if args.limit is not None and args.limit < 0:
         print("--limit must be >= 0", file=sys.stderr)
         sys.exit(2)
@@ -453,16 +460,15 @@ def main() -> None:
         print("--page-num must be >= 0", file=sys.stderr)
         sys.exit(2)
 
-    storage_db_path = args.audit_db or DEFAULT_DB_PATH
     storage = SqliteRepoStorage(storage_db_path)
     storage.init()
 
     if args.cache_only:
-        repo_list = _list_repos_from_storage(args.org, storage)
+        repo_list = _list_repos_from_storage(github_org, storage)
     else:
         repo_list_collector = RepoListCollector(auth_method=args.auth)
         repo_list = repo_list_collector.collect(
-            args.org,
+            github_org,
             sort="pushed",
             direction="asc",
         )
@@ -495,7 +501,7 @@ def main() -> None:
                 RepoArchivedAtEndpoint,
             ],
         )
-        collector.collect(args.org, repos=repo_list, resume=True)
+        collector.collect(github_org, repos=repo_list, resume=True)
 
     rows: list[dict[str, Any]] = []
     namespace_crossref_summary: dict[str, Any] | None = None
@@ -504,52 +510,50 @@ def main() -> None:
         data = storage.read(full_name)
         if data is None:
             continue
-        rows.append(_build_row(args.org, full_name, data))
+        rows.append(_build_row(github_org, full_name, data))
 
-    if args.namespace_crossref:
-        namespace_folders = _load_namespace_folders(
-            org=args.org,
-            namespace_repo=args.namespace_repo,
-            namespace_branch=args.namespace_branch,
-            namespace_root=args.namespace_root,
-            auth_method=args.auth,
-        )
-        _apply_namespace_crossref(rows, namespace_folders)
+    # if args.namespace_crossref:
+    #     namespace_folders = _load_namespace_folders(
+    #         org=github_org,
+    #         namespace_repo=args.namespace_repo,
+    #         namespace_branch=args.namespace_branch,
+    #         namespace_root=args.namespace_root,
+    #         auth_method=args.auth,
+    #     )
+    #     _apply_namespace_crossref(rows, namespace_folders)
 
-        archived_repo_names = _list_archived_repo_names_from_storage(args.org, storage)
-        orphaned = sorted(namespace_folders.intersection(archived_repo_names))
+    #     archived_repo_names = _list_archived_repo_names_from_storage(github_org, storage)
+    #     orphaned = sorted(namespace_folders.intersection(archived_repo_names))
 
-        print(
-            f"Namespace cross-reference enabled: {len(orphaned)} archived repo(s) "
-            "still have namespace folders",
-            file=sys.stderr,
-        )
-        if orphaned:
-            print("Archived repos with namespace folders:", file=sys.stderr)
-            for repo_name in orphaned:
-                print(f"- {repo_name}", file=sys.stderr)
+    #     print(
+    #         f"Namespace cross-reference enabled: {len(orphaned)} archived repo(s) "
+    #         "still have namespace folders",
+    #         file=sys.stderr,
+    #     )
+    #     if orphaned:
+    #         print("Archived repos with namespace folders:", file=sys.stderr)
+    #         for repo_name in orphaned:
+    #             print(f"- {repo_name}", file=sys.stderr)
 
-        namespace_crossref_summary = _build_namespace_crossref_summary(
-            rows=rows,
-            namespace_folders=namespace_folders,
-            orphaned=orphaned,
-        )
+    #     namespace_crossref_summary = _build_namespace_crossref_summary(
+    #         rows=rows,
+    #         namespace_folders=namespace_folders,
+    #         orphaned=orphaned,
+    #     )
 
     df = _compute_derived_columns(pd.DataFrame(rows))
 
-    sort_key, sort_asc = _derive_sort(args.sort)
-    if not df.empty and sort_key in df.columns:
-        df = df.sort_values(by=sort_key, ascending=sort_asc, na_position="last")
-    elif sort_key:
-        print(f"Warning: sort key '{sort_key}' not a column", file=sys.stderr)
+    if not df.empty and sort_by_field in df.columns:
+        df = df.sort_values(by=sort_by_field, ascending=sort_asc, na_position="last")
+    elif sort_by_field:
+        print(f"Warning: sort key '{sort_by_field}' not a column", file=sys.stderr)
 
     records = df.to_dict(orient="records")
 
-    if args.csv:
-        csv_path = os.path.join(OUTPUT_DIR, args.csv)
-        df.to_csv(csv_path, index=False)
-        print(f"Wrote {csv_path}", file=sys.stderr)
-    elif not args.audit_db:
+    csv_path = os.path.join(OUTPUT_DIR, output_filename)
+    df.to_csv(csv_path, index=False)
+    print(f"Wrote {csv_path}", file=sys.stderr)
+    if not args.audit_db:
         if args.namespace_crossref:
             print(
                 json.dumps(
