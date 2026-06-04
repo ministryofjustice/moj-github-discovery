@@ -134,7 +134,8 @@ def main():
         database_path = os.path.join(PROJECT_ROOT, database_path)
     github_organization = config.github_organization
     output_filename = lfs_script_config.output_filename
-    if output_filename is not None and not os.path.isabs(output_filename):
+    output_file_path = output_filename
+    if not os.path.isabs(output_filename):
         output_file_path = os.path.join(OUTPUT_DIR, output_filename)
     repo_list_file = config.repo_list_file
     if repo_list_file is not None and not os.path.isabs(repo_list_file):

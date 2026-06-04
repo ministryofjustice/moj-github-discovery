@@ -17,7 +17,7 @@ DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
 
 class LfsScriptConfig(BaseModel):
-    """Config for ``lfs_audit.py`` script."""
+    """Config for ``lfs_script.py`` script."""
 
     database_path: str = "internal/lfs_audit.db"  # SQLite cache file for LFS audit data
     soft_limit_mb: int = 50  # soft file size limit in megabytes
