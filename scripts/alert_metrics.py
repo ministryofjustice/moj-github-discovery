@@ -7,21 +7,18 @@ import datetime as dt
 import pandas as pd
 import os
 import sys
+from pathlib import Path
 from typing import Any, Callable
 
 # add project root to path for core imports
 # TODO: Remove once pyproject.toml is build-system configured
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core.config import AuditConfig, load_audit_config
 from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
 from core.utils import base_directory_setup
-
-# Defaults
-
-DEFAULT_ORG = "ministryofjustice"
-DEFAULT_MAX_ALERTS = 100000
 
 # TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
 BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
@@ -29,8 +26,6 @@ BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 # Configure Output Directories
 OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "github_alerts")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-DEFAULT_OUTPUT = os.path.join(OUTPUT_DIR, "github_alerts_limited.csv")
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -52,22 +47,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Export repository-level alert metrics via core GitHub modules."
     )
-    parser.add_argument("--org", default=DEFAULT_ORG, help="GitHub organisation login.")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="CSV output path.")
     parser.add_argument(
-        "--max-alerts",
-        type=int,
-        default=DEFAULT_MAX_ALERTS,
-        help="Maximum number of alert rows to export.",
+        "--config-file",
+        default=None,
+        type=Path,
+        help="Path to YAML config file (optional, defaults to internal/audit_config.yaml)",
     )
-    parser.add_argument("--repo-limit", type=int, help="Limit scanned repositories.")
     parser.add_argument(
         "--auth",
         choices=["pat", "app", "cli"],
         default=None,
         help="Select GitHub authentication method explicitly",
     )
-    parser.add_argument("--repo", help="Scan only a single repository (owner/repo).")
+    parser.add_argument(
+        "--repo", default=None, help="Scan only a single repository (owner/repo)."
+    )
     return parser.parse_args()
 
 
@@ -185,30 +179,45 @@ def summarise_results(output_file: str) -> None:
 def main() -> None:
     # Configure and Validate CLI Arguments
     args = parse_args()
-    if args.max_alerts <= 0:
-        print("--max-alerts must be > 0", file=sys.stderr)
-        sys.exit(2)
-    if args.repo_limit is not None and args.repo_limit <= 0:
-        print("--repo-limit must be > 0", file=sys.stderr)
-        sys.exit(2)
+
+    config: AuditConfig = load_audit_config(args.config_file)
+
+    alert_metrics_config = config.alert_metrics
+
+    github_organization = config.github_organization
+    output_filename = alert_metrics_config.output_filename
+    max_alerts = alert_metrics_config.max_alerts
+    repo_limit = alert_metrics_config.repo_limit
+
+    # Debug
+
+    print(f"Using GitHub organization: {github_organization}")
+    print(f"Output file name: {output_filename}")
+    print(f"Max alerts: {max_alerts}")
+    print(f"Repo limit: {repo_limit}")
 
     # Configure GitHub connection and gather Repo Information
     client = GitHubHttpClient(auth_method=args.auth)
     if args.repo:
+        print(f"Scanning single repository: {args.repo}")
         repos = [args.repo]
     else:
-        repos = list_org_repos(args.org, client)
-    if args.repo_limit:
-        repos = repos[: args.repo_limit]
+        print(f"Fetching repositories for organization: {github_organization}")
+        repos = list_org_repos(github_organization, client)
+        if repo_limit:
+            repos = repos[:repo_limit]
+
     # Pre-build archive status lookup so we can annotate each alert with repo status.
     # This helps distinguish between alerts in active vs. archived repositories.
-    archive_status_lookup = build_archive_status_lookup(client, args.org, repos)
+    archive_status_lookup = build_archive_status_lookup(
+        client, github_organization, repos
+    )
 
     rows: list[dict[str, Any]] = []
     repos_with_alerts: set[str] = set()
 
     for repo_full in repos:
-        if len(rows) >= args.max_alerts:
+        if len(rows) >= max_alerts:
             break
 
         # Split Repo Owner and Name from list i.e. owner/repo-name
@@ -217,7 +226,7 @@ def main() -> None:
 
         # Assess repository information for each alert category and severity criteria to be logged
         for kind, severity_of in ALERT_SPECS:
-            if len(rows) >= args.max_alerts:
+            if len(rows) >= max_alerts:
                 break
             try:
                 # Gather repo alerts information for assessment
@@ -228,7 +237,7 @@ def main() -> None:
 
             # Review alerts found for given repo and extract creation/remediation timestamps and lifecycle
             for alert in alerts:
-                if len(rows) >= args.max_alerts:
+                if len(rows) >= max_alerts:
                     break
                 if not isinstance(alert, dict):
                     continue
@@ -263,15 +272,16 @@ def main() -> None:
                 repos_with_alerts.add(repo_full)
 
     # Write rows to final output file
+    output_file_path = os.path.join(OUTPUT_DIR, output_filename)
     if rows:
-        CsvCompiler.write_rows(args.output, rows)
+        CsvCompiler.write_rows(output_file_path, rows)
 
     # Summary logging
-    print(f"Done! Wrote {len(rows)} alerts to {args.output}")
+    print(f"Done! Wrote {len(rows)} alerts to {output_file_path}")
     print(f"Repos with alerts: {len(repos_with_alerts)}")
 
     if rows:
-        summarise_results(args.output)
+        summarise_results(output_file_path)
 
 
 if __name__ == "__main__":

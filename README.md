@@ -364,11 +364,15 @@ uv run python scripts/alert_metrics.py [options]
 
 **Options:**
 
-- `--org` - GitHub organisation login (default: ministryofjustice)
-- `--output` - CSV output path (default: github_alerts_limited.csv)
-- `--max-alerts` - Maximum number of alert rows to export (default: 100000)
-- `--repo-limit` - Limit scanned repositories
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
 - `--auth` - Select GitHub authentication method explicitly (pat, app, cli)
+- `--repo` - Select a specific repository for analysis.
+
+**Config Parameters:**
+
+- `max_alerts: <int>` - Maximum number of alerts to pull for analysis across the estate
+- `output_filename: <filename>.csv` - File name for summary report results are exported to, stored in `output/alert_metrics/`
+- `repo_limit: <int>` - Only consider the first `<x>` amount of repositories pulled by the script e.g. `400`, `1000`, etc.
 
 **Output:**
 
@@ -377,14 +381,11 @@ uv run python scripts/alert_metrics.py [options]
 **Examples:**
 
 ```bash
-# Export alerts for org to default CSV
-uv run python scripts/alert_metrics.py
+# Export alerts for org to default CSV, using a given config file and authenticating via PAT
+uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --auth pat
 
-# Export to custom path with limits
-uv run python scripts/alert_metrics.py --output alerts.csv --max-alerts 5000 --repo-limit 100
-
-# Use specific auth method
-uv run python scripts/alert_metrics.py --auth pat
+# Run script against single repository
+uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --repo-limit 100
 ```
 
 ### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub
