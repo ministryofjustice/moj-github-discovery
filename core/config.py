@@ -25,6 +25,9 @@ class LfsScriptConfig(BaseModel):
     output_csv_filename: str = (
         "repos_exceeding_thresholds.xlsx"  # output file for repos exceeding limits
     )
+    use_cache: bool = (
+        True  # whether to use database cache to skip repos already collected
+    )
 
 
 class ListReposConfig(BaseModel):

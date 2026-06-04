@@ -140,9 +140,12 @@ def main():
     repo_list_file = config.repo_list_file
     if repo_list_file is not None and not os.path.isabs(repo_list_file):
         repo_list_file = os.path.join(PROJECT_ROOT, repo_list_file)
+    resume = (
+        lfs_script_config.use_cache
+    )  # Using 'use_cache' to determine if we should resume from existing data
 
-    soft_limit_mb = lfs_script_config.soft_limit_mb
-    hard_limit_mb = lfs_script_config.hard_limit_mb
+    soft_limit_mb = int(lfs_script_config.soft_limit_mb)
+    hard_limit_mb = int(lfs_script_config.hard_limit_mb)
 
     # Variable Debug
 
@@ -158,6 +161,7 @@ def main():
     print(f"Repo file: {repo_list_file}", file=sys.stderr)
     print(f"Soft limit (MB): {soft_limit_mb}", file=sys.stderr)
     print(f"Hard limit (MB): {hard_limit_mb}", file=sys.stderr)
+    print(f"Resume from cache: {resume}", file=sys.stderr)
     print(sub_section_break, file=sys.stderr)
 
     # Ensure the repo list file exists
@@ -187,7 +191,7 @@ def main():
         f"<LFS Analysis> Collecting data for organization: {github_organization}",
         file=sys.stderr,
     )
-    collector.collect(github_organization, repos=repos, resume=True)
+    collector.collect(github_organization, repos=repos, resume=resume)
     print("<LFS Analysis> Data collection completed", file=sys.stderr)
 
     # Compile the master Excel file with repos exceeding thresholds
@@ -196,7 +200,12 @@ def main():
         storage=storage,
         config=master_csv_config,
         output_path=output_csv_path,
-        transforms=[RepoTreeTransform()],
+        transforms=[
+            RepoTreeTransform(
+                soft_limit_mb=soft_limit_mb,
+                hard_limit_mb=hard_limit_mb,
+            )
+        ],
     )
     print(f"<LFS Analysis> Master summary saved to {output_csv_path}", file=sys.stderr)
 
@@ -211,9 +220,9 @@ def main():
     # Generate individual CSV summaries for each repository
     print("<LFS Analysis> Generating individual CSV summaries", file=sys.stderr)
     for full_repo_name in repos:
-        print(
-            f"<LFS Analysis> Processing repository: {full_repo_name}", file=sys.stderr
-        )
+        # print(
+        #     f"<LFS Analysis> Processing repository: {full_repo_name}", file=sys.stderr
+        # )
         # Retrieve stored data for the repo
         data = storage.read(full_repo_name)
         if not data:
@@ -240,10 +249,10 @@ def main():
             REPO_SUMMARIES_DIR, f"{full_repo_name.replace('/', '_')}_summary.csv"
         )
         pd.DataFrame(blob_rows).to_csv(output_file, index=False)
-        print(
-            f"<LFS Analysis> Saved summary for {full_repo_name} to {output_file}",
-            file=sys.stderr,
-        )
+        # print(
+        #     f"<LFS Analysis> Saved summary for {full_repo_name} to {output_file}",
+        #     file=sys.stderr,
+        # )
 
     print("<LFS Analysis> LFS analysis script completed successfully", file=sys.stderr)
 

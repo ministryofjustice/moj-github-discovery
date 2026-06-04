@@ -34,8 +34,10 @@ workflow_audit:
   credentials_analysis: true     # stage 8 - OIDC vs long-lived
   trigger_risk_analysis: true    # stage 9 - trigger config risk
 
+# Script config for lfs_script.py.
 lfs_script:
   database_path: "internal/lfs_audit.db"
   soft_limit_mb: 50
   hard_limit_mb: 100
   output_csv_filename: "repos_exceeding_thresholds.xlsx"
+  use_cache: false

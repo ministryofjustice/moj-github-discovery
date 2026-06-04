@@ -27,10 +27,6 @@ import re
 
 from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
 
-# Size limits in bytes (50/100 MB converted to bytes for ease of processing)
-SOFT_LIMIT = 50 * 1024 * 1024
-HARD_LIMIT = 100 * 1024 * 1024
-
 
 # ── Abstract base ─────────────────────────────────────────────────────
 
@@ -206,6 +202,10 @@ class RepoTreeTransform(BaseTransform):
     * ``exceeds_hard_limit`` — whether the largest blob exceeds the hard limit
     """
 
+    def __init__(self, soft_limit_mb: int, hard_limit_mb: int):
+        self.soft_limit_bytes = soft_limit_mb * 1024 * 1024
+        self.hard_limit_bytes = hard_limit_mb * 1024 * 1024
+
     @property
     def name(self) -> str:
         return "repo_tree_transform"
@@ -234,6 +234,8 @@ class RepoTreeTransform(BaseTransform):
     def process_repo_tree_stats(
         repo_full_name: str,
         tree: list[object],
+        soft_limit_bytes: int,
+        hard_limit_bytes: int,
     ) -> RepoTreeProcessedData:
         large_blobs: list[LargeBlobData] = []
 
@@ -244,7 +246,7 @@ class RepoTreeTransform(BaseTransform):
             path = getattr(item, "path", None)
             if not isinstance(size, int) or not isinstance(path, str):
                 continue
-            if size >= SOFT_LIMIT:
+            if size >= soft_limit_bytes:
                 large_blobs.append(
                     LargeBlobData(
                         sha=getattr(item, "sha", None),
@@ -262,17 +264,19 @@ class RepoTreeTransform(BaseTransform):
             largest_blob_bytes=largest_size,
             largest_blob_path=largest_path,
             large_blobs=large_blobs,
-            exceeds_soft_limit=largest_size > SOFT_LIMIT,
-            exceeds_hard_limit=largest_size > HARD_LIMIT,
+            exceeds_soft_limit=largest_size > soft_limit_bytes,
+            exceeds_hard_limit=largest_size > hard_limit_bytes,
         )
 
     def apply(self, data: RepoData) -> RepoData:
         if data.repo_tree is None or data.repo_details is None:
             return data
 
-        processed = self.process_repo_tree_stats(
+        processed = RepoTreeTransform.process_repo_tree_stats(
             data.repo_details.full_name,
             data.repo_tree.tree,
+            soft_limit_bytes=self.soft_limit_bytes,
+            hard_limit_bytes=self.hard_limit_bytes,
         )
 
         return data.model_copy(update={"repo_tree_transform": processed})
