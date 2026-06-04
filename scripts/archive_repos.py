@@ -103,29 +103,6 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Select GitHub authentication method explicitly",
     )
-    parser.add_argument(
-        "--namespace-crossref",
-        action="store_true",
-        help=(
-            "Cross-reference archived repositories against namespace folders "
-            "in a separate repository (opt-in)."
-        ),
-    )
-    parser.add_argument(
-        "--namespace-repo",
-        default="cloud-platform-environments",
-        help="Repository containing namespace folders (default: cloud-platform-environments).",
-    )
-    parser.add_argument(
-        "--namespace-branch",
-        default="main",
-        help="Branch to inspect in --namespace-repo (default: main).",
-    )
-    parser.add_argument(
-        "--namespace-root",
-        default="namespaces",
-        help="Top-level folder containing namespace directories (default: namespaces).",
-    )
     return parser.parse_args()
 
 
@@ -453,6 +430,17 @@ def main() -> None:
     print(f"Sort Ascending: {sort_asc}", file=sys.stderr)
     print(f"Storage DB Path: {storage_db_path}", file=sys.stderr)
 
+    # Namespace cross-ref config
+    if archive_repos_config.namespace_crossref.enabled:
+        namespace_repo = archive_repos_config.namespace_crossref.target_repo
+        namespace_branch = archive_repos_config.namespace_crossref.target_branch
+        namespace_root = archive_repos_config.namespace_crossref.root_folder
+
+        print("Namespace cross-reference enabled with config:", file=sys.stderr)
+        print(f"- Namespace Repo: {namespace_repo}", file=sys.stderr)
+        print(f"- Namespace Branch: {namespace_branch}", file=sys.stderr)
+        print(f"- Namespace Root Folder: {namespace_root}", file=sys.stderr)
+
     if args.limit is not None and args.limit < 0:
         print("--limit must be >= 0", file=sys.stderr)
         sys.exit(2)
@@ -512,34 +500,36 @@ def main() -> None:
             continue
         rows.append(_build_row(github_org, full_name, data))
 
-    # if args.namespace_crossref:
-    #     namespace_folders = _load_namespace_folders(
-    #         org=github_org,
-    #         namespace_repo=args.namespace_repo,
-    #         namespace_branch=args.namespace_branch,
-    #         namespace_root=args.namespace_root,
-    #         auth_method=args.auth,
-    #     )
-    #     _apply_namespace_crossref(rows, namespace_folders)
+    if archive_repos_config.namespace_crossref.enabled:
+        namespace_folders = _load_namespace_folders(
+            org=github_org,
+            namespace_repo=namespace_repo,
+            namespace_branch=namespace_branch,
+            namespace_root=namespace_root,
+            auth_method=args.auth,
+        )
+        _apply_namespace_crossref(rows, namespace_folders)
 
-    #     archived_repo_names = _list_archived_repo_names_from_storage(github_org, storage)
-    #     orphaned = sorted(namespace_folders.intersection(archived_repo_names))
+        archived_repo_names = _list_archived_repo_names_from_storage(
+            github_org, storage
+        )
+        orphaned = sorted(namespace_folders.intersection(archived_repo_names))
 
-    #     print(
-    #         f"Namespace cross-reference enabled: {len(orphaned)} archived repo(s) "
-    #         "still have namespace folders",
-    #         file=sys.stderr,
-    #     )
-    #     if orphaned:
-    #         print("Archived repos with namespace folders:", file=sys.stderr)
-    #         for repo_name in orphaned:
-    #             print(f"- {repo_name}", file=sys.stderr)
+        print(
+            f"Namespace cross-reference enabled: {len(orphaned)} archived repo(s) "
+            "still have namespace folders",
+            file=sys.stderr,
+        )
+        if orphaned:
+            print("Archived repos with namespace folders:", file=sys.stderr)
+            for repo_name in orphaned:
+                print(f"- {repo_name}", file=sys.stderr)
 
-    #     namespace_crossref_summary = _build_namespace_crossref_summary(
-    #         rows=rows,
-    #         namespace_folders=namespace_folders,
-    #         orphaned=orphaned,
-    #     )
+        namespace_crossref_summary = _build_namespace_crossref_summary(
+            rows=rows,
+            namespace_folders=namespace_folders,
+            orphaned=orphaned,
+        )
 
     df = _compute_derived_columns(pd.DataFrame(rows))
 
@@ -554,7 +544,7 @@ def main() -> None:
     df.to_csv(csv_path, index=False)
     print(f"Wrote {csv_path}", file=sys.stderr)
     if not args.audit_db:
-        if args.namespace_crossref:
+        if archive_repos_config.namespace_crossref.enabled:
             print(
                 json.dumps(
                     {
