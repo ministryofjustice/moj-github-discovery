@@ -27,6 +27,18 @@ org_security_posture:
   database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
   use_cache: true
+archive_repos:
+  database_path: "internal/repo_audit.db"
+  repo_limit: 400
+  sort_by_field: "days_since_push"
+  sort_ascending: false
+  use_cache: true
+  namespace_crossref:
+    enabled: true
+    target_repo: "cloud-platform-environments"
+    target_branch: "main"
+    root_folder: "namespaces"
+
 
 # Script config for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,
