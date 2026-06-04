@@ -22,7 +22,7 @@ class LfsScriptConfig(BaseModel):
     database_path: str = "internal/lfs_audit.db"  # SQLite cache file for LFS audit data
     soft_limit_mb: int = 50  # soft file size limit in megabytes
     hard_limit_mb: int = 100  # hard file size limit in megabytes
-    output_csv_filename: str = (
+    output_filename: str = (
         "repos_exceeding_thresholds.xlsx"  # output file for repos exceeding limits
     )
     use_cache: bool = (

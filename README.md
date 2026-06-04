@@ -395,8 +395,21 @@ It generates a master Excel summary of repos exceeding thresholds and individual
 **Usage:**
 
 ```bash
-uv run python scripts/lfs_script.py
+uv run python scripts/lfs_script.py --config-file config/audit_config.yaml --auth pat
 ```
+
+**CLI Options:**
+
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+
+**Config Parameters:**
+
+- `database_path`: SQLite path for core storage (default: `internal/lfs_audit.db`).
+- `soft_limit_mb: <int>`: Integer soft/warning file size limit in Megabytes. Defaults to 50.
+- `hard_limit_mb: <int>`: Integer hard file size limit in Megabytes. Defaults to 100.
+- `output_filename: <filename>.xlsx` - Filename for summary output Excel File under `output/lfs_analysis`
+- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 
 **Output:**
 

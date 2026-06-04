@@ -134,9 +134,9 @@ def main():
     if database_path is not None and not os.path.isabs(database_path):
         database_path = os.path.join(PROJECT_ROOT, database_path)
     github_organization = config.github_organization
-    output_csv_filename = lfs_script_config.output_csv_filename
-    if output_csv_filename is not None and not os.path.isabs(output_csv_filename):
-        output_csv_path = os.path.join(OUTPUT_DIR, output_csv_filename)
+    output_filename = lfs_script_config.output_filename
+    if output_filename is not None and not os.path.isabs(output_filename):
+        output_file_path = os.path.join(OUTPUT_DIR, output_filename)
     repo_list_file = config.repo_list_file
     if repo_list_file is not None and not os.path.isabs(repo_list_file):
         repo_list_file = os.path.join(PROJECT_ROOT, repo_list_file)
@@ -157,7 +157,7 @@ def main():
 
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"GitHub Organization: {github_organization}", file=sys.stderr)
-    print(f"Output CSV Path: {output_csv_path}", file=sys.stderr)
+    print(f"Output File Path: {output_file_path}", file=sys.stderr)
     print(f"Repo file: {repo_list_file}", file=sys.stderr)
     print(f"Soft limit (MB): {soft_limit_mb}", file=sys.stderr)
     print(f"Hard limit (MB): {hard_limit_mb}", file=sys.stderr)
@@ -199,7 +199,7 @@ def main():
     ExcelCompiler().compile(
         storage=storage,
         config=master_csv_config,
-        output_path=output_csv_path,
+        output_path=output_file_path,
         transforms=[
             RepoTreeTransform(
                 soft_limit_mb=soft_limit_mb,
@@ -207,7 +207,7 @@ def main():
             )
         ],
     )
-    print(f"<LFS Analysis> Master summary saved to {output_csv_path}", file=sys.stderr)
+    print(f"<LFS Analysis> Master summary saved to {output_file_path}", file=sys.stderr)
 
     # Ensure output directory exists
     if not os.path.isdir(REPO_SUMMARIES_DIR):
