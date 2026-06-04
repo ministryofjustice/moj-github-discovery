@@ -41,7 +41,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # File paths for input and output
 REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
-MASTER_CSV_PATH = os.path.join(OUTPUT_DIR, "repos_exceeding_thresholds.xlsx")
 
 __start_time: float | None = None
 
@@ -76,8 +75,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# Configuration for the master CSV file that summarizes repos exceeding thresholds
-master_csv_config = FieldsConfig(
+# Configuration for the master report file that summarizes repos exceeding thresholds
+master_report_config = FieldsConfig(
     fields=[
         FieldDefinition(
             source="repo_details.full_name",
@@ -198,7 +197,7 @@ def main():
     print("<LFS Analysis> Compiling master Excel summary", file=sys.stderr)
     ExcelCompiler().compile(
         storage=storage,
-        config=master_csv_config,
+        config=master_report_config,
         output_path=output_file_path,
         transforms=[
             RepoTreeTransform(
@@ -220,9 +219,9 @@ def main():
     # Generate individual CSV summaries for each repository
     print("<LFS Analysis> Generating individual CSV summaries", file=sys.stderr)
     for full_repo_name in repos:
-        # print(
-        #     f"<LFS Analysis> Processing repository: {full_repo_name}", file=sys.stderr
-        # )
+        print(
+            f"<LFS Analysis> Processing repository: {full_repo_name}", file=sys.stderr
+        )
         # Retrieve stored data for the repo
         data = storage.read(full_repo_name)
         if not data:
@@ -249,10 +248,10 @@ def main():
             REPO_SUMMARIES_DIR, f"{full_repo_name.replace('/', '_')}_summary.csv"
         )
         pd.DataFrame(blob_rows).to_csv(output_file, index=False)
-        # print(
-        #     f"<LFS Analysis> Saved summary for {full_repo_name} to {output_file}",
-        #     file=sys.stderr,
-        # )
+        print(
+            f"<LFS Analysis> Saved summary for {full_repo_name} to {output_file}",
+            file=sys.stderr,
+        )
 
     print("<LFS Analysis> LFS analysis script completed successfully", file=sys.stderr)
 
