@@ -70,12 +70,12 @@ class ArchiveReposConfig(BaseModel):
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
     )
     output_filename: str = "archive_repos.csv"  # output file for archived repo data
-    # page_num: Optional[int] = (
-    #     None  # page number to process (for pagination of large orgs)
-    # )
-    # repo_limit: Optional[int] = (
-    #     None  # limit total number of repos to process (for testing) - set to None for no limit
-    # )
+    page_num: Optional[int] = (
+        None  # page number to process (for pagination of large orgs)
+    )
+    repo_limit: Optional[int] = (
+        None  # limit total number of repos to process (for testing) - set to None for no limit
+    )
     sort_by_field: str = "days_since_push"
     sort_ascending: bool = False  # sort order - descending by default
     # use_cache: bool = (
@@ -84,6 +84,13 @@ class ArchiveReposConfig(BaseModel):
     namespace_crossref: NamespaceCrossrefConfig = Field(
         default_factory=NamespaceCrossrefConfig
     )
+
+    @field_validator("page_num", "repo_limit", mode="after")
+    @classmethod
+    def must_be_positive(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value <= 0:
+            raise ValueError(f"Value must be a positive integer, got {value}")
+        return value
 
 
 class ListReposConfig(BaseModel):
@@ -135,9 +142,9 @@ class AuditConfig(BaseModel):
 
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
-    lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
+    lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(
         default_factory=OrgSecurityPostureConfig

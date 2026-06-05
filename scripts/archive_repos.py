@@ -45,9 +45,6 @@ BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "archive_repos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Set Default Database Path
-DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
-
 __start_time: float | None = None
 
 
@@ -72,25 +69,6 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         type=Path,
         help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        help="Limit the number of repositories loaded from the organisation.",
-    )
-    parser.add_argument(
-        "--page-num",
-        type=int,
-        help="Process one page only (100 repos per page, 0-indexed).",
-    )
-    parser.add_argument(
-        "--audit-db",
-        nargs="?",
-        const=DEFAULT_DB_PATH,
-        help=(
-            "SQLite path for core storage persistence. "
-            "If provided without a path, defaults to repo_audit.db."
-        ),
     )
     parser.add_argument(
         "--cache-only",
@@ -419,6 +397,8 @@ def main() -> None:
     # Define Variables from Config and/or Args
     github_org = config.github_organization
     output_filename = archive_repos_config.output_filename
+    page_num = archive_repos_config.page_num
+    repo_limit = archive_repos_config.repo_limit
     sort_by_field = archive_repos_config.sort_by_field
     sort_asc = archive_repos_config.sort_ascending
     storage_db_path = archive_repos_config.database_path
@@ -426,6 +406,8 @@ def main() -> None:
     # Debug Config
     print(f"GitHub Organization: {github_org}", file=sys.stderr)
     print(f"Output Filename: {output_filename}", file=sys.stderr)
+    print(f"Page Number: {page_num}", file=sys.stderr)
+    print(f"Repo Limit: {repo_limit}", file=sys.stderr)
     print(f"Sort By Field: {sort_by_field}", file=sys.stderr)
     print(f"Sort Ascending: {sort_asc}", file=sys.stderr)
     print(f"Storage DB Path: {storage_db_path}", file=sys.stderr)
@@ -441,13 +423,6 @@ def main() -> None:
         print(f"- Namespace Branch: {namespace_branch}", file=sys.stderr)
         print(f"- Namespace Root Folder: {namespace_root}", file=sys.stderr)
 
-    if args.limit is not None and args.limit < 0:
-        print("--limit must be >= 0", file=sys.stderr)
-        sys.exit(2)
-    if args.page_num is not None and args.page_num < 0:
-        print("--page-num must be >= 0", file=sys.stderr)
-        sys.exit(2)
-
     storage = SqliteRepoStorage(storage_db_path)
     storage.init()
 
@@ -461,15 +436,16 @@ def main() -> None:
             direction="asc",
         )
 
-    if args.limit is not None:
-        repo_list = repo_list[: args.limit]
+    if repo_limit is not None:
+        print(f"Limiting to first {repo_limit} repositories", file=sys.stderr)
+        repo_list = repo_list[:repo_limit]
 
-    if args.page_num is not None:
+    if page_num is not None:
         page_size = 100
-        start_idx = args.page_num * page_size
+        start_idx = page_num * page_size
         end_idx = start_idx + page_size
         print(
-            f"Processing page {args.page_num} (repos {start_idx}-{end_idx})",
+            f"Processing page {page_num} (repos {start_idx}-{end_idx})",
             file=sys.stderr,
         )
         repo_list = repo_list[start_idx:end_idx]
@@ -543,24 +519,23 @@ def main() -> None:
     csv_path = os.path.join(OUTPUT_DIR, output_filename)
     df.to_csv(csv_path, index=False)
     print(f"Wrote {csv_path}", file=sys.stderr)
-    if not args.audit_db:
-        if archive_repos_config.namespace_crossref.enabled:
-            print(
-                json.dumps(
-                    {
-                        "records": records,
-                        "namespace_crossref_summary": namespace_crossref_summary
-                        or {
-                            "namespace_folders_total": 0,
-                            "archived_repos_with_namespace_folder": 0,
-                            "orphaned_namespaces": [],
-                        },
+    if archive_repos_config.namespace_crossref.enabled:
+        print(
+            json.dumps(
+                {
+                    "records": records,
+                    "namespace_crossref_summary": namespace_crossref_summary
+                    or {
+                        "namespace_folders_total": 0,
+                        "archived_repos_with_namespace_folder": 0,
+                        "orphaned_namespaces": [],
                     },
-                    indent=2,
-                )
+                },
+                indent=2,
             )
-        else:
-            print(json.dumps(records, indent=2))
+        )
+    else:
+        print(json.dumps(records, indent=2))
 
     print(f"Processed {len(records)} repositories", file=sys.stderr)
 
