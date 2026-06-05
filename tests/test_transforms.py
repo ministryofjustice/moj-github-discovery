@@ -23,7 +23,6 @@ from core.transforms import (
     RepoTreeTransform,
     ReferenceClassifier,
     TriggerRiskTransform,
-    SOFT_LIMIT,
     TimestampTransform,
     parse_workflow_permissions,
     parse_actions_from_content,
@@ -316,7 +315,7 @@ class TestFlagTransform:
 
 class TestRepoTreeTransform:
     def test_no_repo_tree_returns_unchanged(self):
-        t = RepoTreeTransform()
+        t = RepoTreeTransform(soft_limit_mb=50, hard_limit_mb=100)
         data = RepoData(repo_details=RepoDetails(full_name="o/r", name="r"))
 
         result = t.apply(data)
@@ -324,7 +323,7 @@ class TestRepoTreeTransform:
         assert result.repo_tree_transform is None
 
     def test_no_repo_details_returns_unchanged(self):
-        t = RepoTreeTransform()
+        t = RepoTreeTransform(soft_limit_mb=50, hard_limit_mb=100)
         data = RepoData(
             repo_tree=RepoTreeData(
                 tree=[RepoTreeEntry(path="README.md", type="blob", size=1)]
@@ -336,7 +335,7 @@ class TestRepoTreeTransform:
         assert result.repo_tree_transform is None
 
     def test_builds_processed_summary(self):
-        t = RepoTreeTransform()
+        t = RepoTreeTransform(soft_limit_mb=50, hard_limit_mb=100)
         data = RepoData(
             repo_details=RepoDetails(full_name="o/r", name="r"),
             repo_tree=RepoTreeData(
@@ -345,7 +344,7 @@ class TestRepoTreeTransform:
                     RepoTreeEntry(
                         path="large.bin",
                         type="blob",
-                        size=SOFT_LIMIT + 1,
+                        size=50 * 1024 * 1024 + 1,
                         sha="2",
                     ),
                 ]
@@ -356,7 +355,7 @@ class TestRepoTreeTransform:
 
         assert result.repo_tree_transform is not None
         assert result.repo_tree_transform.repo == "o/r"
-        assert result.repo_tree_transform.largest_blob_bytes == SOFT_LIMIT + 1
+        assert result.repo_tree_transform.largest_blob_bytes == 50 * 1024 * 1024 + 1
         assert result.repo_tree_transform.largest_blob_path == "large.bin"
         assert result.repo_tree_transform.exceeds_soft_limit is True
         assert result.repo_tree_transform.exceeds_hard_limit is False
