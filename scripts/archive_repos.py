@@ -546,9 +546,12 @@ def main() -> None:
 
     records = df.to_dict(orient="records")
 
-    csv_path = os.path.join(OUTPUT_DIR, output_filename)
-    df.to_csv(csv_path, index=False)
-    print(f"Wrote {csv_path}", file=sys.stderr)
+    output_path = Path(OUTPUT_DIR) / output_filename
+    if output_path.suffix.lower() == ".xlsx":
+        df.to_excel(output_path, index=False)
+    else:
+        df.to_csv(output_path, index=False)
+    print(f"Wrote {output_path}", file=sys.stderr)
     if archive_repos_config.namespace_crossref.enabled:
         print(
             json.dumps(

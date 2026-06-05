@@ -17,9 +17,9 @@ archive_repos:
   repo_limit: null # null for no limit, or set to an integer to limit
   sort_by_field: "days_since_push"
   sort_ascending: false
-  use_cache: true
+  use_cache: false
   namespace_crossref:
-    enabled: true
+    enabled: false
     target_repo: "cloud-platform-environments"
     target_branch: "main"
     root_folder: "namespaces"

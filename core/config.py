@@ -79,7 +79,7 @@ class ArchiveReposConfig(BaseModel):
     sort_by_field: str = "days_since_push"
     sort_ascending: bool = False  # sort order - descending by default
     use_cache: bool = (
-        True  # whether to use database cache to skip endpoints already collected
+        False  # whether to use database cache to skip endpoints already collected
     )
     namespace_crossref: NamespaceCrossrefConfig = Field(
         default_factory=NamespaceCrossrefConfig
