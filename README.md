@@ -371,7 +371,7 @@ uv run python scripts/alert_metrics.py [options]
 **Config Parameters:**
 
 - `max_alerts: <int>` - Maximum number of alerts to pull for analysis across the estate
-- `output_filename: <filename>.csv` - File name for summary report results are exported to, stored in `output/alert_metrics/`
+- `output_filename: <filename>.csv` - File name for summary report results are exported to, stored in `output/github_alerts/`
 - `repo_limit: <int>` - Only consider the first `<x>` amount of repositories pulled by the script e.g. `400`, `1000`, etc.
 
 **Output:**
@@ -385,7 +385,7 @@ uv run python scripts/alert_metrics.py [options]
 uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --auth pat
 
 # Run script against single repository
-uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --repo-limit 100
+uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --repo ministryofjustice/example-repo
 ```
 
 ### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub

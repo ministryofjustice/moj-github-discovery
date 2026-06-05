@@ -191,10 +191,10 @@ def main() -> None:
 
     # Debug
 
-    print(f"Using GitHub organization: {github_organization}")
-    print(f"Output file name: {output_filename}")
-    print(f"Max alerts: {max_alerts}")
-    print(f"Repo limit: {repo_limit}")
+    print(f"Using GitHub organization: {github_organization}", file=sys.stderr)
+    print(f"Output file name: {output_filename}", file=sys.stderr)
+    print(f"Max alerts: {max_alerts}", file=sys.stderr)
+    print(f"Repo limit: {repo_limit}", file=sys.stderr)
 
     # Configure GitHub connection and gather Repo Information
     client = GitHubHttpClient(auth_method=args.auth)
@@ -217,7 +217,7 @@ def main() -> None:
     repos_with_alerts: set[str] = set()
 
     for repo_full in repos:
-        if len(rows) >= max_alerts:
+        if max_alerts is not None and len(rows) >= max_alerts:
             break
 
         # Split Repo Owner and Name from list i.e. owner/repo-name
@@ -226,7 +226,7 @@ def main() -> None:
 
         # Assess repository information for each alert category and severity criteria to be logged
         for kind, severity_of in ALERT_SPECS:
-            if len(rows) >= max_alerts:
+            if max_alerts is not None and len(rows) >= max_alerts:
                 break
             try:
                 # Gather repo alerts information for assessment
@@ -237,7 +237,7 @@ def main() -> None:
 
             # Review alerts found for given repo and extract creation/remediation timestamps and lifecycle
             for alert in alerts:
-                if len(rows) >= max_alerts:
+                if max_alerts is not None and len(rows) >= max_alerts:
                     break
                 if not isinstance(alert, dict):
                     continue
