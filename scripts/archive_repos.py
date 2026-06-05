@@ -37,6 +37,9 @@ from core.models import RepoData, RepoDetails
 from core.storage import SqliteRepoStorage
 from core.utils import base_directory_setup
 
+section_break = "\n" + ("=" * 80) + "\n"
+sub_section_break = "\n" + ("-" * 80) + "\n"
+
 # Base Directory Setup for Outputs and Internal Files
 # TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
 BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
@@ -69,11 +72,6 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         type=Path,
         help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
-    )
-    parser.add_argument(
-        "--cache-only",
-        action="store_true",
-        help="Skip API collection and use only existing data from the SQLite store.",
     )
     parser.add_argument(
         "--auth",
@@ -402,8 +400,18 @@ def main() -> None:
     sort_by_field = archive_repos_config.sort_by_field
     sort_asc = archive_repos_config.sort_ascending
     storage_db_path = archive_repos_config.database_path
+    use_cache = archive_repos_config.use_cache
 
     # Debug Config
+    print(section_break, file=sys.stderr)
+
+    print(
+        "archive_repos to be executed with the following config values:",
+        file=sys.stderr,
+    )
+
+    print(section_break, file=sys.stderr)
+
     print(f"GitHub Organization: {github_org}", file=sys.stderr)
     print(f"Output Filename: {output_filename}", file=sys.stderr)
     print(f"Page Number: {page_num}", file=sys.stderr)
@@ -411,6 +419,9 @@ def main() -> None:
     print(f"Sort By Field: {sort_by_field}", file=sys.stderr)
     print(f"Sort Ascending: {sort_asc}", file=sys.stderr)
     print(f"Storage DB Path: {storage_db_path}", file=sys.stderr)
+    print(f"Use Cache: {use_cache}", file=sys.stderr)
+
+    print(sub_section_break, file=sys.stderr)
 
     # Namespace cross-ref config
     if archive_repos_config.namespace_crossref.enabled:
@@ -423,12 +434,23 @@ def main() -> None:
         print(f"- Namespace Branch: {namespace_branch}", file=sys.stderr)
         print(f"- Namespace Root Folder: {namespace_root}", file=sys.stderr)
 
+    else:
+        print("Namespace cross-reference disabled", file=sys.stderr)
+
+    print(section_break, file=sys.stderr)
+
     storage = SqliteRepoStorage(storage_db_path)
     storage.init()
 
-    if args.cache_only:
+    print("Storage initialized at", storage_db_path, file=sys.stderr)
+
+    print("Starting repository list collection...", file=sys.stderr)
+
+    if use_cache:
+        print("Loading repository list from cache...", file=sys.stderr)
         repo_list = _list_repos_from_storage(github_org, storage)
     else:
+        print("Collecting repository list from GitHub API...", file=sys.stderr)
         repo_list_collector = RepoListCollector(auth_method=args.auth)
         repo_list = repo_list_collector.collect(
             github_org,
@@ -454,7 +476,13 @@ def main() -> None:
         print("No repositories found for the given selection.", file=sys.stderr)
         return
 
-    if not args.cache_only:
+    print(f"Collected {len(repo_list)} repositories to process", file=sys.stderr)
+
+    if not use_cache:
+        print(
+            "use_cache is False, starting API collection for repository details...",
+            file=sys.stderr,
+        )
         collector = RepoCollector(
             storage=storage,
             auth_method=args.auth,

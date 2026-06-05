@@ -41,6 +41,44 @@ def test_load_returns_config_from_file(tmp_path):
     assert config.repo_list_file == "custom_repos.yaml"
 
 
+def test_load_respects_archive_repos_config_overrides(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "repo_list_file": "custom_repos.yaml",
+                "archive_repos": {
+                    "output_filename": "custom_archive_output.xlsx",
+                    "use_cache": False,
+                    "namespace_crossref": {
+                        "enabled": True,
+                        "target_repo": "custom_namespace_repo",
+                        "target_branch": "custom_namespace_branch",
+                        "root_folder": "custom_namespace_root",
+                    },
+                },
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.archive_repos.output_filename == "custom_archive_output.xlsx"
+    assert config.archive_repos.use_cache is False
+    assert config.archive_repos.namespace_crossref.enabled is True
+    assert (
+        config.archive_repos.namespace_crossref.target_repo == "custom_namespace_repo"
+    )
+    assert (
+        config.archive_repos.namespace_crossref.target_branch
+        == "custom_namespace_branch"
+    )
+    assert (
+        config.archive_repos.namespace_crossref.root_folder == "custom_namespace_root"
+    )
+
+
 def test_load_respects_alert_metrics_config(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
     config_file.write_text(
