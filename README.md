@@ -81,7 +81,7 @@ the core SQLite storage, and optionally exports an Excel workbook.
 **Usage:**
 
 ```bash
-uv run python scripts/list_repos.py --repo-file <file> [options]
+uv run python scripts/list_repos.py --config-file config/audit_config.yaml --auth pat
 ```
 
 **CLI Options:**
@@ -92,9 +92,9 @@ uv run python scripts/list_repos.py --repo-file <file> [options]
 **Config Parameters:**
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `output-filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
-- `resume: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
 - `sort_ascending: <true/false>` - Sort order for `sort_by` field, defaults to `false` / descending
@@ -188,39 +188,31 @@ Performs an organisation-level audit that complements the per-repo scripts. It c
 **Usage:**
 
 ```bash
-uv run python scripts/org_security_posture.py <org> [--excel path] [--repo-file [path]] [--no-cache]
+uv run python scripts/org_security_posture.py --config-file /path/to/config.yaml --auth pat/app/cli
 ```
 
-**Options:**
+**CLI Options:**
 
-- `--excel <path>` - Write the report to a multi-sheet Excel workbook.
-- `--repo-file [path]` - Limit repo-level supply-chain checks to repos in a list file. If passed without a value, defaults to `repo_list.yaml`.
-- `--no-cache` - Ignore the saved posture cache and fetch fresh data.
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+
+**Config Parameters:**
+
+- `database_path: <path>` - SQLite path for core storage (default: `internal/org_security_posture.db`).
+- `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
+- `use_cache: true/false` - Skip endpoints already persisted in the database for supply-chain analysis
 
 **Output:**
 
 - A summary printed to stderr
-- Excel workbook output when `--excel` is supplied
-- Cached results stored in `internal/rg_posture_cache.db` for reuse on later runs
+- Excel workbook output to `output/org_security_posture/`
+- Cached results stored in `internal/org_security_posture.db` for reuse on later runs
 
 **Examples:**
 
 ```bash
-# Export a workbook for review
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-
-# Export a workbook for review, authenticating via PAT specifically
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx --auth pat
-
-# Limit supply-chain checks to repos from repo_list.yaml
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file
-
-# Limit supply-chain checks to repos from a custom list file
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file custom_repos.yaml --excel moj-security-posture.xlsx
-
-# Force a fresh pull instead of using the local cache
-uv run python scripts/org_security_posture.py ministryofjustice --no-cache
+# Export a workbook for review (org + output file come from config), authenticating via PAT specifically
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml --auth pat
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard
@@ -478,13 +470,13 @@ uv run python scripts/archive_repos.py ministryofjustice --audit-db /tmp/archive
 
 ```bash
 # 1. Generate an organisation-wide posture workbook
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 
-# 2. Re-run without cache when you need fresh data
-uv run python scripts/org_security_posture.py ministryofjustice --no-cache
+# 2. Set `use_cache: false` in config/audit_config.yaml to run without cache when you need fresh data
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 
-# 3. Limit supply-chain checks to repos listed in repo_list.yaml
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file --excel moj-security-posture.xlsx
+# 3. Limit supply-chain checks to repos listed in repo_list.yaml - adjust repo_list_file for alternate lists
+uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
 ```
 
 ### Batch Audit Using File
@@ -584,8 +576,7 @@ uv run python scripts/archive_repos.py ministryofjustice --cache-only --sort -da
 ### Export organisation posture report
 
 ```bash
-uv run python scripts/org_security_posture.py ministryofjustice --excel moj-security-posture.xlsx
-uv run python scripts/org_security_posture.py ministryofjustice --repo-file
+uv run python scripts/org_security_posture.py
 ```
 
 ## License
