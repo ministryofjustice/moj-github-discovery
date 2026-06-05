@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
         "--config-file",
         default=None,
         type=Path,
-        help="Path to YAML config file (optional, defaults to internal/audit_config.yaml)",
+        help="Path to YAML config file (optional, defaults to config/audit_config.yaml)",
     )
     parser.add_argument(
         "--auth",
