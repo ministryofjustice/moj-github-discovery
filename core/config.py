@@ -49,9 +49,9 @@ class NamespaceCrossrefConfig(BaseModel):
     """Config for cross-referencing repos with external namespace data."""
 
     enabled: bool = False  # whether to perform cross-referencing
-    target_repo: str = ""
+    target_repo: str = "cloud-platform-environments"
     target_branch: str = "main"
-    root_folder: str = ""
+    root_folder: str = "namespaces"
 
     @model_validator(mode="after")
     def validate_crossref(self) -> "NamespaceCrossrefConfig":
@@ -87,9 +87,9 @@ class ArchiveReposConfig(BaseModel):
 
     @field_validator("page_num", "repo_limit", mode="after")
     @classmethod
-    def must_be_positive(cls, value: Optional[int]) -> Optional[int]:
-        if value is not None and value <= 0:
-            raise ValueError(f"Value must be a positive integer, got {value}")
+    def must_be_non_negative(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError(f"Value must be a non-negative integer, got {value}")
         return value
 
 

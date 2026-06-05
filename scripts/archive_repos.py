@@ -400,6 +400,8 @@ def main() -> None:
     sort_by_field = archive_repos_config.sort_by_field
     sort_asc = archive_repos_config.sort_ascending
     storage_db_path = archive_repos_config.database_path
+    if storage_db_path and not Path(storage_db_path).is_absolute():
+        storage_db_path = str(Path(PROJECT_ROOT) / storage_db_path)
     use_cache = archive_repos_config.use_cache
 
     # Debug Config
