@@ -10,6 +10,19 @@ alert_metrics:
   output_filename: "github_alerts_limited.csv"
   repo_limit: 400
 
+archive_repos:
+  database_path: "internal/repo_audit.db"
+  output_filename: "archive_repos.csv"
+  page_num: None # None for all pages, or set to an integer to limit
+  repo_limit: None # None for no limit, or set to an integer to limit
+  sort_by_field: "days_since_push"
+  sort_ascending: false
+  use_cache: true
+  namespace_crossref:
+    enabled: true
+    target_repo: "cloud-platform-environments"
+    target_branch: "main"
+    root_folder: "namespaces"
 
 # Script config for list_repos.py.
 list_repos:
@@ -27,21 +40,6 @@ org_security_posture:
   database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
   use_cache: true
-archive_repos:
-  database_path: "internal/repo_audit.db"
-  output_filename: "archive_repos.csv"
-  # page_num: None # None for all pages, or set to an integer to limit
-  # repo_limit: None # None for no limit, or set to an integer to limit
-  sort_by_field: "days_since_push"
-  sort_ascending: false
-  # use_cache: true
-  namespace_crossref:
-    enabled: true
-    target_repo: "cloud-platform-environments"
-    target_branch: "main"
-    root_folder: "namespaces"
-  
-
 
 # Script config for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,

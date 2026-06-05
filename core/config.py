@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
