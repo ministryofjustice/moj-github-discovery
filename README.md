@@ -125,7 +125,7 @@ uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth 
 **Config Parameters:**
 
 - `database_path: "path/to/file.db"` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `output_filename: "file.csv"` - Export the full results set to CSV of given filename under `output/archive_repos/`
+- `output_filename: "file.csv / file.xlsx"` - Export the full results set to CSV or Excel of given filename under `output/archive_repos/`
 - `page_num: null/<int>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed). `null` for full estate.
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `sort_by_field: "field"` - Sort by a result column. Default is `days_since_push`
