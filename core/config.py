@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
@@ -28,6 +28,21 @@ class LfsScriptConfig(BaseModel):
     use_cache: bool = (
         True  # whether to use database cache to skip repos already collected
     )
+
+
+class AlertMetricsConfig(BaseModel):
+    """Config for ``alert_metrics.py`` script."""
+
+    output_filename: str = "alert_metrics.csv"  # output file for alert data
+    max_alerts: Optional[int] = None  # max number of alerts to collect (for testing)
+    repo_limit: Optional[int] = None  # max number of repos to audit (for testing)
+
+    @field_validator("repo_limit", "max_alerts", mode="after")
+    @classmethod
+    def must_be_positive(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value <= 0:
+            raise ValueError(f"Value must be a positive integer, got {value}")
+        return value
 
 
 class ListReposConfig(BaseModel):
@@ -80,6 +95,7 @@ class AuditConfig(BaseModel):
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
     lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
+    alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(
         default_factory=OrgSecurityPostureConfig

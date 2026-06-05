@@ -41,6 +41,27 @@ def test_load_returns_config_from_file(tmp_path):
     assert config.repo_list_file == "custom_repos.yaml"
 
 
+def test_load_respects_alert_metrics_config(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "alert_metrics": {
+                    "output_filename": "custom_alerts.csv",
+                    "max_alerts": 500,
+                    "repo_limit": 50,
+                }
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.alert_metrics.output_filename == "custom_alerts.csv"
+    assert config.alert_metrics.max_alerts == 500
+    assert config.alert_metrics.repo_limit == 50
+
+
 def test_load_respects_org_security_posture_config_overrides(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
     config_file.write_text(

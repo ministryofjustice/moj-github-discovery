@@ -5,11 +5,18 @@
 github_organization: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
 
+alert_metrics:
+  max_alerts: 10000
+  output_filename: "github_alerts_limited.csv"
+  repo_limit: 400
+
+
 # Script config for list_repos.py.
 list_repos:
   database_path: "internal/repo_audit.db"
   output_filename: "list_repos.xlsx"
-  repo_limit: 50
+  repo_limit: 400
+  resume: true
   standard_endpoints_only: true
   sort_by_field: "pushed_at"
   sort_ascending: false
