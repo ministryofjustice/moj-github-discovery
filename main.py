@@ -8,7 +8,7 @@ from pathlib import Path
 from core.config import AuditConfig, load_audit_config
 
 from scripts import (
-    # alert_metrics,
+    alert_metrics,
     archive_repos,
     # github_workflow,
     list_repos,
@@ -20,7 +20,7 @@ section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
 SCRIPTS = {
-    # "alert_metrics": alert_metrics,
+    "alert_metrics": alert_metrics,
     "archive_repos": archive_repos,
     # "github_workflow": github_workflow,
     "list_repos": list_repos,
