@@ -2,30 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import pandas as pd
 import os
 import sys
-from pathlib import Path
 from typing import Any, Callable
 
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.compiler import CsvCompiler
 from core.github_api import fetch_repo_alerts, list_org_repos
 from core.github_client import GitHubHttpClient
-from core.utils import base_directory_setup
-
-# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "github_alerts")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -40,29 +26,6 @@ ALERT_SPECS: list[AlertSpec] = [
     ),
     ("secret_scanning", lambda _: "critical"),
 ]
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse and return command-line arguments for later use within alert_metrics.py"""
-    parser = argparse.ArgumentParser(
-        description="Export repository-level alert metrics via core GitHub modules."
-    )
-    parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help="Path to YAML config file (optional, defaults to config/audit_config.yaml)",
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly",
-    )
-    parser.add_argument(
-        "--repo", default=None, help="Scan only a single repository (owner/repo)."
-    )
-    return parser.parse_args()
 
 
 def parse_iso(value: str | None) -> dt.datetime | None:
@@ -176,11 +139,17 @@ def summarise_results(output_file: str) -> None:
     print(df.groupby(["severity", "type"]).size())
 
 
-def main() -> None:
-    # Configure and Validate CLI Arguments
-    args = parse_args()
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+) -> None:
 
-    config: AuditConfig = load_audit_config(args.config_file)
+    # Configure Output Directories
+    OUTPUT_DIR = os.path.join(base_output_dir, "github_alerts")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     alert_metrics_config = config.alert_metrics
 
@@ -197,10 +166,10 @@ def main() -> None:
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
 
     # Configure GitHub connection and gather Repo Information
-    client = GitHubHttpClient(auth_method=args.auth)
-    if args.repo:
-        print(f"Scanning single repository: {args.repo}")
-        repos = [args.repo]
+    client = GitHubHttpClient(auth_method=auth)
+    if kwargs.get("repo"):
+        print(f"Scanning single repository: {kwargs['repo']}")
+        repos = [kwargs["repo"]]
     else:
         print(f"Fetching repositories for organization: {github_organization}")
         repos = list_org_repos(github_organization, client)
@@ -282,7 +251,3 @@ def main() -> None:
 
     if rows:
         summarise_results(output_file_path)
-
-
-if __name__ == "__main__":
-    main()
