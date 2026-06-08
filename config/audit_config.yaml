@@ -10,6 +10,19 @@ alert_metrics:
   output_filename: "github_alerts_limited.csv"
   repo_limit: 400
 
+archive_repos:
+  database_path: "internal/repo_audit.db"
+  output_filename: "archive_repos.csv"
+  page_num: null # null for all pages, or set to an integer to limit
+  repo_limit: null # null for no limit, or set to an integer to limit
+  sort_by_field: "days_since_push"
+  sort_ascending: false
+  use_cache: false
+  namespace_crossref:
+    enabled: false
+    target_repo: "cloud-platform-environments"
+    target_branch: "main"
+    root_folder: "namespaces"
 
 # Script config for list_repos.py.
 list_repos:

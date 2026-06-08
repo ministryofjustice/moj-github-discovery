@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
@@ -42,6 +42,54 @@ class AlertMetricsConfig(BaseModel):
     def must_be_positive(cls, value: Optional[int]) -> Optional[int]:
         if value is not None and value <= 0:
             raise ValueError(f"Value must be a positive integer, got {value}")
+        return value
+
+
+class NamespaceCrossrefConfig(BaseModel):
+    """Config for cross-referencing repos with external namespace data."""
+
+    enabled: bool = False  # whether to perform cross-referencing
+    target_repo: str = "cloud-platform-environments"
+    target_branch: str = "main"
+    root_folder: str = "namespaces"
+
+    @model_validator(mode="after")
+    def validate_crossref(self) -> "NamespaceCrossrefConfig":
+        for field_name in ["target_repo", "target_branch", "root_folder"]:
+            if self.enabled and not self.__dict__.get(field_name):
+                raise ValueError(
+                    f"Namespace crossref is enabled but '{field_name}' is not set"
+                )
+        return self
+
+
+class ArchiveReposConfig(BaseModel):
+    """Config for ``archive_repos.py`` script."""
+
+    database_path: str = (
+        "internal/repo_audit.db"  # SQLite cache file for repo audit data
+    )
+    output_filename: str = "archive_repos.csv"  # output file for archived repo data
+    page_num: Optional[int] = (
+        None  # page number to process (for pagination of large orgs)
+    )
+    repo_limit: Optional[int] = (
+        None  # limit total number of repos to process (for testing) - set to None for no limit
+    )
+    sort_by_field: str = "days_since_push"
+    sort_ascending: bool = False  # sort order - descending by default
+    use_cache: bool = (
+        False  # whether to use database cache to skip endpoints already collected
+    )
+    namespace_crossref: NamespaceCrossrefConfig = Field(
+        default_factory=NamespaceCrossrefConfig
+    )
+
+    @field_validator("page_num", "repo_limit", mode="after")
+    @classmethod
+    def must_be_non_negative(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError(f"Value must be a non-negative integer, got {value}")
         return value
 
 
@@ -94,8 +142,9 @@ class AuditConfig(BaseModel):
 
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
-    lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
+    archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
+    lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(
         default_factory=OrgSecurityPostureConfig

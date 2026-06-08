@@ -97,7 +97,7 @@ uv run python scripts/list_repos.py --config-file config/audit_config.yaml --aut
 - `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
-- `sort_ascending: <true/false>` - Sort order for `sort_by` field, defaults to `false` / descending
+- `sort_ascending: <true/false>` - Sort order for `sort_by_field`, defaults to `false` / descending
 
 **Examples:**
 
@@ -114,30 +114,35 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-uv run python scripts/archive_repos.py <org> [options]
+uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth pat
 ```
 
 **Options:**
 
-- `--csv <path>` - Export the full results set to CSV.
-- `--limit <N>` - Limit the number of repositories loaded from the organisation.
-- `--page-num <N>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed).
-- `--sort [-]column` - Sort by a result column. Default is `days_since_push` ascending. Prefix with `-` for descending.
-- `--audit-db [path]` - Use a custom SQLite path for core storage persistence. If omitted, the script uses `internal/repo_audit.db` beside the script if present.
-  - If provided without a path, it also defaults to `internal/repo_audit.db`.
-- `--cache-only` - Do not call the GitHub API. Use only existing local caches.
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
 - `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
-- `--namespace-crossref` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
-- `--namespace-repo <name>` - Namespace repository name (default: `cloud-platform-environments`).
-- `--namespace-branch <name>` - Branch to inspect in namespace repository (default: `main`).
-- `--namespace-root <path>` - Top-level namespace directory path (default: `namespaces`).
+
+**Config Parameters:**
+
+- `database_path: "path/to/file.db"` - SQLite path for core storage (default: `internal/repo_audit.db`).
+- `output_filename: "file.csv / file.xlsx"` - Export the full results set to CSV or Excel of given filename under `output/archive_repos/`
+- `page_num: null/<int>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed). `null` for full estate.
+- `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
+- `sort_by_field: "field"` - Sort by a result column. Default is `days_since_push`
+- `sort_ascending: true/false` - Sort order for `sort_by_field`, defaults to `false` / descending
+- `use_cache: true/false` - Do not call the GitHub API / Use only existing local caches if `true`.
+- **Namespace Crossref Config:**
+  - `enabled: true/false` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
+  - `target_repo: "repo_name"` - Namespace repository name (default: `cloud-platform-environments`).
+  - `target_branch: "branch"` - Branch to inspect in namespace repository (default: `main`).
+  - `root_folder: "folder"` - Top-level namespace directory path (default: `namespaces`).
 
 **Output:**
 
-- CSV when `--csv` is used
-- Core storage is persisted in SQLite (`repo_data` table)
-- JSON to stdout when `--csv` is not provided and `--audit-db` is not explicitly supplied
-- When `--namespace-crossref` is enabled and JSON is printed, output is an object with `records` and `namespace_crossref_summary`
+- CSV to `output/archive_repos`
+- Core storage is persisted in SQLite (`repo_data` table) under `internal/`
+- JSON to stdout by default.
+- When `namespace_crossref` is enabled and JSON is printed, output is an object with `records` and `namespace_crossref_summary`
 - Elapsed time and progress information on stderr
 
 **Useful fields in the output:**
@@ -150,23 +155,8 @@ uv run python scripts/archive_repos.py <org> [options]
 **Examples:**
 
 ```bash
-# Export archive candidates to CSV
-uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
-
-# Export archive candidates to CSV, authenticating via PAT specifically
-uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv --auth pat
-
-# Reuse local caches only for a fast rerun
-uv run python scripts/archive_repos.py ministryofjustice --cache-only --csv archivable.csv
-
-# Process only page 2 of the org inventory and write to the audit database
-uv run python scripts/archive_repos.py ministryofjustice --page-num 2 --audit-db
-
-# Sort by oldest last push and print JSON to stdout
-uv run python scripts/archive_repos.py ministryofjustice --sort days_since_push
-
-# Opt-in: identify archived repos that still have namespace folders
-uv run python scripts/archive_repos.py ministryofjustice --namespace-crossref
+# Export archive candidates to CSV using specific config parameters
+uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth pat
 ```
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
@@ -459,7 +449,7 @@ Each repo is assigned risk flags:
 ```bash
 # 1. Audit all repos in organization
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --excel audit_results.xlsx
+uv run python scripts/list_repos.py --config-file config/audit_config.yaml
 
 # 2. Launch dashboard to explore results
 uv run python scripts/dashboard.py
@@ -471,13 +461,7 @@ uv run python scripts/dashboard.py
 
 ```bash
 # 1. Generate a CSV of old or archived repositories
-uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
-
-# 2. Re-run quickly from the local caches while refining filters
-uv run python scripts/archive_repos.py ministryofjustice --cache-only --csv archivable.csv
-
-# 3. Optionally persist to a custom SQLite file for downstream analysis
-uv run python scripts/archive_repos.py ministryofjustice --audit-db /tmp/archive-audit.db
+uv run python scripts/archive_repos.py --config-file config/audit_config.yaml
 ```
 
 ### Organisation Security Posture Review
@@ -583,8 +567,7 @@ uv run python scripts/dashboard.py
 ### Export archive candidate data
 
 ```bash
-uv run python scripts/archive_repos.py ministryofjustice --csv archivable.csv
-uv run python scripts/archive_repos.py ministryofjustice --cache-only --sort -days_since_push
+uv run python scripts/archive_repos.py --config-file config/audit_config.yaml
 ```
 
 ### Export organisation posture report
