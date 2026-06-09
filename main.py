@@ -13,7 +13,7 @@ from scripts import (
     # github_workflow,
     list_repos,
     lfs_script,
-    # org_security_posture
+    org_security_posture,
 )
 
 section_break = "\n" + ("=" * 80) + "\n"
@@ -25,7 +25,7 @@ SCRIPTS = {
     # "github_workflow": github_workflow,
     "list_repos": list_repos,
     "lfs_script": lfs_script,
-    # "org_security_posture": org_security_posture
+    "org_security_posture": org_security_posture,
 }
 
 __start_time: float | None = None

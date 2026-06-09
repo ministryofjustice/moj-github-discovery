@@ -3,22 +3,16 @@
 
 from __future__ import annotations
 
-import argparse
-import atexit
 import os
 import sys
 import time
 from pathlib import Path
 from typing import Any, Literal
 
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import pandas as pd
 
 from core.collector import OrgEndpointCollector
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.github_api import (
     OrgActionsEndpoint,
     OrgAuditLogEndpoint,
@@ -36,53 +30,9 @@ from core.github_client import GitHubHttpClient
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
-from core.utils import base_directory_setup
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
-
-# TODO:
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "org_security_posture")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Set Default Cache and Repo List Paths
-ORG_CACHE_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "org_posture_cache.db")
-
-__start_time: float | None = None
-
-
-# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
-def _report_elapsed() -> None:
-    """Report elapsed time on script exit."""
-    if __start_time is not None:
-        elapsed = time.monotonic() - __start_time
-        print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
-
-
-atexit.register(_report_elapsed)
-
-
-def _parse_args() -> argparse.Namespace:
-    """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(
-        description="Audit organisation security posture using core collectors."
-    )
-    parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly",
-    )
-    return parser.parse_args()
 
 
 def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
@@ -329,31 +279,29 @@ def write_excel(report: dict[str, Any], path: str) -> None:
     print(f"Wrote {path}", file=sys.stderr)
 
 
-def main() -> None:
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+) -> None:
     """Main entry point for org security posture audit script."""
-    global __start_time
-    __start_time = time.monotonic()
 
-    args = _parse_args()
-
-    config: AuditConfig = load_audit_config(args.config_file)
+    # Configure Output Directories
+    OUTPUT_DIR = os.path.join(base_output_dir, "org_security_posture")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     org_security_posture_config = config.org_security_posture
 
     # Define Variables from Config
     database_path = Path(org_security_posture_config.database_path)
-    if not database_path.is_absolute():
-        database_path = Path(PROJECT_ROOT) / database_path
-    database_path.parent.mkdir(parents=True, exist_ok=True)
     global ORG_CACHE_DB_PATH
     ORG_CACHE_DB_PATH = str(database_path)
     github_organization = config.github_organization
     output_filename = org_security_posture_config.output_filename
     repo_file = config.repo_list_file
     use_cache = org_security_posture_config.use_cache
-
-    if repo_file is not None and not Path(repo_file).is_absolute():
-        repo_file = str(Path(PROJECT_ROOT) / repo_file)
 
     # Org Security Posture Config Debug
     print(section_break, file=sys.stderr)
@@ -365,7 +313,7 @@ def main() -> None:
 
     print(section_break, file=sys.stderr)
 
-    print(f"Auth method: {args.auth}", file=sys.stderr)
+    print(f"Auth method: {auth}", file=sys.stderr)
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"GitHub Organization: {github_organization}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
@@ -394,7 +342,7 @@ def main() -> None:
     )
     report = run_full_audit(
         github_organization,
-        args.auth,
+        auth,
         repo_full_names=repo_scope,
         use_cache=use_cache,
     )
@@ -437,7 +385,3 @@ def main() -> None:
 
     excel_path = os.path.join(OUTPUT_DIR, output_filename)
     write_excel(report, excel_path)
-
-
-if __name__ == "__main__":
-    main()
