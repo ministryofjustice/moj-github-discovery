@@ -10,19 +10,22 @@ from core.config import AuditConfig, load_audit_config
 from scripts import (
     alert_metrics,
     archive_repos,
-    # github_workflow,
+    github_workflow,
     list_repos,
     lfs_script,
     org_security_posture,
 )
 
+# Constants
+
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
+# Script registry - maps script names to their run functions for dynamic execution based on CLI args
 SCRIPTS = {
     "alert_metrics": alert_metrics,
     "archive_repos": archive_repos,
-    # "github_workflow": github_workflow,
+    "github_workflow": github_workflow,
     "list_repos": list_repos,
     "lfs_script": lfs_script,
     "org_security_posture": org_security_posture,
@@ -47,6 +50,7 @@ def base_directory_setup() -> tuple[str, str]:
 
 
 def _report_elapsed() -> None:
+    """Report elapsed time since script start on exit."""
     if __start_time is not None:
         elapsed = time.monotonic() - __start_time
         print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
@@ -66,7 +70,8 @@ def _parse_args() -> argparse.Namespace:
         "--scripts",
         nargs="+",
         choices=list(SCRIPTS.keys()),
-        help="Select which script(s) to run. See README for details on each script.",
+        metavar="SCRIPT",
+        help=f"One or more scripts to run. Choices: {', '.join(SCRIPTS.keys())}.",
     )
     parser.add_argument(
         "--all",
@@ -77,7 +82,7 @@ def _parse_args() -> argparse.Namespace:
         "--config-file",
         default=None,
         type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
+        help="Path to audit config YAML. Defaults to config/audit_config.yaml.",
     )
     parser.add_argument(
         "--auth",
@@ -88,10 +93,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--repo",
         default=None,
-        help=(
-            "Optionally specify a single repository to target in the format "
-            "owner/repo. This only applies to alert_metrics.py script for now."
-        ),
+        help="Optionally specify a single repository to target in the format owner/repo. This only applies to the alert_metrics.py script for now.",
+    )
+    parser.add_argument(
+        "--repos",
+        nargs="+",
+        help="Specific repos to scan, e.g. owner/repo owner/repo. Only applies to github_workflow.py for now.",
     )
     return parser.parse_args()
 
@@ -103,6 +110,7 @@ def main():
 
     args = _parse_args()
 
+    # Global Script Argument Validation
     if not args.scripts and not args.all:
         print(
             "Please specify a script to run with --scripts <name> [name ...] or use --all to run all scripts.",
@@ -110,13 +118,24 @@ def main():
         )
         sys.exit(1)
 
+    # Script-Specific Argument Validation
     if args.repo and "alert_metrics" not in (args.scripts or []) and not args.all:
         print(
-            "The --repo argument currently only applies to the alert_metrics script. Please include alert_metrics in --scripts or use --all.",
+            "The --repo argument currently only applies to the alert_metrics script.",
+            "Please include alert_metrics in --scripts or use --all.",
             file=sys.stderr,
         )
         sys.exit(1)
 
+    if args.repos and "github_workflow" not in (args.scripts or []) and not args.all:
+        print(
+            "The --repos argument currently only applies to the github_workflow script.",
+            "Please include github_workflow in --scripts or use --all",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Load Config File - Defaults to config/audit_config.yaml if not specified
     config: AuditConfig = load_audit_config(args.config_file)
 
     scripts_to_run = (
@@ -135,15 +154,23 @@ def main():
     print(f"Base output directory: {base_output_dir}", file=sys.stderr)
     print(f"Base internal directory: {base_internal_dir}", file=sys.stderr)
 
+    # Iterate through selected scripts and execute them sequentially,
+    # passing the global config and any relevant CLI args
+
     for name, script in scripts_to_run.items():
         print(
             f"{section_break}\nStarting script: {name}\n{section_break}",
             file=sys.stderr,
         )
         try:
+            # Prepare kwargs for scripts that require specific CLI args
             kwargs = {}
             if name == "alert_metrics" and args.repo:
                 kwargs["repo"] = args.repo
+            if name == "github_workflow" and args.repos:
+                kwargs["repos"] = args.repos
+            # Pass the global config, auth method, base directories, and any script-specific kwargs
+            # to the script's run function
             script.run(
                 config,
                 args.auth,

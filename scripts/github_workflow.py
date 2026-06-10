@@ -21,13 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.github_api import (
     LatestWorkflowRunEndpoint,
     RepoDetailsEndpoint,
@@ -44,18 +40,6 @@ from core.models import RepoActionsPermissionsData, RepoData
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
-from core.utils import base_directory_setup
-
-# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "github_workflow_posture")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Set Default Database Path
-DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "github_workflow_posture.db")
-
 
 # --- Workflow file parsing ------------------------------------------------
 
@@ -247,66 +231,6 @@ def write_summary(
     print(report)
 
 
-# --- CLI ------------------------------------------------------------------
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Identify repositories using GitHub Actions across the MoJ estate"
-    )
-    parser.add_argument(
-        "--org",
-        default=os.getenv("GITHUB_ORG", "ministryofjustice"),
-        help="GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)",
-    )
-    parser.add_argument(
-        "--repos",
-        nargs="+",
-        help="Specific repos to scan, e.g. owner/repo owner/repo",
-    )
-    parser.add_argument(
-        "--repo-file",
-        help="Repo list file (YAML or plain text, one owner/repo per line)",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=500,
-        help="Max repos to scan (default: 500)",
-    )
-    parser.add_argument(
-        "--out-prefix",
-        default="github_workflow_posture",
-        help="Prefix for output files (default: github_workflow_posture)",
-    )
-    parser.add_argument(
-        "--db",
-        default=DEFAULT_DB_PATH,
-        help=f"SQLite path for collection cache (default: {DEFAULT_DB_PATH})",
-    )
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="Resume collection by skipping endpoint data already cached in the database",
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly",
-    )
-    parser.add_argument(
-        "--config-file",
-        type=Path,
-        default=None,
-        help=(
-            "Path to audit config YAML. Defaults to config/audit_config.yaml "
-            "if present, otherwise all stages run with built-in defaults."
-        ),
-    )
-    return parser.parse_args()
-
-
 # --- Stage functions ------------------------------------------------------
 
 
@@ -319,15 +243,12 @@ def resolve_repo_list(
 
     Resolution order:
       1. ``--repos`` CLI arg (explicit list)
-      2. ``--repo-file`` CLI arg (explicit path)
-      3. ``repo_list_file`` from the loaded audit config, if that path exists
-      4. ``repo_list.yaml`` in the current working directory, if present
-      5. Fall back to listing the org via the GitHub API
+      2. ``repo_list_file`` from the loaded audit config, if that path exists
+      3. ``repo_list.yaml`` in the current working directory, if present
+      4. Fall back to listing the org via the GitHub API
     """
     if args.repos:
         repo_list = args.repos[: args.limit]
-    elif args.repo_file:
-        repo_list = load_repo_list_file(args.repo_file)[: args.limit]
     elif config.repo_list_file and Path(config.repo_list_file).exists():
         print(
             f"Using repo list from config: {config.repo_list_file}",
@@ -894,13 +815,38 @@ def _skip(stage_label: str, toggle_name: str) -> None:
     )
 
 
-def main() -> None:
-    args = _parse_args()
-    config: AuditConfig = load_audit_config(args.config_file)
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+) -> None:
+
+    # Configure Output Directories
+    # TODO: once stages refactored - remove global and just pass output_dir to stages that need it,
+    # rather than relying on a global var.
+    global OUTPUT_DIR
+    OUTPUT_DIR = os.path.join(base_output_dir, "github_workflow_posture")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     workflow_config = config.workflow_audit
 
-    client = GitHubHttpClient(auth_method=args.auth)
-    storage = SqliteRepoStorage(args.db)
+    # TODO: refactor to avoid argparse.Namespace and just pass workflow_config and repo_list directly to stages
+    # that need them, rather than packing into Namespace with some args from CLI and some from config.
+
+    args = argparse.Namespace(
+        org=config.github_organization,
+        repo_file=config.repo_list_file,
+        limit=workflow_config.repo_limit,
+        out_prefix=workflow_config.output_prefix,
+        db=workflow_config.database_path,
+        resume=workflow_config.use_cache,
+        repos=kwargs.get("repos", None),
+    )
+
+    client = GitHubHttpClient(auth_method=auth)
+    storage = SqliteRepoStorage(workflow_config.database_path)
 
     # Stage 1 - resolve_repo_lis. (mandatory)
     repo_list = resolve_repo_list(args, client, config)
@@ -952,7 +898,3 @@ def main() -> None:
         _skip("Stage 9", "trigger_risk_analysis")
 
     print("--- Complete ---")
-
-
-if __name__ == "__main__":
-    main()

@@ -128,6 +128,16 @@ class OrgSecurityPostureConfig(BaseModel):
 class WorkflowAuditConfig(BaseModel):
     """Per-stage toggles for ``github_workflow.py``."""
 
+    database_path: str = "internal/github_workflow_posture.db"  # SQLite cache file for workflow audit data
+    output_prefix: str = (
+        "github_workflow_audit"  # prefix for output files (suffixes added per stage)
+    )
+    repo_limit: Optional[int] = (
+        400  # max number of repos to audit (for testing) - set to None for no limit
+    )
+    use_cache: bool = (
+        True  # whether to use database cache to skip endpoints already collected
+    )
     collect_baseline_data: bool = True  # stage 2
     collect_additional_data: bool = True  # stage 3
     gen_posture_reports: bool = True  # stage 4/5
