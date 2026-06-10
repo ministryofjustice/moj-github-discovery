@@ -239,7 +239,7 @@ uv run audit-cli --scripts org_security_posture --config-file /path/to/config.ya
 
 ```bash
 # Export a workbook for review (org + output file come from config), authenticating via PAT specifically
-uv run run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml --auth pat
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml --auth pat
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard
@@ -333,7 +333,7 @@ to identify repositories using Actions, archived repos with workflows, and candi
 **Usage:**
 
 ```bash
-uv run run audit-cli --scripts github_workflow [options]
+uv run audit-cli --scripts github_workflow [options]
 ```
 
 **Config Parameters:**
@@ -502,10 +502,10 @@ uv run audit-cli --scripts archive_repos --config-file config/audit_config.yaml
 uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 
 # 2. Set `use_cache: false` in config/audit_config.yaml to run without cache when you need fresh data
-uv run audit-cli --scripts org_security_posture.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 
 # 3. Limit supply-chain checks to repos listed in repo_list.yaml - adjust repo_list_file for alternate lists
-uv run audit-cli --scripts org_security_posture.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 ```
 
 ### Batch Audit Using File

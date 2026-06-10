@@ -62,8 +62,7 @@ atexit.register(_report_elapsed)
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Collect audit data for repositories listed in a repo file "
-            "and optionally export to Excel."
+            "Unified entrypoint for running one or more GitHub audit scripts using the shared YAML config."
         )
     )
     parser.add_argument(
@@ -179,9 +178,10 @@ def main():
                 **kwargs,
             )
             script_results[name] = "Success"
-        except Exception as exc:
-            print(f"Error running script {name}: {exc}", file=sys.stderr)
-            script_results[name] = f"Failed: {exc}"
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 1
+            print(f"Script {name} exited with code {code}", file=sys.stderr)
+            script_results[name] = f"Failed (exit {code})"
 
     # Summary of script results
     print(

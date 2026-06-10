@@ -837,10 +837,8 @@ def run(
 
     args = argparse.Namespace(
         org=config.github_organization,
-        repo_file=config.repo_list_file,
         limit=workflow_config.repo_limit,
         out_prefix=workflow_config.output_prefix,
-        db=workflow_config.database_path,
         resume=workflow_config.use_cache,
         repos=kwargs.get("repos", None),
     )
