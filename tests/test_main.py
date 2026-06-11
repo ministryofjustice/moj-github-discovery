@@ -4,11 +4,6 @@ import pytest
 from main import main, _parse_args, SCRIPTS
 
 
-@pytest.fixture
-def _make_mock_scripts():
-    return {name: MagicMock() for name in SCRIPTS.keys()}
-
-
 # Parse_Args Tests
 def test_parse_args_defaults():
     args = _parse_args([])

@@ -37,7 +37,7 @@ list_repos:
 
 # Script config for org_security_posture.py.
 org_security_posture:
-  database_path: "internal/test/org_security_posture.db"
+  database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
   use_cache: true
 
