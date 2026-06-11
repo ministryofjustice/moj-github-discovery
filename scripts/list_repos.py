@@ -2,22 +2,14 @@
 
 from __future__ import annotations
 
-import argparse
-import atexit
 import os
 import sys
-import time
-from pathlib import Path
 from typing import Any
-
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
 from core.collector import RepoCollector
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.github_api import (
     REPO_ENDPOINTS,
     STANDARD_REPO_AUDIT_ENDPOINTS,
@@ -25,72 +17,27 @@ from core.github_api import (
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
-from core.utils import base_directory_setup
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
-# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
 
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "list_repos")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Set Default Database Path
-DEFAULT_DB_PATH = os.path.join(BASE_INTERNAL_DIR, "repo_audit.db")
-
-__start_time: float | None = None
-
-
-# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
-def _report_elapsed() -> None:
-    if __start_time is not None:
-        elapsed = time.monotonic() - __start_time
-        print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
-
-
-atexit.register(_report_elapsed)
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Collect audit data for repositories listed in a repo file "
-            "and optionally export to Excel."
-        )
-    )
-    parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    global __start_time
-    __start_time = time.monotonic()
-
-    args = _parse_args()
-    config: AuditConfig = load_audit_config(args.config_file)
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+) -> None:
+    OUTPUT_DIR = os.path.join(base_output_dir, "list_repos")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     list_repos_config = config.list_repos
 
-    # Define Variables from Config and/or Args
+    # Define Variables from Config and CLI Args
     database_path = list_repos_config.database_path
-    if database_path is not None and not Path(database_path).is_absolute():
-        database_path = str(Path(PROJECT_ROOT) / database_path)
     output_filename = list_repos_config.output_filename
     repo_file = config.repo_list_file
-    if repo_file is not None and not Path(repo_file).is_absolute():
-        repo_file = str(Path(PROJECT_ROOT) / repo_file)
     repo_limit = list_repos_config.repo_limit
     use_cache = list_repos_config.use_cache
     sort_by_field = list_repos_config.sort_by_field
@@ -144,7 +91,7 @@ def main() -> None:
         else REPO_ENDPOINTS
     )
     collector = RepoCollector(
-        storage=storage, endpoints=selected_endpoints, auth_method=args.auth
+        storage=storage, endpoints=selected_endpoints, auth_method=auth
     )
 
     primary_org = repo_list[0].split("/", 1)[0]
@@ -177,7 +124,3 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

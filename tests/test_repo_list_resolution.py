@@ -30,25 +30,6 @@ def test_explicit_repos_arg_wins(tmp_path, monkeypatch):
     assert result == ["ministryofjustice/foo", "ministryofjustice/bar"]
 
 
-def test_repo_file_arg_used_when_no_repos(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    repo_file = tmp_path / "custom.yaml"
-    repo_file.write_text("repos:\n  - ministryofjustice/baz\n")
-
-    args = _make_args(repo_file=str(repo_file))
-    config = AuditConfig()
-    client = MagicMock()
-
-    with patch(
-        "scripts.github_workflow.load_repo_list_file",
-        return_value=["ministryofjustice/baz"],
-    ) as mock_load:
-        result = scripts.github_workflow.resolve_repo_list(args, client, config)
-
-    mock_load.assert_called_once_with(str(repo_file))
-    assert result == ["ministryofjustice/baz"]
-
-
 def test_config_repo_list_file_used_when_no_cli_args(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     config_repo_file = tmp_path / "from_config.yaml"

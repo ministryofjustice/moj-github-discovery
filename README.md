@@ -66,12 +66,64 @@ collection, storage, and report shaping.
 - Add focused unit tests first (`tests/test_github_api.py`, `tests/test_collector.py`, `tests/test_presenters.py`, `tests/test_transforms.py`).
 - Add any script-specific config to `config/audit_config.yaml` with a corresponding model in `core/config.py`.
 
+## Usage Overview
+
+### CLI Args
+
+- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
+- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
+- `--scripts` - One or more scripts to be executed by the audit CLI. Current options are:
+  - `alert_metrics`
+  - `archive_repos`
+  - `github_workflow`
+  - `lfs_script`
+  - `list_repos`
+  - `org_security_posture`
+- `--all` - Trigger all the scripts in sequence
+  - **note:** this will take a significant amount of time due to rate limiting, consider running on an extremely small subset of repos if testing
+- `--repo` - Specify a single repository to target in the form `owner/repo` - currently only applies to `alert_metrics`
+- `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - currently only applies to `github_workflow`
+
+### Local Terminal
+
+After running `uv sync`, the audit CLI can be triggered for any given script(s) under the `scripts/` directory.
+
+```shell
+# Install CLI and dependencies
+uv sync
+
+# Display Help Information around CLI Args
+uv run audit-cli --help
+
+# Run a specific script e.g. list_repos.py
+uv run audit-cli --scripts list_repos
+
+# Run multiple scripts, authenticating via PAT
+uv run audit-cli --scripts alert_metrics lfs_script --auth pat
+
+# Run a given script with a custom config file
+uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml
+
+# Run github_workflow.py against a specific set of repos
+uv run audit-cli --scripts github_workflow --repos ministryofjustice/<repo1> ministryofjustice/<repo2> 
+
+# Run alert_metrics against a specific repo
+uv run audit-cli --scripts alert_metrics --repo ministryofjustice/<repo name>
+```
+
+### Virtual Environment (Venv)
+
+- Install the CLI and dependencies: `uv sync`
+- Initialise a venv: `source .venv/bin/activate`
+- Run the CLI: `audit-cli <args>`
+- Deactivate when done: `deactivate`
+
 ## Global Config Attributes
 
 - `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
 - `repo_list_file` - Path to the repo list YAML file to be referenced by the scripts - defaults to `repo_list.yaml` at project root.
 
-## Scripts
+## Script-Specific Usage
 
 ### 1. `list_repos.py` - Audit Repositories From a File
 
@@ -81,20 +133,15 @@ the core SQLite storage, and optionally exports an Excel workbook.
 **Usage:**
 
 ```bash
-uv run python scripts/list_repos.py --config-file config/audit_config.yaml --auth pat
+uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --auth pat
 ```
-
-**CLI Options:**
-
-- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Config Parameters:**
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
 - `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
-- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
 - `sort_ascending: <true/false>` - Sort order for `sort_by_field`, defaults to `false` / descending
@@ -103,7 +150,7 @@ uv run python scripts/list_repos.py --config-file config/audit_config.yaml --aut
 
 ```bash
 # Audit all repos from file
-uv run python scripts/list_repos.py --config-file config/audit_config.yaml --auth app
+uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --auth app
 ```
 
 ### 2. `archive_repos.py` - Find Archive Candidates
@@ -114,13 +161,8 @@ The script caches repo metadata and code-search results locally so repeated runs
 **Usage:**
 
 ```bash
-uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth pat
+uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --auth pat
 ```
-
-**Options:**
-
-- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Config Parameters:**
 
@@ -130,7 +172,7 @@ uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth 
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `sort_by_field: "field"` - Sort by a result column. Default is `days_since_push`
 - `sort_ascending: true/false` - Sort order for `sort_by_field`, defaults to `false` / descending
-- `use_cache: true/false` - Do not call the GitHub API / Use only existing local caches if `true`.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - **Namespace Crossref Config:**
   - `enabled: true/false` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
   - `target_repo: "repo_name"` - Namespace repository name (default: `cloud-platform-environments`).
@@ -156,7 +198,7 @@ uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth 
 
 ```bash
 # Export archive candidates to CSV using specific config parameters
-uv run python scripts/archive_repos.py --config-file path/to/config.yaml --auth pat
+uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --auth pat
 ```
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
@@ -178,19 +220,14 @@ Performs an organisation-level audit that complements the per-repo scripts. It c
 **Usage:**
 
 ```bash
-uv run python scripts/org_security_posture.py --config-file /path/to/config.yaml --auth pat/app/cli
+uv run audit-cli --scripts org_security_posture --config-file /path/to/config.yaml --auth pat/app/cli
 ```
-
-**CLI Options:**
-
-- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Config Parameters:**
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/org_security_posture.db`).
 - `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
-- `use_cache: true/false` - Skip endpoints already persisted in the database for supply-chain analysis
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache for supply chain analysis (still fetches missing data).
 
 **Output:**
 
@@ -202,7 +239,7 @@ uv run python scripts/org_security_posture.py --config-file /path/to/config.yaml
 
 ```bash
 # Export a workbook for review (org + output file come from config), authenticating via PAT specifically
-uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml --auth pat
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml --auth pat
 ```
 
 ### 4. `dashboard.py` - Interactive Web Dashboard
@@ -296,51 +333,56 @@ to identify repositories using Actions, archived repos with workflows, and candi
 **Usage:**
 
 ```bash
-uv run python scripts/github_workflow.py [options]
+uv run audit-cli --scripts github_workflow [options]
 ```
 
-**Options:**
+**Config Parameters:**
 
-- `--org` - GitHub organisation to scan (default: env GITHUB_ORG or ministryofjustice)
-- `--repo-file` - YAML file with list of repos to scan (optional, defaults to scanning entire org)
-- `--db` - SQLite database path for caching (default: `internal/github_workflow_posture.db`)
-- `--csv` - Export summary CSV
-- `--excel` - Export detailed Excel workbook
-- `--limit` - Limit number of repos to process
-- `--sort` - Sort repos by field (default: -workflow_count)
-- `--auth` - Specify auth method (pat, app, cli)
-- `--no-cache` - Ignore cached data
-- `--resume` - Resume from last interrupted run
+- `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow_posture.db`).
+- `output_prefix: <filename>` - Output filename prefix, only applies to `gen_posture_reports`.
+- `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
+- **Stage-specific toggles:**
+  - `collect_baseline_data: true/false` - Toggle collection of repo metadata and workflow inventory.
+  - `collect_additional_data: true/false` - Toggle collection of actions permissions-based data
+  - `gen_posture_reports: true/false` - Toggle generation of base summary posture CSVs and text reports
+  - `actions_analysis: true/false` - Toggle execution of actions analysis, what actions are used, how many are SHA pinned, etc.
+  - `permissions_analysis: true/false` - Toggle execution of workflow permission configuration analysis.
+  - `credentials_analysis: true/false` - Toggle execution of workflow credential usage analysis (OIDC vs Long-Lived)
+  - `trigger_risk_analysis: true/false` - Toggle execution of workflow trigger risk analysis.
 
 **Output:**
 
-- A human-readable summary report written to stdout and a file
-- CSV summary when `--csv` is provided
-- Excel workbook with detailed workflow data when `--excel` is provided
-- Cached results stored in the specified SQLite database
+- All outputs by default are sent to `output/github_workflow_posture`
+
+- **Posture Reports:**
+  - Text summary report (`_audit_summary.txt` suffix) summarising base analysis and posture of workflows
+  - CSV summary of workflow data for repos analysed  (`_repo_summary.csv` suffix)
+  - CSV providing details of workflows per repository analysed (`_workflow_details.csv`)
+- **Actions Analysis:**
+  - `github_actions_owner_summary.csv` - Outlines the most commonly used action providers through the workflows analysed
+  - `github_actions_pinning_per_repo.csv` - Compares the pinned vs unpinned by SHA actions per repository.
+  - `github_actions_unpinned_detail.csv` - Outlines per-workflow in each repository pinned/unpinned by SHA metrics for actions.
+  - `github_actions_usage_summary.csv` - CSV summary count of the most common actions used throughout the workflows analysed
+  - `github_actions_usage_detail.csv` - CSV detailed report outlining actions used throughout each workflow file, version, pinning, and owner.
+- **Permissions Analysis:**
+  - `github_workflow_permissions.csv` - CSV report of permission configuration risks associated with the analysed repositories.
+- **Credentials Analysis:**
+  - `github_workflow_credential_posture.csv` - Per-workflow per repository breakdown of OIDC vs long-lived credential usage.
+  - `github_workflow_credential_posture_per_repo.csv` - CSV breakdown of OIDC vs Long-lived credential usage per repository analysed.
+- **Trigger Risk Analysis:**
+  - `github_workflow_trigger_risk.csv` - Per-workflow per repository breakdown of workflow trigger configuration risk.
+  - `github_workflow_trigger_risk_per_repo.csv` - CSV breakdown of workflow trigger configuration risk per repository analysed.
 
 **Examples:**
 
 ```bash
-# Scan entire org and print summary
-uv run python scripts/github_workflow.py
+# Scan Using Config File and Repo List
 
-# Scan specific repos from file and export Excel
-uv run python scripts/github_workflow.py --repo-file repo_list.yaml --excel workflow_posture.xlsx
 
-# Limit to 50 repos and sort by workflow count
-uv run python scripts/github_workflow.py --limit 50 --sort -workflow_count
+# Scan Only Particular Set of Repos
 
-# Use custom database and resume interrupted run
-uv run python scripts/github_workflow.py --db custom.db --resume
 ```
-
-**Output:**
-
-- A human-readable summary report written to stdout and a file
-- CSV summary when `--csv` is provided
-- Excel workbook with detailed workflow data when `--excel` is provided
-- Cached results stored in the specified SQLite database
 
 ### 7. `alert_metrics.py` - Assess GitHub Security Alerts
 
@@ -349,14 +391,8 @@ Exports repository-level alert metrics for code scanning, dependabot, and secret
 **Usage:**
 
 ```bash
-uv run python scripts/alert_metrics.py [options]
+uv run audit-cli --scripts alert_metrics [options]
 ```
-
-**Options:**
-
-- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-- `--auth` - Select GitHub authentication method explicitly (pat, app, cli)
-- `--repo` - Select a specific repository for analysis.
 
 **Config Parameters:**
 
@@ -372,10 +408,10 @@ uv run python scripts/alert_metrics.py [options]
 
 ```bash
 # Export alerts for org to default CSV, using a given config file and authenticating via PAT
-uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --auth pat
+uv run audit-cli --scripts alert_metrics --config-file config/audit_config.yaml --auth pat
 
 # Run script against single repository
-uv run python scripts/alert_metrics.py --config-file config/audit_config.yaml --repo ministryofjustice/example-repo
+uv run audit-cli --scripts alert_metrics --config-file config/audit_config.yaml --repo ministryofjustice/example-repo
 ```
 
 ### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub
@@ -386,13 +422,8 @@ It generates a master Excel summary of repos exceeding thresholds and individual
 **Usage:**
 
 ```bash
-uv run python scripts/lfs_script.py --config-file config/audit_config.yaml --auth pat
+uv run audit-cli --scripts lfs_script --config-file config/audit_config.yaml --auth pat
 ```
-
-**CLI Options:**
-
-- `--config-file <path/to/config.yaml>` - Path to config file for audit script to reference, defaults to `config/audit_config.yaml` if not provided.
-- `--auth` - Specify a (single) auth method if required `pat, app, cli` - will default check each method sequentially if not provided.
 
 **Config Parameters:**
 
@@ -400,7 +431,7 @@ uv run python scripts/lfs_script.py --config-file config/audit_config.yaml --aut
 - `soft_limit_mb: <int>`: Integer soft/warning file size limit in Megabytes. Defaults to 50.
 - `hard_limit_mb: <int>`: Integer hard file size limit in Megabytes. Defaults to 100.
 - `output_filename: <filename>.xlsx` - Filename for summary output Excel File under `output/lfs_analysis`
-- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 
 **Output:**
 
@@ -411,7 +442,7 @@ uv run python scripts/lfs_script.py --config-file config/audit_config.yaml --aut
 
 ```bash
 # Run the LFS analysis
-uv run python scripts/lfs_script.py
+uv run audit-cli --scripts lfs_script
 ```
 
 ## Database Schema
@@ -461,20 +492,20 @@ uv run python scripts/dashboard.py
 
 ```bash
 # 1. Generate a CSV of old or archived repositories
-uv run python scripts/archive_repos.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts archive_repos --config-file config/audit_config.yaml
 ```
 
 ### Organisation Security Posture Review
 
 ```bash
 # 1. Generate an organisation-wide posture workbook
-uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 
 # 2. Set `use_cache: false` in config/audit_config.yaml to run without cache when you need fresh data
-uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 
 # 3. Limit supply-chain checks to repos listed in repo_list.yaml - adjust repo_list_file for alternate lists
-uv run python scripts/org_security_posture.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml
 ```
 
 ### Batch Audit Using File
@@ -493,7 +524,7 @@ EOF
 
 # Audit them
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
+uv run audit-cli --scripts list_repos
 
 # View in dashboard
 uv run python scripts/dashboard.py
@@ -504,7 +535,7 @@ uv run python scripts/dashboard.py
 ```bash
 # Re-run audits to update the core storage database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
+uv run audit-cli --scripts list_repos
 
 # Dashboard automatically shows updated data
 uv run python scripts/dashboard.py
@@ -543,14 +574,14 @@ This will diagnose differences in PATH, HOME, and token availability.
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 20 --excel github_audit.xlsx
+uv run audit-cli --scripts list_repos
 ```
 
 ### Audit specific critical repos
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --limit 2 --db ./path/to/repo_audit.db
+uv run audit-cli --scripts list_repos
 uv run python scripts/dashboard.py
 # Select each repo and click "Run Audit" for updated details in core storage
 ```
@@ -567,13 +598,13 @@ uv run python scripts/dashboard.py
 ### Export archive candidate data
 
 ```bash
-uv run python scripts/archive_repos.py --config-file config/audit_config.yaml
+uv run audit-cli --scripts archive_repos --config-file config/audit_config.yaml
 ```
 
 ### Export organisation posture report
 
 ```bash
-uv run python scripts/org_security_posture.py
+uv run audit-cli --scripts org_security_posture
 ```
 
 ## License

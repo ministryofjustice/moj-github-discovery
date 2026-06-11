@@ -8,22 +8,15 @@ pagination, retries, and persistence to the core package.
 
 from __future__ import annotations
 
-import argparse
-import atexit
 import json
 import os
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.collector import RepoCollector, RepoListCollector
 from core.github_api import (
     CodeSearchEndpoint,
@@ -35,51 +28,9 @@ from core.github_api import (
 from core.github_client import GitHubHttpClient
 from core.models import RepoData, RepoDetails
 from core.storage import SqliteRepoStorage
-from core.utils import base_directory_setup
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
-
-# Base Directory Setup for Outputs and Internal Files
-# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "archive_repos")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-__start_time: float | None = None
-
-
-# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
-def _report_elapsed() -> None:
-    if __start_time is not None:
-        elapsed = time.monotonic() - __start_time
-        print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
-
-
-atexit.register(_report_elapsed)
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Build an archive-candidate inventory using shared core collectors."
-        )
-    )
-    parser.add_argument(
-        "--config-file",
-        default=None,
-        type=Path,
-        help=("Path to audit config YAML. Defaults to config/audit_config.yaml."),
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly",
-    )
-    return parser.parse_args()
 
 
 def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
@@ -382,13 +333,16 @@ def _compute_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def main() -> None:
-    global __start_time
-    __start_time = time.monotonic()
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+) -> None:
 
-    args = _parse_args()
-
-    config: AuditConfig = load_audit_config(args.config_file)
+    OUTPUT_DIR = os.path.join(base_output_dir, "archive_repos")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     archive_repos_config = config.archive_repos
 
@@ -400,8 +354,6 @@ def main() -> None:
     sort_by_field = archive_repos_config.sort_by_field
     sort_asc = archive_repos_config.sort_ascending
     storage_db_path = archive_repos_config.database_path
-    if storage_db_path and not Path(storage_db_path).is_absolute():
-        storage_db_path = str(Path(PROJECT_ROOT) / storage_db_path)
     use_cache = archive_repos_config.use_cache
 
     # Debug Config
@@ -453,7 +405,7 @@ def main() -> None:
         repo_list = _list_repos_from_storage(github_org, storage)
     else:
         print("Collecting repository list from GitHub API...", file=sys.stderr)
-        repo_list_collector = RepoListCollector(auth_method=args.auth)
+        repo_list_collector = RepoListCollector(auth_method=auth)
         repo_list = repo_list_collector.collect(
             github_org,
             sort="pushed",
@@ -487,7 +439,7 @@ def main() -> None:
         )
         collector = RepoCollector(
             storage=storage,
-            auth_method=args.auth,
+            auth_method=auth,
             endpoints=[
                 RepoDetailsEndpoint,
                 DependencyGraphEndpoint,
@@ -512,7 +464,7 @@ def main() -> None:
             namespace_repo=namespace_repo,
             namespace_branch=namespace_branch,
             namespace_root=namespace_root,
-            auth_method=args.auth,
+            auth_method=auth,
         )
         _apply_namespace_crossref(rows, namespace_folders)
 
@@ -571,7 +523,3 @@ def main() -> None:
         print(json.dumps(records, indent=2))
 
     print(f"Processed {len(records)} repositories", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    main()
