@@ -99,7 +99,7 @@ uv run audit-cli --help
 uv run audit-cli --scripts list_repos
 
 # Run multiple scripts, authenticating via PAT
-uv run audit-cli --scripts alert_metrics lfs_script --auth app
+uv run audit-cli --scripts alert_metrics lfs_script --auth pat
 
 # Run a given script with a custom config file
 uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml
@@ -141,7 +141,7 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --a
 - `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
 - `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
 - `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
-- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
 - `sort_ascending: <true/false>` - Sort order for `sort_by_field`, defaults to `false` / descending
@@ -172,7 +172,7 @@ uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --aut
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `sort_by_field: "field"` - Sort by a result column. Default is `days_since_push`
 - `sort_ascending: true/false` - Sort order for `sort_by_field`, defaults to `false` / descending
-- `use_cache: true/false` - Do not call the GitHub API / Use only existing local caches if `true`.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - **Namespace Crossref Config:**
   - `enabled: true/false` - Opt-in cross-reference: compare archived repos with namespace folders in a separate repo.
   - `target_repo: "repo_name"` - Namespace repository name (default: `cloud-platform-environments`).
@@ -227,7 +227,7 @@ uv run audit-cli --scripts org_security_posture --config-file /path/to/config.ya
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/org_security_posture.db`).
 - `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
-- `use_cache: true/false` - Skip endpoints already persisted in the database for supply-chain analysis
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache for supply chain analysis (still fetches missing data).
 
 **Output:**
 
@@ -341,7 +341,7 @@ uv run audit-cli --scripts github_workflow [options]
 - `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow_posture.db`).
 - `output_prefix: <filename>` - Output filename prefix, only applies to `gen_posture_reports`.
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
-- `use_cache: true/false` - Do not call the GitHub API / Use only existing local caches if `true`.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - **Stage-specific toggles:**
   - `collect_baseline_data: true/false` - Toggle collection of repo metadata and workflow inventory.
   - `collect_additional_data: true/false` - Toggle collection of actions permissions-based data
@@ -431,7 +431,7 @@ uv run audit-cli --scripts lfs_script --config-file config/audit_config.yaml --a
 - `soft_limit_mb: <int>`: Integer soft/warning file size limit in Megabytes. Defaults to 50.
 - `hard_limit_mb: <int>`: Integer hard file size limit in Megabytes. Defaults to 100.
 - `output_filename: <filename>.xlsx` - Filename for summary output Excel File under `output/lfs_analysis`
-- `use_cache: true/false` - Skip endpoints already persisted in the database for each repo. Safe to use after an interrupted run.
+- `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 
 **Output:**
 

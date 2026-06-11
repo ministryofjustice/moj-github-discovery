@@ -21,7 +21,7 @@ from scripts import (
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
-# Script registry - maps script names to their run functions for dynamic execution based on CLI args
+# Script registry - maps script names to their modules (each exposing a `run()` function)
 SCRIPTS = {
     "alert_metrics": alert_metrics,
     "archive_repos": archive_repos,
@@ -59,7 +59,7 @@ def _report_elapsed() -> None:
 atexit.register(_report_elapsed)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Unified entrypoint for running one or more GitHub audit scripts using the shared YAML config."
@@ -99,15 +99,15 @@ def _parse_args() -> argparse.Namespace:
         nargs="+",
         help="Specific repos to scan, e.g. owner/repo owner/repo. Only applies to github_workflow.py for now.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
+def main(argv=None) -> None:
 
     global __start_time
     __start_time = time.monotonic()
 
-    args = _parse_args()
+    args = _parse_args(argv)
 
     # Global Script Argument Validation
     if not args.scripts and not args.all:
@@ -182,6 +182,12 @@ def main():
             code = exc.code if isinstance(exc.code, int) else 1
             print(f"Script {name} exited with code {code}", file=sys.stderr)
             script_results[name] = f"Failed (exit {code})"
+        except Exception as exc:
+            print(
+                f"Script {name} failed with an unhandled exception: {exc!r}",
+                file=sys.stderr,
+            )
+            script_results[name] = "Failed (exception)"
 
     # Summary of script results
     print(

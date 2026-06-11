@@ -296,6 +296,9 @@ def run(
 
     # Define Variables from Config
     database_path = Path(org_security_posture_config.database_path)
+    if not database_path.is_absolute():
+        database_path = Path(os.getcwd()) / database_path
+    database_path.parent.mkdir(parents=True, exist_ok=True)
     global ORG_CACHE_DB_PATH
     ORG_CACHE_DB_PATH = str(database_path)
     github_organization = config.github_organization
