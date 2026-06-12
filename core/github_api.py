@@ -102,6 +102,55 @@ def list_org_repos(
     return [r["full_name"] for r in items if isinstance(r, dict) and "full_name" in r]
 
 
+def list_org_repos_with_archive_status(
+    org: str,
+    client: BaseHttpClient,
+    *,
+    type: Literal["all", "public", "private", "forks", "sources", "member"] = "all",
+    sort: Literal["created", "updated", "pushed", "full_name"] = "pushed",
+    direction: Literal["asc", "desc"] | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    """Return repo names and archive status from a single paginated API call.
+
+    Replaces calling :func:`list_org_repos` and ``get_org_repos_with_archive_status``
+    separately, which would paginate ``/orgs/{org}/repos`` twice. This function
+    paginates once and extracts both pieces of information in one pass.
+
+    Args:
+        org:       GitHub organisation login name.
+        client:    HTTP client to use for the request.
+        type:      Filter by repo type.  ``"all"`` returns every repo.
+        sort:      Property to sort results by.
+        direction: Sort order.  Defaults to ``"asc"`` when *sort* is
+                   ``"full_name"``, otherwise ``"desc"`` (GitHub API default).
+
+    Returns:
+        A tuple of:
+        - list of ``owner/repo`` strings
+        - dict mapping repo full_name to status ("archived" or "non_archived")
+    """
+    params = f"type={type}&sort={sort}"
+    if direction is not None:
+        params += f"&direction={direction}"
+
+    repos: list[str] = []
+    status_lookup: dict[str, str] = {}
+    try:
+        items = client.get_paginated(f"/orgs/{org}/repos?{params}")
+        for item in items:
+            if isinstance(item, dict) and "full_name" in item:
+                full_name = item["full_name"]
+                repos.append(full_name)
+                status_lookup[full_name] = (
+                    "archived" if item.get("archived", False) else "non_archived"
+                )
+    except Exception:
+        # If the bulk fetch fails, return empty collections to allow graceful degradation
+        pass
+
+    return repos, status_lookup
+
+
 def dependency_supply_chain_summary(
     org: str,
     client: BaseHttpClient,
