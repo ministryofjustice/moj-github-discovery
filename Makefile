@@ -1,0 +1,29 @@
+IMAGE_NAME ?= moj-github-discovery:audit-cli-poc
+ENV_FILE ?= docker-audit-cli/.env
+AUDIT_ARGS ?= --scripts list_repos
+
+.PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-check-env
+
+audit-cli: audit-cli-build audit-cli-run
+
+audit-cli-build:
+	docker build -f docker-audit-cli/Dockerfile -t $(IMAGE_NAME) .
+
+audit-cli-check-env:
+	@if [ ! -f $(ENV_FILE) ]; then \
+		echo "$(ENV_FILE) not found. Creating it from docker-audit-cli/.env.example"; \
+		cp docker-audit-cli/.env.example $(ENV_FILE); \
+		echo "Created $(ENV_FILE). Update it with real values before running again."; \
+		exit 1; \
+	fi
+
+audit-cli-run: audit-cli-check-env
+	@mkdir -p output internal
+	@args="$(AUDIT_ARGS)"; \
+	case "$$args" in run\ *) args="$${args#run }" ;; esac; \
+	echo "Running audit CLI with args: $$args"; \
+	docker run --rm \
+		--env-file $(ENV_FILE) \
+		-v "$(PWD)/output:/app/output" \
+		-v "$(PWD)/internal:/app/internal" \
+		$(IMAGE_NAME) $$args
