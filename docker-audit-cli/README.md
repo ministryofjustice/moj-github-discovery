@@ -22,7 +22,28 @@ This will:
 ```bash
 make audit-cli-build
 make audit-cli-run
-make audit-cli-list-repos-10
+```
+
+`make audit-cli-run` forwards args to `main.py` inside the container.
+
+Examples:
+
+```bash
+# Default behavior (same as make audit-cli-run)
+make audit-cli-run AUDIT_ARGS="run --scripts list_repos"
+
+# Equivalent to: audit-cli run --scripts list_repos archive_repos
+make audit-cli-run AUDIT_ARGS="run --scripts list_repos archive_repos"
+
+# Equivalent to: audit-cli run --all
+make audit-cli-run AUDIT_ARGS="run --all"
+```
+
+The leading `run` token is optional, so these also work:
+
+```bash
+make audit-cli-run AUDIT_ARGS="--scripts list_repos"
+make audit-cli-run AUDIT_ARGS="--all"
 ```
 
 ## Secrets and environment variables
@@ -43,20 +64,4 @@ Put real secret values in `docker-audit-cli/.env`.
 make audit-cli-run
 ```
 
-## Run list_repos for 10 repositories
-
-```bash
-make audit-cli-list-repos-10
-```
-
-This runs `scripts/list_repos.py` in the container using
-`docker-audit-cli/list-repos-10.yaml`.
-
-Expected outputs:
-
-- Excel file at `output/list_repos/list_repos_10.xlsx`
-- SQLite data at `internal/repo_audit.db`
-- Runtime logs directly in your terminal
-
-The container entry point currently executes `main.py`. Once issue #133 lands,
-update the Docker entry point to target the unified CLI.
+The container uses the unified CLI entrypoint in `main.py`.
