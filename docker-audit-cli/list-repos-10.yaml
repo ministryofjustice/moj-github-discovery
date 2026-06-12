@@ -1,8 +1,0 @@
-# Minimal override config for a quick 10-repository list_repos test run.
-list_repos:
-  output_filename: list_repos_10.xlsx
-  repo_limit: 10
-  standard_endpoints_only: true
-  use_cache: true
-  sort_by_field: pushed_at
-  sort_ascending: false
