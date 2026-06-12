@@ -1,9 +1,8 @@
 IMAGE_NAME ?= moj-github-discovery:audit-cli-poc
 ENV_FILE ?= docker-audit-cli/.env
-LIST_REPOS_10_CONFIG ?= docker-audit-cli/list-repos-10.yaml
-AUDIT_ARGS ?= --all
+AUDIT_ARGS ?= --scripts list_repos
 
-.PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-check-env audit-cli-list-repos-10
+.PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-check-env
 
 audit-cli: audit-cli-build audit-cli-run
 
