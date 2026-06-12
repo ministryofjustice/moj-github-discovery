@@ -22,5 +22,5 @@ COPY . .
 RUN mkdir -p /app/output /app/internal
 VOLUME ["/app/output", "/app/internal"]
 
-# Placeholder for the unified CLI entry point work in issue #133.
+# Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
 ENTRYPOINT ["uv", "run", "python", "main.py"]
