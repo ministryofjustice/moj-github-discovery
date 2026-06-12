@@ -46,6 +46,11 @@ org_security_posture:
 # so disabling them only makes sense when a previous run has already
 # populated the SQLite cache (default: github_workflow_posture.db).
 workflow_audit:
+  database_path: "internal/github_workflow_posture.db"
+  output_prefix: "github_workflow_audit"
+  repo_limit: 400 # set to null for no limit
+  use_cache: true
+  # Stages
   collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory
   collect_additional_data: true  # stage 3 - Actions permissions + latest run
   gen_posture_reports: true      # stage 4/5 - posture CSVs + summary.txt

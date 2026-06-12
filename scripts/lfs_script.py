@@ -4,19 +4,12 @@ It collects repository data, checks blob sizes against predefined thresholds,
 and generates summary reports in CSV format.
 """
 
-import argparse
-import atexit
 import os
 import sys
-import time
-
-# add project root to path for core imports
-# TODO: Remove once pyproject.toml is build-system configured
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.models import FieldDefinition, FieldsConfig, FieldType
 from core.collector import RepoCollector
 from core.github_api import GetRepoTreeEndpoint, RepoDetailsEndpoint
@@ -24,56 +17,10 @@ from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.compiler import ExcelCompiler
 from core.transforms import RepoTreeTransform
-from core.utils import base_directory_setup
 
-from pathlib import Path
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
-
-# Base directory configurations
-# TODO: PROJECT_ROOT will be removed as an output of base_directory_setup once all scripts updated to use audit_config.yaml for repo_list loading
-BASE_OUTPUT_DIR, BASE_INTERNAL_DIR, PROJECT_ROOT = base_directory_setup()
-
-# Configure Output Directories
-OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, "lfs_analysis")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# File paths for input and output
-REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
-
-__start_time: float | None = None
-
-
-# TODO: Consider moving to core.utils as repeated across scripts or to main.py when shared entrypoint developed
-def _report_elapsed() -> None:
-    if __start_time is not None:
-        elapsed = time.monotonic() - __start_time
-        print(f"Elapsed time: {elapsed:.2f}s", file=sys.stderr)
-
-
-atexit.register(_report_elapsed)
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse and return command-line arguments for later use within the LFS analysis script."""
-    parser = argparse.ArgumentParser(
-        description="Analyze GitHub repositories for large file storage (LFS) issues and generate summary reports."
-    )
-    parser.add_argument(
-        "--config-file",
-        type=Path,
-        default=None,
-        help="Path to the audit configuration YAML file (optional, defaults to config/audit_config.yaml)",
-    )
-    parser.add_argument(
-        "--auth",
-        choices=["pat", "app", "cli"],
-        default=None,
-        help="Select GitHub authentication method explicitly (pat, app, or cli)",
-    )
-    return parser.parse_args()
-
 
 # Configuration for the master report file that summarizes repos exceeding thresholds
 master_report_config = FieldsConfig(
@@ -111,35 +58,35 @@ master_report_config = FieldsConfig(
 )
 
 
-def main():
+def run(
+    config: AuditConfig,
+    auth: str | None,
+    base_output_dir: str,
+    base_internal_dir: str,
+    **kwargs,
+):
     """
     Main function to orchestrate the LFS analysis process.
     Loads repository list, collects data from GitHub, generates master summary,
     and creates individual CSV summaries for each repository.
     """
-    global __start_time
-    __start_time = time.monotonic()
+    # Configure Output Directories
+    OUTPUT_DIR = os.path.join(base_output_dir, "lfs_analysis")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    print("<LFS Analysis> Starting LFS analysis script", file=sys.stderr)
-
-    args = parse_args()
-
-    config: AuditConfig = load_audit_config(args.config_file)
+    # File paths for input and output
+    REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
 
     lfs_script_config = config.lfs_script
 
     # Define file paths from config
     database_path = lfs_script_config.database_path
-    if database_path is not None and not os.path.isabs(database_path):
-        database_path = os.path.join(PROJECT_ROOT, database_path)
     github_organization = config.github_organization
     output_filename = lfs_script_config.output_filename
     output_file_path = output_filename
     if not os.path.isabs(output_filename):
         output_file_path = os.path.join(OUTPUT_DIR, output_filename)
     repo_list_file = config.repo_list_file
-    if repo_list_file is not None and not os.path.isabs(repo_list_file):
-        repo_list_file = os.path.join(PROJECT_ROOT, repo_list_file)
     resume = (
         lfs_script_config.use_cache
     )  # Using 'use_cache' to determine if we should resume from existing data
@@ -183,7 +130,7 @@ def main():
     collector = RepoCollector(
         storage=storage,
         endpoints=[RepoDetailsEndpoint, GetRepoTreeEndpoint],
-        auth_method=args.auth,
+        auth_method=auth,
     )
 
     # Collect data for the primary organization and specified repos, resuming if interrupted
@@ -255,8 +202,3 @@ def main():
         )
 
     print("<LFS Analysis> LFS analysis script completed successfully", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    # Run the main function when the script is executed directly
-    main()
