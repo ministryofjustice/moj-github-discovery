@@ -61,8 +61,24 @@ def build_archive_status_lookup(
     )
     repo_set = set(repos)
 
-    # Stage 1: Use pre-fetched data if available (this is now the primary path)
-    # If pre_fetched_status was provided, most repos will already be resolved.
+    # Stage 1: If pre-fetched data was not provided, populate from the org-wide
+    # paginated listing. This preserves standalone helper behavior for tests and
+    # non-optimized call sites.
+    if pre_fetched_status is None and repo_set:
+        try:
+            repo_items = client.get_paginated(f"/orgs/{org}/repos?type=all&sort=pushed")
+        except Exception:
+            repo_items = []
+
+        for repo_item in repo_items:
+            if not isinstance(repo_item, dict):
+                continue
+            full_name = repo_item.get("full_name")
+            if not isinstance(full_name, str) or full_name not in repo_set:
+                continue
+            status_lookup[full_name] = (
+                "archived" if repo_item.get("archived", False) else "non_archived"
+            )
 
     # Stage 2: For any repos not yet resolved, try individual API calls.
     # This handles edge cases where a repo may not be in the pre-fetched data
