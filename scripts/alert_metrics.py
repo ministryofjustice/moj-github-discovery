@@ -10,7 +10,10 @@ from typing import Any, Callable
 
 from core.config import AuditConfig
 from core.compiler import CsvCompiler
-from core.github_api import fetch_repo_alerts, list_org_repos
+from core.github_api import (
+    fetch_repo_alerts,
+    list_org_repos_with_archive_status,
+)
 from core.github_client import GitHubHttpClient
 
 # Alerts Config
@@ -34,41 +37,35 @@ def parse_iso(value: str | None) -> dt.datetime | None:
 
 
 def build_archive_status_lookup(
-    client: GitHubHttpClient, org: str, repos: list[str]
+    client: GitHubHttpClient,
+    org: str,
+    repos: list[str],
+    pre_fetched_status: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return repo archive status keyed by full repo name.
 
     Archive status is used to annotate alerts, helping analysts understand whether
-    issues were found in active or archived repositories. This function uses a
-    two-stage lookup: first attempt bulk fetch via org/repos endpoint, then fall back
-    to individual repo lookups for any repos not found in the bulk response.
+    issues were found in active or archived repositories. This function accepts
+    optional pre-fetched status data to avoid duplicate API calls. If not provided,
+    it will perform individual repo lookups for any repos not in the pre-fetched data.
+
+    Args:
+        client: GitHub HTTP client
+        org: Organization name
+        repos: List of full repo names (owner/repo format)
+        pre_fetched_status: Optional dict mapping repo full names to archive status.
+                           If provided, this is used as the primary source.
     """
-    status_lookup: dict[str, str] = {}
+    status_lookup: dict[str, str] = (
+        pre_fetched_status.copy() if pre_fetched_status else {}
+    )
     repo_set = set(repos)
 
-    if repo_set:
-        # Stage 1: Bulk fetch all org repos and match against the repos we need.
-        # This is more efficient than individual requests when available.
-        try:
-            repo_items = client.get_paginated(f"/orgs/{org}/repos?type=all&sort=pushed")
-        except Exception:
-            # If the bulk fetch fails, gracefully continue with individual lookups below.
-            repo_items = []
-
-        # Extract archive status from the bulk response for matching repos.
-        for repo_item in repo_items:
-            if not isinstance(repo_item, dict):
-                continue
-            full_name = repo_item.get("full_name")
-            if not isinstance(full_name, str) or full_name not in repo_set:
-                continue
-            # Store as "archived" or "non_archived" based on the API response.
-            status_lookup[full_name] = (
-                "archived" if repo_item.get("archived", False) else "non_archived"
-            )
+    # Stage 1: Use pre-fetched data if available (this is now the primary path)
+    # If pre_fetched_status was provided, most repos will already be resolved.
 
     # Stage 2: For any repos not yet resolved, try individual API calls.
-    # This handles edge cases where a repo may not be in the bulk response
+    # This handles edge cases where a repo may not be in the pre-fetched data
     # (e.g., private repos, recently created repos, or API permission issues).
     for repo_full in repos:
         if repo_full in status_lookup:
@@ -170,17 +167,24 @@ def run(
     if kwargs.get("repo"):
         print(f"Scanning single repository: {kwargs['repo']}")
         repos = [kwargs["repo"]]
+        # For single repo, skip bulk fetch and build status from individual lookup
+        archive_status_lookup: dict[str, str] = {}
     else:
         print(f"Fetching repositories for organization: {github_organization}")
-        repos = list_org_repos(github_organization, client)
+        # Single paginated call returns both the repo list and archive status,
+        # replacing the previous pattern of calling list_org_repos + a second
+        # pagination for archive status.
+        repos, pre_fetched_status = list_org_repos_with_archive_status(
+            github_organization, client
+        )
         if repo_limit:
             repos = repos[:repo_limit]
 
-    # Pre-build archive status lookup so we can annotate each alert with repo status.
-    # This helps distinguish between alerts in active vs. archived repositories.
-    archive_status_lookup = build_archive_status_lookup(
-        client, github_organization, repos
-    )
+        # Fall back to individual lookups only for repos not covered by the bulk fetch
+        # (e.g. edge cases like recently created or permission-restricted repos).
+        archive_status_lookup = build_archive_status_lookup(
+            client, github_organization, repos, pre_fetched_status=pre_fetched_status
+        )
 
     rows: list[dict[str, Any]] = []
     repos_with_alerts: set[str] = set()
