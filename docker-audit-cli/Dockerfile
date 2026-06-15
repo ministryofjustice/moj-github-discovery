@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14-slim@sha256:a01e48f10f90ac3ee65ef6937b9d7c831a3570c81b98d39a547ff09fb359de7f
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -19,7 +19,16 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 
-RUN mkdir -p /app/output /app/internal
+# Create non-root user for security (org-wide, scheduled deployments).
+RUN groupadd -r audit-runner && useradd -r -g audit-runner audit-runner
+
+# Create volume directories and set ownership.
+RUN mkdir -p /app/output /app/internal && \
+    chown -R audit-runner:audit-runner /app
+
+# Switch to non-root user.
+USER audit-runner
+
 VOLUME ["/app/output", "/app/internal"]
 
 # Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
