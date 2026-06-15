@@ -32,6 +32,7 @@ from core.github_api import (
     fetch_repo_alerts,
     fetch_repo_file_text,
     list_org_repos,
+    list_org_repos_with_archive_status,
     check_workflow_permissions,
     check_credential_posture,
     check_trigger_risk,
@@ -115,6 +116,110 @@ class TestListOrgRepos:
         )
         list_org_repos("myorg", client)
         assert any("direction" not in call[1] for call in client.calls)
+
+
+# ── list_org_repos_with_archive_status ────────────────────────────
+
+
+class TestListOrgReposWithArchiveStatus:
+    def test_basic_listing_with_archive_status(self):
+        """Verify both repo list and archive status mapping are returned."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/repo-a", "archived": False},
+                    {"full_name": "myorg/repo-b", "archived": True},
+                ],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == ["myorg/repo-a", "myorg/repo-b"]
+        assert status_lookup == {
+            "myorg/repo-a": "non_archived",
+            "myorg/repo-b": "archived",
+        }
+
+    def test_filters_malformed_items_consistently(self):
+        """Malformed items are filtered from both list and status mapping."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/repo-a", "archived": False},
+                    "not a dict",
+                    {"no_full_name_key": True, "archived": False},
+                    None,
+                    {"full_name": "myorg/repo-b", "archived": True},
+                ],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == ["myorg/repo-a", "myorg/repo-b"]
+        assert status_lookup == {
+            "myorg/repo-a": "non_archived",
+            "myorg/repo-b": "archived",
+        }
+
+    def test_missing_archived_field_defaults_to_non_archived(self):
+        """Repos without an archived field default to non_archived status."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/repo-a"},  # No archived field
+                    {"full_name": "myorg/repo-b", "archived": True},
+                ],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == ["myorg/repo-a", "myorg/repo-b"]
+        assert status_lookup == {
+            "myorg/repo-a": "non_archived",
+            "myorg/repo-b": "archived",
+        }
+
+    def test_custom_params(self):
+        """Custom filter/sort parameters are passed through correctly."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=public&sort=full_name&direction=asc": [
+                    {"full_name": "myorg/aaa", "archived": False},
+                ],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status(
+            "myorg",
+            client,
+            type="public",
+            sort="full_name",
+            direction="asc",
+        )
+        assert repos == ["myorg/aaa"]
+        assert status_lookup == {"myorg/aaa": "non_archived"}
+
+    def test_empty_repo_list(self):
+        """Empty paginated response returns empty list and mapping."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == []
+        assert status_lookup == {}
+
+    def test_archived_false_is_distinct_from_missing(self):
+        """Explicitly False archived field is treated as non_archived."""
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/repo-explicit", "archived": False},
+                    {"full_name": "myorg/repo-missing"},
+                ],
+            }
+        )
+        repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        # Both should map to "non_archived", but we verify the field is handled correctly
+        assert status_lookup["myorg/repo-explicit"] == "non_archived"
+        assert status_lookup["myorg/repo-missing"] == "non_archived"
 
 
 class TestDependencySupplyChainSummary:

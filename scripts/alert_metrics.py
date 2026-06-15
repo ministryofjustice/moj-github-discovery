@@ -185,7 +185,7 @@ def run(
         repos = [kwargs["repo"]]
         # For single repo, build archive status lookup (may use org listing + per-repo fallback)
         archive_status_lookup = build_archive_status_lookup(
-            client, github_organization, repos
+            client, github_organization, repos, pre_fetched_status=None
         )
     else:
         print(f"Fetching repositories for organization: {github_organization}")
