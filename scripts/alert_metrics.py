@@ -184,7 +184,9 @@ def run(
         print(f"Scanning single repository: {kwargs['repo']}")
         repos = [kwargs["repo"]]
         # For single repo, skip bulk fetch and build status from individual lookup
-        archive_status_lookup: dict[str, str] = {}
+        archive_status_lookup = build_archive_status_lookup(
+            client, github_organization, repos
+        )
     else:
         print(f"Fetching repositories for organization: {github_organization}")
         # Single paginated call returns both the repo list and archive status,
