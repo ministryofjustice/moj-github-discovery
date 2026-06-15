@@ -3,9 +3,12 @@
 This folder contains all files related to the Docker proof of concept for the
 audit CLI.
 
+For full project setup and authentication guidance, refer to `docs/setup.md`.
+For full CLI/script usage, refer to the root `README.md`.
+
 ## Quick start
 
-Run everything with one command from repo root:
+From the repo root:
 
 ```bash
 make audit-cli
@@ -25,6 +28,7 @@ make audit-cli-run
 ```
 
 `make audit-cli-run` forwards args to `main.py` inside the container.
+Default args are set in the root `Makefile`.
 
 Examples:
 
@@ -39,14 +43,15 @@ make audit-cli-run AUDIT_ARGS="run --scripts list_repos archive_repos"
 make audit-cli-run AUDIT_ARGS="run --all"
 ```
 
-The leading `run` token is optional, so these also work:
+The leading `run` token is optional:
 
 ```bash
 make audit-cli-run AUDIT_ARGS="--scripts list_repos"
-make audit-cli-run AUDIT_ARGS="--all"
 ```
 
 ## Secrets and environment variables
+
+For required credentials and setup options, refer to `docs/setup.md`.
 
 Create a local env file from the example template:
 
@@ -57,11 +62,3 @@ cp docker-audit-cli/.env.example docker-audit-cli/.env
 Put real secret values in `docker-audit-cli/.env`.
 
 `make audit-cli-run` validates this file exists and fails with guidance if it is missing.
-
-## Run (current placeholder entry point)
-
-```bash
-make audit-cli-run
-```
-
-The container uses the unified CLI entrypoint in `main.py`.
