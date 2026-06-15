@@ -111,3 +111,23 @@ Provide your username after the `-u` flag and your Github PAT (if using `GITHUB_
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
 ```
+
+
+### Running Scripts
+
+The recommended way to run any audit script is via `audit-cli`:
+
+```bash
+uv run audit-cli --scripts <script_name> --auth app
+```
+
+This automatically creates the `output/` and `internal/` directories on every run.
+
+* Note: If you run a script directly without `audit-cli`, create the `internal/` directory first or you will see `sqlite3.OperationalError: unable to open database file`
+
+Fix:
+
+```bash
+mkdir -p internal
+uv run python scripts/<script_name>.py --config-file config/audit_config.yaml --auth app
+```
