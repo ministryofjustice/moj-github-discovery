@@ -112,8 +112,8 @@ def list_org_repos_with_archive_status(
 ) -> tuple[list[str], dict[str, str]]:
     """Return repo names and archive status from a single paginated API call.
 
-    Replaces calling :func:`list_org_repos` and ``get_org_repos_with_archive_status``
-    separately, which would paginate ``/orgs/{org}/repos`` twice. This function
+    Replaces calling :func:`list_org_repos` and separately iterating the same
+    ``/orgs/{org}/repos`` pagination to derive archive status. This function
     paginates once and extracts both pieces of information in one pass.
 
     Args:
@@ -135,19 +135,14 @@ def list_org_repos_with_archive_status(
 
     repos: list[str] = []
     status_lookup: dict[str, str] = {}
-    try:
-        items = client.get_paginated(f"/orgs/{org}/repos?{params}")
-        for item in items:
-            if isinstance(item, dict) and "full_name" in item:
-                full_name = item["full_name"]
-                repos.append(full_name)
-                status_lookup[full_name] = (
-                    "archived" if item.get("archived", False) else "non_archived"
-                )
-    except Exception:
-        # If the bulk fetch fails, return empty collections to allow graceful degradation
-        pass
-
+    items = client.get_paginated(f"/orgs/{org}/repos?{params}")
+    for item in items:
+        if isinstance(item, dict) and "full_name" in item:
+            full_name = item["full_name"]
+            repos.append(full_name)
+            status_lookup[full_name] = (
+                "archived" if item.get("archived", False) else "non_archived"
+            )
     return repos, status_lookup
 
 

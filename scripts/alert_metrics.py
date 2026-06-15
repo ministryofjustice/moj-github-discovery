@@ -59,11 +59,11 @@ def build_archive_status_lookup(
     status_lookup: dict[str, str] = (
         pre_fetched_status.copy() if pre_fetched_status else {}
     )
-    repo_set = set(repos)
 
     # Stage 1: If pre-fetched data was not provided, populate from the org-wide
     # paginated listing. This preserves standalone helper behavior for tests and
     # non-optimized call sites.
+    repo_set = set(repos)
     if pre_fetched_status is None and repo_set:
         try:
             repo_items = client.get_paginated(f"/orgs/{org}/repos?type=all&sort=pushed")
@@ -183,7 +183,7 @@ def run(
     if kwargs.get("repo"):
         print(f"Scanning single repository: {kwargs['repo']}")
         repos = [kwargs["repo"]]
-        # For single repo, skip bulk fetch and build status from individual lookup
+        # For single repo, build archive status lookup (may use org listing + per-repo fallback)
         archive_status_lookup = build_archive_status_lookup(
             client, github_organization, repos
         )
