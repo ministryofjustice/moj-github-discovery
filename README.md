@@ -85,8 +85,10 @@ collection, storage, and report shaping.
 - `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - currently only applies to `github_workflow`
 
 ### Notes
+
 - `archive_repos` has `repo_limit: null` by default and will scan the entire org. Set a `repo_limit` in the config for a faster targeted run.
-- `alert_metrics` uses a global `max_alerts` cap across all repos. If early repos are alert-heavy, the cap can be hit before all repos are scanned. Set `max_alerts: null` in the config for complete coverage.
+- `alert_metrics` uses a global `max_alerts` cap across all repos. If early repos are alert-heavy, the cap can be hit before all repos are scanned.
+  Set `max_alerts: null` in the config for complete coverage.
 
 ### Local Terminal
 
