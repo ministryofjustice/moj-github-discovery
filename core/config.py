@@ -7,6 +7,7 @@ the ``--config-file`` CLI argument on any script that consumes this module.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +15,24 @@ import yaml
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
+
+
+class OutputPathsConfig(BaseModel):
+    """Global output and internal paths."""
+
+    outputs_root_dir: str = "outputs"  # Root dir for all audit outputs
+    internal_root_dir: str = "internal"  # Root dir for SQLite caches
+
+    @field_validator("outputs_root_dir", "internal_root_dir")
+    @classmethod
+    def no_absolute_paths(cls, value: str) -> str:
+        # Warn during migration while still allowing absolute paths.
+        if os.path.isabs(value):
+            print(
+                f"WARNING: Absolute path '{value}' detected; "
+                "this will be disallowed in v2.0"
+            )
+        return value
 
 
 class LfsScriptConfig(BaseModel):
