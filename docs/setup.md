@@ -26,7 +26,9 @@ Install dependencies (including local dev dependencies) via `uv sync --group dev
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - GitHub personal access token (PAT) with appropriate scopes (minimum: `repo`) - [Guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
-- Note: If you are contributing to this repository, signed commits are required - guidance is available on how to do this via SSH or GPG keys here: [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
+- Note: If you are contributing to this repository, signed commits are required - guidance is
+  available on how to do this via SSH or GPG keys here:
+  [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 
 GitHub App credentials available for `Developer Experience GitHub Audit`:
 
@@ -110,24 +112,4 @@ Provide your username after the `-u` flag and your Github PAT (if using `GITHUB_
 
 ```shell
 gh auth token | docker login ghcr.io -u <github username> --password-stdin
-```
-
-### Running Scripts
-
-The recommended way to run any audit script is via `audit-cli`:
-
-```bash
-uv run audit-cli --scripts <script_name> --auth app
-```
-
-This automatically creates the `output/` and `internal/` directories on every run.
-
-- Note: If you run a script directly without `audit-cli`, create the `internal/` directory
-  first or you will see `sqlite3.OperationalError: unable to open database file`
-
-Fix:
-
-```bash
-mkdir -p internal
-uv run python scripts/<script_name>.py --config-file config/audit_config.yaml --auth app
 ```

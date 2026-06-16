@@ -582,6 +582,23 @@ This will diagnose differences in PATH, HOME, and token availability.
 - Close other instances of the dashboard
 - Ensure no other processes are accessing the database
 
+### sqlite3.OperationalError: unable to open database file
+
+- Caused by running a script directly without `audit-cli`
+- Fix: run via `audit-cli`, or run `mkdir -p internal` first
+
+### 403 Rate Limit Errors During a Run
+
+- Expected behaviour at org scale, not an error
+- Script retries automatically — full org runs can take 35+ minutes
+- Use `use_cache: true` on repeat runs to reduce API calls
+
+### [warn] code_scanning failed: 404
+
+- Expected behaviour, not an error
+- Code scanning is not enabled on that repository
+- Script continues normally
+
 ## Examples
 
 ### Export audit to XLSX report
