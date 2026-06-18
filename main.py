@@ -35,12 +35,12 @@ __start_time: float | None = None
 
 
 # Setup Base Directories for Script Outputs
-def base_directory_setup() -> tuple[str, str]:
+def base_directory_setup(config: AuditConfig) -> tuple[str, str]:
     """Configure base directories for outputs and internal files."""
 
-    # Configure base Output Directories
-    base_output_dir = "output"
-    base_internal_dir = "internal"
+    # Configure base directories from config
+    base_output_dir = config.output_paths.outputs_root_dir
+    base_internal_dir = config.output_paths.internal_root_dir
 
     # Ensure base output directories exist
     for directory in (base_output_dir, base_internal_dir):
@@ -148,7 +148,7 @@ def main(argv=None) -> None:
 
     script_results = {}
 
-    base_output_dir, base_internal_dir = base_directory_setup()
+    base_output_dir, base_internal_dir = base_directory_setup(config)
 
     print(f"Base output directory: {base_output_dir}", file=sys.stderr)
     print(f"Base internal directory: {base_internal_dir}", file=sys.stderr)

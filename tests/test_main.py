@@ -2,6 +2,8 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from main import main, _parse_args, SCRIPTS
+from core.config import AuditConfig
+from main import base_directory_setup
 
 
 # Parse_Args Tests
@@ -152,7 +154,7 @@ def test_repo_kwarg_passed_to_alert_metrics(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         main(
             [
@@ -178,7 +180,7 @@ def test_repos_kwarg_passed_to_github_workflow(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         main(
             [
@@ -209,7 +211,7 @@ def test_failed_script_exits_nonzero(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         with pytest.raises(SystemExit) as exc_info:
             main(["--config-file", str(config_file), "--scripts", "list_repos"])
@@ -225,7 +227,7 @@ def test_successful_script_exits_zero(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         try:
             main(["--config-file", str(config_file), "--scripts", "list_repos"])
@@ -233,3 +235,27 @@ def test_successful_script_exits_zero(tmp_path):
         except SystemExit as exc_info:
             exit_code = exc_info.value.code
     assert exit_code == 0
+
+
+def test_base_directory_setup_reads_from_config(tmp_path):
+    config = AuditConfig()
+    config.output_paths.outputs_root_dir = str(tmp_path / "custom_outputs")
+    config.output_paths.internal_root_dir = str(tmp_path / "custom_internal")
+
+    outputs, internal = base_directory_setup(config)
+
+    assert outputs == str(tmp_path / "custom_outputs")
+    assert internal == str(tmp_path / "custom_internal")
+
+
+def test_base_directory_setup_creates_dirs(tmp_path):
+    config = AuditConfig()
+    config.output_paths.outputs_root_dir = str(tmp_path / "outputs")
+    config.output_paths.internal_root_dir = str(tmp_path / "internal")
+
+    outputs, internal = base_directory_setup(config)
+
+    assert outputs == str(tmp_path / "outputs")
+    assert internal == str(tmp_path / "internal")
+    assert (tmp_path / "outputs").exists()
+    assert (tmp_path / "internal").exists()
