@@ -26,7 +26,9 @@ Install dependencies (including local dev dependencies) via `uv sync --group dev
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - GitHub personal access token (PAT) with appropriate scopes (minimum: `repo`) - [Guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
-- Note: If you are contributing to this repository, signed commits are required - guidance is available on how to do this via SSH or GPG keys here: [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
+- Note: If you are contributing to this repository, signed commits are required - guidance is
+  available on how to do this via SSH or GPG keys here:
+  [guidance](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 
 GitHub App credentials available for `Developer Experience GitHub Audit`:
 
