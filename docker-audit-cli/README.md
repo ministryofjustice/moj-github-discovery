@@ -18,7 +18,7 @@ This will:
 
 - build the Docker image
 - check `docker-audit-cli/.env` exists
-- run the container with mounted `output/` and `internal/`
+- run the container with mounted `outputs/` and `internal/`
 
 ## Individual commands
 

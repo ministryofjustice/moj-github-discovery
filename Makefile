@@ -19,13 +19,13 @@ audit-cli-check-env:
 	fi
 
 audit-cli-run: audit-cli-check-env
-	@mkdir -p output internal
+	@mkdir -p outputs internal
 	@args="$(AUDIT_ARGS)"; \
 	case "$$args" in run\ *) args="$${args#run }" ;; esac; \
 	echo "Running audit CLI with args: $$args"; \
 	docker run --rm \
 		--platform $(DOCKER_PLATFORM) \
 		--env-file $(ENV_FILE) \
-		-v "$(PWD)/output:/app/output" \
+		-v "$(PWD)/outputs:/app/outputs" \
 		-v "$(PWD)/internal:/app/internal" \
 		$(IMAGE_NAME) $$args
