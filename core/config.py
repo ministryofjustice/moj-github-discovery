@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 import yaml
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -35,8 +35,23 @@ class OutputPathsConfig(BaseModel):
         return value
 
 
-class LfsScriptConfig(BaseModel):
+class ScriptOutputConfig(BaseModel):
+    """Shared output subdirectory behaviour for script configs."""
+
+    script_name: ClassVar[str]
+    output_subdir: Optional[str] = None  # Defaults to script_name when omitted
+
+    @model_validator(mode="after")
+    def set_default_output_subdir(self) -> "ScriptOutputConfig":
+        if not self.output_subdir:
+            self.output_subdir = self.script_name
+        return self
+
+
+class LfsScriptConfig(ScriptOutputConfig):
     """Config for ``lfs_script.py`` script."""
+
+    script_name: ClassVar[str] = "lfs_analysis"
 
     database_path: str = "internal/lfs_audit.db"  # SQLite cache file for LFS audit data
     soft_limit_mb: int = 50  # soft file size limit in megabytes
@@ -49,8 +64,10 @@ class LfsScriptConfig(BaseModel):
     )
 
 
-class AlertMetricsConfig(BaseModel):
+class AlertMetricsConfig(ScriptOutputConfig):
     """Config for ``alert_metrics.py`` script."""
+
+    script_name: ClassVar[str] = "github_alerts"
 
     output_filename: str = "alert_metrics.csv"  # output file for alert data
     max_alerts: Optional[int] = None  # max number of alerts to collect (for testing)
@@ -82,8 +99,10 @@ class NamespaceCrossrefConfig(BaseModel):
         return self
 
 
-class ArchiveReposConfig(BaseModel):
+class ArchiveReposConfig(ScriptOutputConfig):
     """Config for ``archive_repos.py`` script."""
+
+    script_name: ClassVar[str] = "archive_repos"
 
     database_path: str = (
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
@@ -112,8 +131,10 @@ class ArchiveReposConfig(BaseModel):
         return value
 
 
-class ListReposConfig(BaseModel):
+class ListReposConfig(ScriptOutputConfig):
     """Config for ``list_repos.py`` script."""
+
+    script_name: ClassVar[str] = "list_repos"
 
     database_path: str = (
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
@@ -130,8 +151,10 @@ class ListReposConfig(BaseModel):
     sort_ascending: bool = False  # sort order - descending by default
 
 
-class OrgSecurityPostureConfig(BaseModel):
+class OrgSecurityPostureConfig(ScriptOutputConfig):
     """Config for ``org_security_posture.py`` script."""
+
+    script_name: ClassVar[str] = "org_security_posture"
 
     database_path: str = (
         "internal/org_security_posture.db"  # SQLite cache file for org posture data
@@ -144,8 +167,10 @@ class OrgSecurityPostureConfig(BaseModel):
     )
 
 
-class WorkflowAuditConfig(BaseModel):
+class WorkflowAuditConfig(ScriptOutputConfig):
     """Per-stage toggles for ``github_workflow.py``."""
+
+    script_name: ClassVar[str] = "github_workflow_posture"
 
     database_path: str = "internal/github_workflow_posture.db"  # SQLite cache file for workflow audit data
     output_prefix: str = (
