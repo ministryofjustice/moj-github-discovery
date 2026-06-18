@@ -13,6 +13,7 @@ from core.config import AuditConfig
 from core.models import FieldDefinition, FieldsConfig, FieldType
 from core.collector import RepoCollector
 from core.github_api import GetRepoTreeEndpoint, RepoDetailsEndpoint
+from core.output_paths import OutputPathResolver
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.compiler import ExcelCompiler
@@ -70,22 +71,20 @@ def run(
     Loads repository list, collects data from GitHub, generates master summary,
     and creates individual CSV summaries for each repository.
     """
-    # Configure Output Directories
-    OUTPUT_DIR = os.path.join(base_output_dir, "lfs_analysis")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    # File paths for input and output
-    REPO_SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "repo_summaries")
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     lfs_script_config = config.lfs_script
 
     # Define file paths from config
-    database_path = lfs_script_config.database_path
+    database_path = resolver.database_path(lfs_script_config.database_path)
     github_organization = config.github_organization
     output_filename = lfs_script_config.output_filename
-    output_file_path = output_filename
-    if not os.path.isabs(output_filename):
-        output_file_path = os.path.join(OUTPUT_DIR, output_filename)
+    output_file_path = resolver.script_output_file(
+        lfs_script_config.output_subdir, output_filename
+    )
+    repo_summaries_dir = (
+        resolver.script_output_dir(lfs_script_config.output_subdir) / "repo_summaries"
+    )
+    repo_summaries_dir.mkdir(exist_ok=True)
     repo_list_file = config.repo_list_file
     resume = (
         lfs_script_config.use_cache
@@ -126,7 +125,7 @@ def run(
 
     # Set up storage and collector for fetching repo data
     print("<LFS Analysis> Setting up storage and collector", file=sys.stderr)
-    storage = SqliteRepoStorage(database_path)
+    storage = SqliteRepoStorage(str(database_path))
     collector = RepoCollector(
         storage=storage,
         endpoints=[RepoDetailsEndpoint, GetRepoTreeEndpoint],
@@ -157,12 +156,12 @@ def run(
     print(f"<LFS Analysis> Master summary saved to {output_file_path}", file=sys.stderr)
 
     # Ensure output directory exists
-    if not os.path.isdir(REPO_SUMMARIES_DIR):
+    if not repo_summaries_dir.is_dir():
         print(
-            f"<LFS Analysis> Creating output directory: {REPO_SUMMARIES_DIR}",
+            f"<LFS Analysis> Creating output directory: {repo_summaries_dir}",
             file=sys.stderr,
         )
-        os.makedirs(REPO_SUMMARIES_DIR)
+        repo_summaries_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate individual CSV summaries for each repository
     print("<LFS Analysis> Generating individual CSV summaries", file=sys.stderr)
@@ -192,8 +191,8 @@ def run(
         ]
 
         # Save the blob data to a CSV file
-        output_file = os.path.join(
-            REPO_SUMMARIES_DIR, f"{full_repo_name.replace('/', '_')}_summary.csv"
+        output_file = (
+            repo_summaries_dir / f"{full_repo_name.replace('/', '_')}_summary.csv"
         )
         pd.DataFrame(blob_rows).to_csv(output_file, index=False)
         print(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import Any
 
@@ -14,6 +13,7 @@ from core.github_api import (
     REPO_ENDPOINTS,
     STANDARD_REPO_AUDIT_ENDPOINTS,
 )
+from core.output_paths import OutputPathResolver
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
@@ -29,13 +29,11 @@ def run(
     base_internal_dir: str,
     **kwargs,
 ) -> None:
-    OUTPUT_DIR = os.path.join(base_output_dir, "list_repos")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     list_repos_config = config.list_repos
 
     # Define Variables from Config and CLI Args
-    database_path = list_repos_config.database_path
+    database_path = resolver.database_path(list_repos_config.database_path)
     output_filename = list_repos_config.output_filename
     repo_file = config.repo_list_file
     repo_limit = list_repos_config.repo_limit
@@ -84,7 +82,7 @@ def run(
         )
         return
 
-    storage = SqliteRepoStorage(database_path)
+    storage = SqliteRepoStorage(str(database_path))
     selected_endpoints = (
         STANDARD_REPO_AUDIT_ENDPOINTS
         if list_repos_config.standard_endpoints_only
@@ -111,9 +109,11 @@ def run(
 
     summary = build_repo_summary_table(df)
 
-    excel_path = os.path.join(OUTPUT_DIR, output_filename)
+    excel_path = resolver.script_output_file(
+        list_repos_config.output_subdir, output_filename
+    )
     try:
-        with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        with pd.ExcelWriter(str(excel_path), engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Repos")
             summary.to_excel(writer, index=False, sheet_name="Summary")
         print(f"Wrote {excel_path}", file=sys.stderr)
