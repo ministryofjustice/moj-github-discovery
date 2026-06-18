@@ -25,14 +25,14 @@ COPY . .
 RUN groupadd -r audit-runner && useradd -r -m -d /home/audit-runner -g audit-runner audit-runner
 
 # Create volume directories and set ownership.
-RUN mkdir -p output internal && \
+RUN mkdir -p outputs internal && \
     mkdir -p /home/audit-runner/.cache && \
     chown -R audit-runner:audit-runner /app /home/audit-runner /opt/venv
 
 # Switch to non-root user.
 USER audit-runner
 
-VOLUME ["/app/output", "/app/internal"]
+VOLUME ["/app/outputs", "/app/internal"]
 
 # Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
 ENTRYPOINT ["uv", "run", "--no-dev", "python", "main.py"]

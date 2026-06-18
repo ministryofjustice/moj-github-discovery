@@ -1,9 +1,10 @@
 IMAGE_NAME ?= moj-github-discovery:audit-cli-poc
 ENV_FILE ?= docker-audit-cli/.env
 AUDIT_ARGS ?= --scripts list_repos
+AUDIT_SMOKE_ARGS ?= --scripts alert_metrics --repo ministryofjustice/moj-github-discovery
 DOCKER_PLATFORM ?= linux/amd64
 
-.PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-check-env
+.PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-smoke audit-cli-check-env
 
 audit-cli: audit-cli-build audit-cli-run
 
@@ -29,3 +30,7 @@ audit-cli-run: audit-cli-check-env
 		-v "$(PWD)/outputs:/app/outputs" \
 		-v "$(PWD)/internal:/app/internal" \
 		$(IMAGE_NAME) $$args
+
+# Lightweight smoke check: one script, one repo.
+audit-cli-smoke:
+	@$(MAKE) audit-cli-run AUDIT_ARGS="$(AUDIT_SMOKE_ARGS)"
