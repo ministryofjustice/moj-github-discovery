@@ -22,7 +22,13 @@ def test_defaults_all_stages_enabled():
     assert config.repo_list_file == "repo_list.yaml"
 
 
-def test_script_output_subdir_defaults_are_derived_from_script_name():
+def test_output_paths_config_defaults():
+    config = AuditConfig()
+    assert config.output_paths.outputs_root_dir == "outputs"
+    assert config.output_paths.internal_root_dir == "internal"
+
+
+def test_script_output_subdir_python_fallback_defaults():
     config = AuditConfig()
 
     assert config.list_repos.output_subdir == "list_repos"
@@ -31,6 +37,25 @@ def test_script_output_subdir_defaults_are_derived_from_script_name():
     assert config.org_security_posture.output_subdir == "org_security_posture"
     assert config.lfs_script.output_subdir == "lfs_analysis"
     assert config.workflow_audit.output_subdir == "github_workflow_posture"
+
+
+def test_output_paths_loaded_from_yaml(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "output_paths": {
+                    "outputs_root_dir": "custom_outputs",
+                    "internal_root_dir": "custom_internal",
+                }
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.output_paths.outputs_root_dir == "custom_outputs"
+    assert config.output_paths.internal_root_dir == "custom_internal"
 
 
 def test_output_subdir_can_be_overridden_from_config_file(tmp_path):

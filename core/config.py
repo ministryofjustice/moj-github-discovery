@@ -7,7 +7,6 @@ the ``--config-file`` CLI argument on any script that consumes this module.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import ClassVar, Optional
 
@@ -18,31 +17,24 @@ DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
 
 class OutputPathsConfig(BaseModel):
-    """Global output and internal paths."""
+    """Global output and internal path roots.
+
+    Set in audit_config.yaml under output_paths.
+    Python defaults are fallbacks only; YAML is authoritative.
+    """
 
     outputs_root_dir: str = "outputs"  # Root dir for all audit outputs
     internal_root_dir: str = "internal"  # Root dir for SQLite caches
-
-    @field_validator("outputs_root_dir", "internal_root_dir")
-    @classmethod
-    def no_absolute_paths(cls, value: str) -> str:
-        # Warn during migration while still allowing absolute paths.
-        if os.path.isabs(value):
-            print(
-                f"WARNING: Absolute path '{value}' detected; "
-                "this will be disallowed in v2.0"
-            )
-        return value
 
 
 class ScriptOutputConfig(BaseModel):
     """Shared output subdirectory behaviour for script configs."""
 
     script_name: ClassVar[str]
-    output_subdir: Optional[str] = None  # Defaults to script_name when omitted
+    output_subdir: Optional[str] = None
 
     @model_validator(mode="after")
-    def set_default_output_subdir(self) -> "ScriptOutputConfig":
+    def derive_output_subdir(self) -> "ScriptOutputConfig":
         if not self.output_subdir:
             self.output_subdir = self.script_name
         return self
@@ -196,6 +188,7 @@ class AuditConfig(BaseModel):
 
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
+    output_paths: OutputPathsConfig = Field(default_factory=OutputPathsConfig)
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
     lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)

@@ -5,12 +5,24 @@
 github_organization: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
 
+# Output directory configuration.
+# All paths are relative to the project root.
+# output_subdir is optional for each script; omit it to use the default derived
+# from the script config's script_name.
+output_paths:
+  outputs_root_dir: "outputs"
+  internal_root_dir: "internal"
+
 alert_metrics:
+  # Optional override; defaults to github_alerts if omitted.
+  output_subdir: "github_alerts"
   max_alerts: 10000
   output_filename: "github_alerts_limited.csv"
   repo_limit: 400
 
 archive_repos:
+  # Optional override; defaults to archive_repos if omitted.
+  output_subdir: "archive_repos"
   database_path: "internal/repo_audit.db"
   output_filename: "archive_repos.csv"
   page_num: null # null for all pages, or set to an integer to limit
@@ -26,6 +38,8 @@ archive_repos:
 
 # Script config for list_repos.py.
 list_repos:
+  # Optional override; defaults to list_repos if omitted.
+  output_subdir: "list_repos"
   database_path: "internal/repo_audit.db"
   output_filename: "list_repos.xlsx"
   repo_limit: 400
@@ -37,6 +51,8 @@ list_repos:
 
 # Script config for org_security_posture.py.
 org_security_posture:
+  # Optional override; defaults to org_security_posture if omitted.
+  output_subdir: "org_security_posture"
   database_path: "internal/org_security_posture.db"
   output_filename: "org_security_posture.xlsx"
   use_cache: true
@@ -46,6 +62,8 @@ org_security_posture:
 # so disabling them only makes sense when a previous run has already
 # populated the SQLite cache (default: github_workflow_posture.db).
 workflow_audit:
+  # Optional override; defaults to github_workflow_posture if omitted.
+  output_subdir: "github_workflow_posture"
   database_path: "internal/github_workflow_posture.db"
   output_prefix: "github_workflow_audit"
   repo_limit: 400 # set to null for no limit
@@ -61,6 +79,8 @@ workflow_audit:
 
 # Script config for lfs_script.py.
 lfs_script:
+  # Optional override; defaults to lfs_analysis if omitted.
+  output_subdir: "lfs_analysis"
   database_path: "internal/lfs_audit.db"
   soft_limit_mb: 50
   hard_limit_mb: 100
