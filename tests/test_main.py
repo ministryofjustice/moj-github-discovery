@@ -1,7 +1,10 @@
 from unittest.mock import patch, MagicMock
+from pathlib import Path
 import pytest
 
 from main import main, _parse_args, SCRIPTS
+from core.config import AuditConfig
+from main import base_directory_setup
 
 
 # Parse_Args Tests
@@ -152,7 +155,7 @@ def test_repo_kwarg_passed_to_alert_metrics(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         main(
             [
@@ -178,7 +181,7 @@ def test_repos_kwarg_passed_to_github_workflow(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         main(
             [
@@ -209,7 +212,7 @@ def test_failed_script_exits_nonzero(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         with pytest.raises(SystemExit) as exc_info:
             main(["--config-file", str(config_file), "--scripts", "list_repos"])
@@ -225,7 +228,7 @@ def test_successful_script_exits_zero(tmp_path):
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("output", "internal")),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
     ):
         try:
             main(["--config-file", str(config_file), "--scripts", "list_repos"])
@@ -233,3 +236,15 @@ def test_successful_script_exits_zero(tmp_path):
         except SystemExit as exc_info:
             exit_code = exc_info.value.code
     assert exit_code == 0
+
+
+def test_base_directory_setup_returns_fixed_directories():
+    """Verify base_directory_setup returns fixed output and internal dirs."""
+    config = AuditConfig()
+
+    outputs, internal = base_directory_setup(config)
+
+    assert outputs == "outputs"
+    assert internal == "internal"
+    assert Path("outputs").exists()
+    assert Path("internal").exists()

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import pandas as pd
-import os
 import sys
 from typing import Any, Callable
 
@@ -15,6 +14,7 @@ from core.github_api import (
     list_org_repos_with_archive_status,
 )
 from core.github_client import GitHubHttpClient
+from core.output_paths import OutputPathResolver
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -159,11 +159,7 @@ def run(
     base_internal_dir: str,
     **kwargs,
 ) -> None:
-
-    # Configure Output Directories
-    OUTPUT_DIR = os.path.join(base_output_dir, "github_alerts")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     alert_metrics_config = config.alert_metrics
 
     github_organization = config.github_organization
@@ -263,9 +259,11 @@ def run(
                 repos_with_alerts.add(repo_full)
 
     # Write rows to final output file
-    output_file_path = os.path.join(OUTPUT_DIR, output_filename)
+    output_file_path = resolver.script_output_file(
+        alert_metrics_config.output_subdir, output_filename
+    )
     if rows:
-        CsvCompiler.write_rows(output_file_path, rows)
+        CsvCompiler.write_rows(str(output_file_path), rows)
 
     # Summary logging
     print(f"Done! Wrote {len(rows)} alerts to {output_file_path}")

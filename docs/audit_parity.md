@@ -83,8 +83,8 @@ comparisons:
 
   alert_metrics:
     id_column: "repo"
-    pat_file: "outputs/alert_metrics/alerts_top_50_pat.csv"
-    app_file: "outputs/alert_metrics/alerts_top_50_app.csv"
+    pat_file: "outputs/github_alerts/alerts_top_50_pat.csv"
+    app_file: "outputs/github_alerts/alerts_top_50_app.csv"
     file_type: "csv"
     comparison_level: "coverage" # only check repo coverage, skip field differences due to large data size
 ```

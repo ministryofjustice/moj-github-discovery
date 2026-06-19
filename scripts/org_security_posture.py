@@ -3,10 +3,8 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import time
-from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -27,6 +25,7 @@ from core.github_api import (
     dependency_supply_chain_summary,
 )
 from core.github_client import GitHubHttpClient
+from core.output_paths import OutputPathResolver
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
@@ -287,18 +286,11 @@ def run(
     **kwargs,
 ) -> None:
     """Main entry point for org security posture audit script."""
-
-    # Configure Output Directories
-    OUTPUT_DIR = os.path.join(base_output_dir, "org_security_posture")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     org_security_posture_config = config.org_security_posture
 
     # Define Variables from Config
-    database_path = Path(org_security_posture_config.database_path)
-    if not database_path.is_absolute():
-        database_path = Path(os.getcwd()) / database_path
-    database_path.parent.mkdir(parents=True, exist_ok=True)
+    database_path = resolver.database_path(org_security_posture_config.database_path)
     global ORG_CACHE_DB_PATH
     ORG_CACHE_DB_PATH = str(database_path)
     github_organization = config.github_organization
@@ -386,5 +378,7 @@ def run(
         if key in summary:
             print(f"  {key}: {summary[key]}", file=sys.stderr)
 
-    excel_path = os.path.join(OUTPUT_DIR, output_filename)
-    write_excel(report, excel_path)
+    excel_path = resolver.script_output_file(
+        org_security_posture_config.output_subdir, output_filename
+    )
+    write_excel(report, str(excel_path))

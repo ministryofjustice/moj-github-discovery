@@ -9,9 +9,7 @@ pagination, retries, and persistence to the core package.
 from __future__ import annotations
 
 import json
-import os
 import sys
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -27,6 +25,7 @@ from core.github_api import (
 )
 from core.github_client import GitHubHttpClient
 from core.models import RepoData, RepoDetails
+from core.output_paths import OutputPathResolver
 from core.storage import SqliteRepoStorage
 
 section_break = "\n" + ("=" * 80) + "\n"
@@ -340,10 +339,7 @@ def run(
     base_internal_dir: str,
     **kwargs,
 ) -> None:
-
-    OUTPUT_DIR = os.path.join(base_output_dir, "archive_repos")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     archive_repos_config = config.archive_repos
 
     # Define Variables from Config and/or Args
@@ -353,7 +349,7 @@ def run(
     repo_limit = archive_repos_config.repo_limit
     sort_by_field = archive_repos_config.sort_by_field
     sort_asc = archive_repos_config.sort_ascending
-    storage_db_path = archive_repos_config.database_path
+    storage_db_path = resolver.database_path(archive_repos_config.database_path)
     use_cache = archive_repos_config.use_cache
 
     # Debug Config
@@ -498,11 +494,13 @@ def run(
 
     records = df.to_dict(orient="records")
 
-    output_path = Path(OUTPUT_DIR) / output_filename
+    output_path = resolver.script_output_file(
+        archive_repos_config.output_subdir, output_filename
+    )
     if output_path.suffix.lower() == ".xlsx":
-        df.to_excel(output_path, index=False)
+        df.to_excel(str(output_path), index=False)
     else:
-        df.to_csv(output_path, index=False)
+        df.to_csv(str(output_path), index=False)
     print(f"Wrote {output_path}", file=sys.stderr)
     if archive_repos_config.namespace_crossref.enabled:
         print(

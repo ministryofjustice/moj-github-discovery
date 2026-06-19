@@ -37,6 +37,7 @@ from core.github_api import (
 )
 from core.github_client import GitHubHttpClient
 from core.models import RepoActionsPermissionsData, RepoData
+from core.output_paths import OutputPathResolver
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
@@ -367,18 +368,19 @@ def write_posture_reports(
     args: argparse.Namespace,
     repo_rows: List[Dict[str, Any]],
     detail_rows: List[Dict[str, Any]],
+    output_dir: Path,
 ) -> None:
     """Stage 5: Write repo-level posture reports."""
     prefix = args.out_prefix
-    repo_summary_path = os.path.join(OUTPUT_DIR, f"{prefix}_repo_summary.csv")
-    workflow_details_path = os.path.join(OUTPUT_DIR, f"{prefix}_workflow_details.csv")
-    summary_text_report_path = os.path.join(OUTPUT_DIR, f"{prefix}_summary.txt")
+    repo_summary_path = output_dir / f"{prefix}_repo_summary.csv"
+    workflow_details_path = output_dir / f"{prefix}_workflow_details.csv"
+    summary_text_report_path = output_dir / f"{prefix}_summary.txt"
 
-    repo_count = CsvCompiler.write_rows(repo_summary_path, repo_rows)
-    details_count = CsvCompiler.write_rows(workflow_details_path, detail_rows)
+    repo_count = CsvCompiler.write_rows(str(repo_summary_path), repo_rows)
+    details_count = CsvCompiler.write_rows(str(workflow_details_path), detail_rows)
     print(f"Wrote {repo_summary_path} ({repo_count} rows)")
     print(f"Wrote {workflow_details_path} ({details_count} rows)")
-    write_summary(summary_text_report_path, repo_rows, detail_rows)
+    write_summary(str(summary_text_report_path), repo_rows, detail_rows)
 
     total = len(repo_rows)
     print(
@@ -390,30 +392,30 @@ def write_posture_reports(
 
 
 def actions_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
 
     # Organise Output Paths
-    actions_analysis_path_base = os.path.join(OUTPUT_DIR, "actions_analysis")
-    os.makedirs(actions_analysis_path_base, exist_ok=True)
+    actions_analysis_path_base = output_dir / "actions_analysis"
+    actions_analysis_path_base.mkdir(parents=True, exist_ok=True)
     # Actions Usage and Ownership
-    action_usage_detail_path = os.path.join(
-        actions_analysis_path_base, "github_actions_usage_detail.csv"
+    action_usage_detail_path = (
+        actions_analysis_path_base / "github_actions_usage_detail.csv"
     )
-    action_usage_summary_path = os.path.join(
-        actions_analysis_path_base, "github_actions_usage_summary.csv"
+    action_usage_summary_path = (
+        actions_analysis_path_base / "github_actions_usage_summary.csv"
     )
-    action_owner_summary_path = os.path.join(
-        actions_analysis_path_base, "github_actions_owner_summary.csv"
+    action_owner_summary_path = (
+        actions_analysis_path_base / "github_actions_owner_summary.csv"
     )
-    action_pinning_path = os.path.join(
-        actions_analysis_path_base, "github_actions_pinning_per_repo.csv"
+    action_pinning_path = (
+        actions_analysis_path_base / "github_actions_pinning_per_repo.csv"
     )
-    action_unpinned_detail_path = os.path.join(
-        actions_analysis_path_base, "github_actions_unpinned_detail.csv"
+    action_unpinned_detail_path = (
+        actions_analysis_path_base / "github_actions_unpinned_detail.csv"
     )
 
     all_actions: List[Dict[str, Any]] = []
@@ -429,7 +431,7 @@ def actions_analysis(
     print(f"Total action references found: {len(all_actions)}")
 
     usage_detail_count = CsvCompiler.write_rows(
-        action_usage_detail_path,
+        str(action_usage_detail_path),
         all_actions,
     )
     print(f"Wrote {action_usage_detail_path} ({usage_detail_count} rows)")
@@ -448,17 +450,17 @@ def actions_analysis(
             ]
         )
         empty_usage.to_csv(
-            action_usage_summary_path,
+            str(action_usage_summary_path),
             index=False,
             lineterminator="\r\n",
         )
         empty_owner.to_csv(
-            action_owner_summary_path,
+            str(action_owner_summary_path),
             index=False,
             lineterminator="\r\n",
         )
         empty_pinning.to_csv(
-            action_pinning_path,
+            str(action_pinning_path),
             index=False,
             lineterminator="\r\n",
         )
@@ -488,7 +490,7 @@ def actions_analysis(
         .reset_index(drop=True)
     )
     usage_summary_df.to_csv(
-        action_usage_summary_path,
+        str(action_usage_summary_path),
         index=False,
         lineterminator="\r\n",
     )
@@ -503,7 +505,7 @@ def actions_analysis(
         .reset_index(drop=True)
     )
     owner_summary_df.to_csv(
-        action_owner_summary_path,
+        str(action_owner_summary_path),
         index=False,
         lineterminator="\r\n",
     )
@@ -525,7 +527,7 @@ def actions_analysis(
     print(f"Unpinned (mutable tag): {len(unpinned_df)}")
 
     unpinned_count = CsvCompiler.write_rows(
-        action_unpinned_detail_path,
+        str(action_unpinned_detail_path),
         unpinned_df.to_dict("records"),
     )
     print(f"Wrote {action_unpinned_detail_path} ({unpinned_count} rows)")
@@ -563,7 +565,7 @@ def actions_analysis(
         ).reset_index(drop=True)
 
     pinning_df.to_csv(
-        action_pinning_path,
+        str(action_pinning_path),
         index=False,
         lineterminator="\r\n",
     )
@@ -579,12 +581,12 @@ def actions_analysis(
 
 
 def permissions_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 7: Parse workflow files for permissions posture."""
     print("\n--- Analysing workflow permissions ---")
-    permissions_analysis_path_base = os.path.join(OUTPUT_DIR, "permissions_analysis")
-    os.makedirs(permissions_analysis_path_base, exist_ok=True)
+    permissions_analysis_path_base = output_dir / "permissions_analysis"
+    permissions_analysis_path_base.mkdir(parents=True, exist_ok=True)
     all_permissions: List[Dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         perm = check_workflow_permissions(
@@ -595,11 +597,11 @@ def permissions_analysis(
             print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
-    permissions_analysis_path = os.path.join(
-        permissions_analysis_path_base, "github_workflow_permissions.csv"
+    permissions_analysis_path = (
+        permissions_analysis_path_base / "github_workflow_permissions.csv"
     )
     perms_count = CsvCompiler.write_rows(
-        permissions_analysis_path,
+        str(permissions_analysis_path),
         all_permissions,
     )
     print(f"Wrote {permissions_analysis_path} ({perms_count} rows)")
@@ -624,7 +626,7 @@ def permissions_analysis(
 
 
 def credentials_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 8: Assess OIDC vs long-lived credentials."""
     print("\n--- Assessing OIDC vs long-lived credentials ---")
@@ -639,14 +641,14 @@ def credentials_analysis(
             print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
-    credentials_analysis_path_base = os.path.join(OUTPUT_DIR, "credentials_analysis")
-    os.makedirs(credentials_analysis_path_base, exist_ok=True)
-    credentials_analysis_path = os.path.join(
-        credentials_analysis_path_base, "github_workflow_credential_posture.csv"
+    credentials_analysis_path_base = output_dir / "credentials_analysis"
+    credentials_analysis_path_base.mkdir(parents=True, exist_ok=True)
+    credentials_analysis_path = (
+        credentials_analysis_path_base / "github_workflow_credential_posture.csv"
     )
 
     cred_count = CsvCompiler.write_rows(
-        credentials_analysis_path,
+        str(credentials_analysis_path),
         all_credential_findings,
     )
     print(f"Wrote {credentials_analysis_path} ({cred_count} rows)")
@@ -683,12 +685,12 @@ def credentials_analysis(
         )
     ]
 
-    cred_repo_analysis_path = os.path.join(
-        credentials_analysis_path_base,
-        "github_workflow_credential_posture_per_repo.csv",
+    cred_repo_analysis_path = (
+        credentials_analysis_path_base
+        / "github_workflow_credential_posture_per_repo.csv"
     )
     cred_repo_count = CsvCompiler.write_rows(
-        cred_repo_analysis_path,
+        str(cred_repo_analysis_path),
         cred_repo_rows,
     )
     print(f"Wrote {cred_repo_analysis_path} ({cred_repo_count} rows)")
@@ -713,7 +715,7 @@ def credentials_analysis(
 
 
 def trigger_risk_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]]
+    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 9: Analyse workflow trigger config risk."""
     print("\n--- Analysing workflow trigger risk ---")
@@ -728,14 +730,12 @@ def trigger_risk_analysis(
             print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
             time.sleep(0.1)
 
-    trigger_analysis_path = os.path.join(OUTPUT_DIR, "trigger_analysis")
-    os.makedirs(trigger_analysis_path, exist_ok=True)
+    trigger_analysis_path = output_dir / "trigger_analysis"
+    trigger_analysis_path.mkdir(parents=True, exist_ok=True)
 
-    trigger_csv_path = os.path.join(
-        trigger_analysis_path, "github_workflow_trigger_risk.csv"
-    )
+    trigger_csv_path = trigger_analysis_path / "github_workflow_trigger_risk.csv"
     trigger_count = CsvCompiler.write_rows(
-        trigger_csv_path,
+        str(trigger_csv_path),
         all_trigger_findings,
     )
     print(f"Wrote {trigger_csv_path} ({trigger_count} rows)")
@@ -822,15 +822,10 @@ def run(
     base_internal_dir: str,
     **kwargs,
 ) -> None:
-
-    # Configure Output Directories
-    # TODO: once stages refactored - remove global and just pass output_dir to stages that need it,
-    # rather than relying on a global var.
-    global OUTPUT_DIR
-    OUTPUT_DIR = os.path.join(base_output_dir, "github_workflow_posture")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+    resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     workflow_config = config.workflow_audit
+    output_dir = resolver.script_output_dir(workflow_config.output_subdir)
+    db_path = resolver.database_path(workflow_config.database_path)
 
     # TODO: refactor to avoid argparse.Namespace and just pass workflow_config and repo_list directly to stages
     # that need them, rather than packing into Namespace with some args from CLI and some from config.
@@ -844,7 +839,7 @@ def run(
     )
 
     client = GitHubHttpClient(auth_method=auth)
-    storage = SqliteRepoStorage(workflow_config.database_path)
+    storage = SqliteRepoStorage(str(db_path))
 
     # Stage 1 - resolve_repo_lis. (mandatory)
     repo_list = resolve_repo_list(args, client, config)
@@ -867,31 +862,31 @@ def run(
 
     # Stage 5 - write_posture_reports
     if workflow_config.gen_posture_reports:
-        write_posture_reports(args, repo_rows, detail_rows)
+        write_posture_reports(args, repo_rows, detail_rows, output_dir)
     else:
         _skip("Stage 5", "gen_posture_reports")
 
     # Stage 6 - actions_analysis
     if workflow_config.actions_analysis:
-        actions_analysis(client, detail_rows)
+        actions_analysis(client, detail_rows, output_dir)
     else:
         _skip("Stage 6", "actions_analysis")
 
     # Stage 7 - permissions_analysis
     if workflow_config.permissions_analysis:
-        permissions_analysis(client, detail_rows)
+        permissions_analysis(client, detail_rows, output_dir)
     else:
         _skip("Stage 7", "permissions_analysis")
 
     # Stage 8 - credentials_analysis
     if workflow_config.credentials_analysis:
-        credentials_analysis(client, detail_rows)
+        credentials_analysis(client, detail_rows, output_dir)
     else:
         _skip("Stage 8", "credentials_analysis")
 
     # Stage 9 - trigger_risk_analysis
     if workflow_config.trigger_risk_analysis:
-        trigger_risk_analysis(client, detail_rows)
+        trigger_risk_analysis(client, detail_rows, output_dir)
     else:
         _skip("Stage 9", "trigger_risk_analysis")
 

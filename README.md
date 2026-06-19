@@ -123,6 +123,14 @@ uv run audit-cli --scripts alert_metrics --repo ministryofjustice/<repo name>
 - `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
 - `repo_list_file` - Path to the repo list YAML file to be referenced by the scripts - defaults to `repo_list.yaml` at project root.
 
+## Output Directory Configuration
+
+Audit output locations are configured in `config/audit_config.yaml`.
+
+- Set global output and internal roots via `output_paths`.
+- Set per-script output folders via each script's `output_subdir`.
+- If these roots are changed, update any Docker volume mounts accordingly.
+
 ## Script-Specific Usage
 
 ### 1. `list_repos.py` - Audit Repositories From a File
@@ -167,7 +175,7 @@ uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --aut
 **Config Parameters:**
 
 - `database_path: "path/to/file.db"` - SQLite path for core storage (default: `internal/repo_audit.db`).
-- `output_filename: "file.csv / file.xlsx"` - Export the full results set to CSV or Excel of given filename under `output/archive_repos/`
+- `output_filename: "file.csv / file.xlsx"` - Export the full results set to CSV or Excel of given filename under `outputs/archive_repos/`
 - `page_num: null/<int>` - Process only one page of cached/fetched repos (100 repos per page, 0-indexed). `null` for full estate.
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `sort_by_field: "field"` - Sort by a result column. Default is `days_since_push`
@@ -181,7 +189,7 @@ uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --aut
 
 **Output:**
 
-- CSV to `output/archive_repos`
+- CSV to `outputs/archive_repos`
 - Core storage is persisted in SQLite (`repo_data` table) under `internal/`
 - JSON to stdout by default.
 - When `namespace_crossref` is enabled and JSON is printed, output is an object with `records` and `namespace_crossref_summary`
@@ -232,7 +240,7 @@ uv run audit-cli --scripts org_security_posture --config-file /path/to/config.ya
 **Output:**
 
 - A summary printed to stderr
-- Excel workbook output to `output/org_security_posture/`
+- Excel workbook output to `outputs/org_security_posture/`
 - Cached results stored in `internal/org_security_posture.db` for reuse on later runs
 
 **Examples:**
@@ -353,7 +361,7 @@ uv run audit-cli --scripts github_workflow [options]
 
 **Output:**
 
-- All outputs by default are sent to `output/github_workflow_posture`
+- All outputs by default are sent to `outputs/github_workflow_posture`
 
 - **Posture Reports:**
   - Text summary report (`_audit_summary.txt` suffix) summarising base analysis and posture of workflows
@@ -397,7 +405,7 @@ uv run audit-cli --scripts alert_metrics [options]
 **Config Parameters:**
 
 - `max_alerts: <int>` - Maximum number of alerts to pull for analysis across the estate
-- `output_filename: <filename>.csv` - File name for summary report results are exported to, stored in `output/github_alerts/`
+- `output_filename: <filename>.csv` - File name for summary report results are exported to, stored in `outputs/github_alerts/`
 - `repo_limit: <int>` - Only consider the first `<x>` amount of repositories pulled by the script e.g. `400`, `1000`, etc.
 
 **Output:**
@@ -430,7 +438,7 @@ uv run audit-cli --scripts lfs_script --config-file config/audit_config.yaml --a
 - `database_path`: SQLite path for core storage (default: `internal/lfs_audit.db`).
 - `soft_limit_mb: <int>`: Integer soft/warning file size limit in Megabytes. Defaults to 50.
 - `hard_limit_mb: <int>`: Integer hard file size limit in Megabytes. Defaults to 100.
-- `output_filename: <filename>.xlsx` - Filename for summary output Excel File under `output/lfs_analysis`
+- `output_filename: <filename>.xlsx` - Filename for summary output Excel File under `outputs/lfs_analysis`
 - `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 
 **Output:**

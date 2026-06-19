@@ -22,6 +22,49 @@ def test_defaults_all_stages_enabled():
     assert config.repo_list_file == "repo_list.yaml"
 
 
+def test_script_output_subdir_python_fallback_defaults():
+    config = AuditConfig()
+
+    assert config.list_repos.output_subdir == "list_repos"
+    assert config.archive_repos.output_subdir == "archive_repos"
+    assert config.alert_metrics.output_subdir == "alert_metrics"
+    assert config.org_security_posture.output_subdir == "org_security_posture"
+    assert config.lfs_script.output_subdir == "lfs_analysis"
+    assert config.workflow_audit.output_subdir == "github_workflow_posture"
+
+
+def test_output_subdir_can_be_overridden_from_config_file(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "list_repos": {"output_subdir": "custom_list_output"},
+                "alert_metrics": {"output_subdir": "alerts_custom"},
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.list_repos.output_subdir == "custom_list_output"
+    assert config.alert_metrics.output_subdir == "alerts_custom"
+
+
+def test_script_output_subdir_from_yaml(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "archive_repos": {"output_subdir": "custom_archive_dir"},
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.archive_repos.output_subdir == "custom_archive_dir"
+
+
 def test_load_returns_defaults_when_default_path_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     config = load_audit_config()
