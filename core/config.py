@@ -16,17 +16,6 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
 
-class OutputPathsConfig(BaseModel):
-    """Global output and internal path roots.
-
-    Set in audit_config.yaml under output_paths.
-    Python defaults are fallbacks only; YAML is authoritative.
-    """
-
-    outputs_root_dir: str = "outputs"  # Root dir for all audit outputs
-    internal_root_dir: str = "internal"  # Root dir for SQLite caches
-
-
 class ScriptOutputConfig(BaseModel):
     """Shared output subdirectory behaviour for script configs."""
 
@@ -59,7 +48,7 @@ class LfsScriptConfig(ScriptOutputConfig):
 class AlertMetricsConfig(ScriptOutputConfig):
     """Config for ``alert_metrics.py`` script."""
 
-    script_name: ClassVar[str] = "github_alerts"
+    script_name: ClassVar[str] = "alert_metrics"
 
     output_filename: str = "alert_metrics.csv"  # output file for alert data
     max_alerts: Optional[int] = None  # max number of alerts to collect (for testing)
@@ -188,7 +177,6 @@ class AuditConfig(BaseModel):
 
     github_organization: str = "ministryofjustice"
     repo_list_file: str = "repo_list.yaml"
-    output_paths: OutputPathsConfig = Field(default_factory=OutputPathsConfig)
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
     lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)

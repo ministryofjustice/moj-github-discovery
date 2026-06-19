@@ -5,17 +5,10 @@
 github_organization: "ministryofjustice"
 repo_list_file: "repo_list.yaml"
 
-# Output directory configuration.
-# All paths are relative to the project root.
-# output_subdir is optional for each script; omit it to use the default derived
-# from the script config's script_name.
-output_paths:
-  outputs_root_dir: "outputs"
-  internal_root_dir: "internal"
 
 alert_metrics:
-  # Optional override; defaults to github_alerts if omitted.
-  output_subdir: "github_alerts"
+  # Optional override; defaults to alert_metrics if omitted.
+  output_subdir: "alert_metrics"
   max_alerts: 10000
   output_filename: "github_alerts_limited.csv"
   repo_limit: 400

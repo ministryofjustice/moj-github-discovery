@@ -1,10 +1,6 @@
 """Consistency tests for script output path configuration."""
 
-from pathlib import Path
-
-import yaml
-
-from core.config import AuditConfig, load_audit_config
+from core.config import AuditConfig
 from core.output_paths import OutputPathResolver
 
 
@@ -69,37 +65,3 @@ def test_multiple_scripts_use_distinct_output_subdirs():
     }
 
     assert len(subdirs) == 6
-
-
-def test_custom_outputs_root_dir_changes_output_location(tmp_path):
-    config_file = tmp_path / "audit_config.yaml"
-    config_file.write_text(
-        yaml.safe_dump(
-            {
-                "output_paths": {
-                    "outputs_root_dir": str(tmp_path / "custom_outputs"),
-                    "internal_root_dir": str(tmp_path / "custom_internal"),
-                },
-                "list_repos": {
-                    "output_subdir": "list_custom",
-                    "output_filename": "list.xlsx",
-                },
-            }
-        )
-    )
-
-    config = load_audit_config(config_file)
-    resolver = OutputPathResolver(
-        config=config,
-        base_output_dir=config.output_paths.outputs_root_dir,
-        base_internal_dir=config.output_paths.internal_root_dir,
-    )
-
-    resolved_file = resolver.script_output_file(
-        config.list_repos.output_subdir,
-        config.list_repos.output_filename,
-    )
-
-    assert resolved_file == Path(
-        tmp_path / "custom_outputs" / "list_custom" / "list.xlsx"
-    )

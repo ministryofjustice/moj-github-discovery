@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+from pathlib import Path
 import pytest
 
 from main import main, _parse_args, SCRIPTS
@@ -237,25 +238,13 @@ def test_successful_script_exits_zero(tmp_path):
     assert exit_code == 0
 
 
-def test_base_directory_setup_reads_from_config(tmp_path):
+def test_base_directory_setup_returns_fixed_directories():
+    """Verify base_directory_setup returns fixed output and internal dirs."""
     config = AuditConfig()
-    config.output_paths.outputs_root_dir = str(tmp_path / "custom_outputs")
-    config.output_paths.internal_root_dir = str(tmp_path / "custom_internal")
 
     outputs, internal = base_directory_setup(config)
 
-    assert outputs == str(tmp_path / "custom_outputs")
-    assert internal == str(tmp_path / "custom_internal")
-
-
-def test_base_directory_setup_creates_dirs(tmp_path):
-    config = AuditConfig()
-    config.output_paths.outputs_root_dir = str(tmp_path / "outputs")
-    config.output_paths.internal_root_dir = str(tmp_path / "internal")
-
-    outputs, internal = base_directory_setup(config)
-
-    assert outputs == str(tmp_path / "outputs")
-    assert internal == str(tmp_path / "internal")
-    assert (tmp_path / "outputs").exists()
-    assert (tmp_path / "internal").exists()
+    assert outputs == "outputs"
+    assert internal == "internal"
+    assert Path("outputs").exists()
+    assert Path("internal").exists()
