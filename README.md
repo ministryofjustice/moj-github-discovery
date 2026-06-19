@@ -84,6 +84,12 @@ collection, storage, and report shaping.
 - `--repo` - Specify a single repository to target in the form `owner/repo` - currently only applies to `alert_metrics`
 - `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - currently only applies to `github_workflow`
 
+### Notes
+
+- `archive_repos` has `repo_limit: null` by default and will scan the entire org. Set a `repo_limit` in the config for a faster targeted run.
+- `alert_metrics` uses a global `max_alerts` cap across all repos. If early repos are alert-heavy, the cap can be hit before all repos are scanned.
+  Set `max_alerts: null` in the config for complete coverage.
+
 ### Local Terminal
 
 After running `uv sync`, the audit CLI can be triggered for any given script(s) under the `scripts/` directory.
@@ -575,6 +581,23 @@ This will diagnose differences in PATH, HOME, and token availability.
 
 - Close other instances of the dashboard
 - Ensure no other processes are accessing the database
+
+### sqlite3.OperationalError: unable to open database file
+
+- Caused by running a script directly without `audit-cli`
+- Fix: run via `audit-cli`, or run `mkdir -p internal` first
+
+### 403 Rate Limit Errors During a Run
+
+- Expected behaviour at org scale, not an error
+- Script retries automatically — full org runs can take 35+ minutes
+- Use `use_cache: true` on repeat runs to reduce API calls
+
+### [warn] code_scanning failed: 404
+
+- Expected behaviour, not an error
+- Code scanning is not enabled on that repository
+- Script continues normally
 
 ## Examples
 
