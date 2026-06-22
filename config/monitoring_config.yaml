@@ -1,0 +1,68 @@
+# Default audit config for moj-github-discovery scripts.
+# Override by passing --config-file path/to/your.yaml on the CLI.
+
+# Global attributes used by all/multiple scripts
+github_organization: "ministryofjustice"
+repo_list_file: "repo_list.yaml"
+
+alert_metrics:
+  max_alerts: 10000
+  output_filename: "github_alerts_limited.csv"
+  repo_limit: 400
+
+archive_repos:
+  database_path: "internal/repo_audit.db"
+  output_filename: "archive_repos.csv"
+  page_num: null # null for all pages, or set to an integer to limit
+  repo_limit: null # null for no limit, or set to an integer to limit
+  sort_by_field: "days_since_push"
+  sort_ascending: false
+  use_cache: false
+  namespace_crossref:
+    enabled: false
+    target_repo: "cloud-platform-environments"
+    target_branch: "main"
+    root_folder: "namespaces"
+
+# Script config for list_repos.py.
+list_repos:
+  database_path: "internal/repo_audit.db"
+  output_filename: "list_repos.xlsx"
+  repo_limit: 400
+  resume: true
+  standard_endpoints_only: true
+  sort_by_field: "pushed_at"
+  sort_ascending: false
+  use_cache: true
+
+# Script config for org_security_posture.py.
+org_security_posture:
+  database_path: "internal/org_security_posture.db"
+  output_filename: "org_security_posture.xlsx"
+  use_cache: true
+
+# Script config for github_workflow.py.
+# Stages 2 and 3 collect the base data the later stages depend on,
+# so disabling them only makes sense when a previous run has already
+# populated the SQLite cache (default: github_workflow_posture.db).
+workflow_audit:
+  database_path: "internal/github_workflow_posture.db"
+  output_prefix: "github_workflow_audit"
+  repo_limit: 400 # set to null for no limit
+  use_cache: true
+  # Stages
+  collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory
+  collect_additional_data: true  # stage 3 - Actions permissions + latest run
+  gen_posture_reports: false      # stage 4/5 - posture CSVs + summary.txt
+  actions_analysis: false         # stage 6 - action usage + SHA pinning
+  permissions_analysis: false     # stage 7 - workflow permissions
+  credentials_analysis: true     # stage 8 - OIDC vs long-lived
+  trigger_risk_analysis: false    # stage 9 - trigger config risk
+
+# Script config for lfs_script.py.
+lfs_script:
+  database_path: "internal/lfs_audit.db"
+  soft_limit_mb: 50
+  hard_limit_mb: 100
+  output_filename: "repos_exceeding_thresholds.xlsx"
+  use_cache: false
