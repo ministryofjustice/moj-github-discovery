@@ -34,7 +34,7 @@ section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
 
-def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
+def _load_cache(org: str, storage: SqliteOrgStorage, database_path: str) -> dict[str, Any]:
     """Load cached posture data for an org, if available and not expired."""
     try:
         cached = storage.read_cache(org)
@@ -43,7 +43,7 @@ def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
         cache, updated_at = cached
         age_min = (time.time() - updated_at) / 60
         print(
-            f"  Loaded cache ({age_min:.0f} min old): {ORG_CACHE_DB_PATH}",
+            f"  Loaded cache ({age_min:.0f} min old): {database_path}",
             file=sys.stderr,
         )
         return cache
@@ -52,11 +52,11 @@ def _load_cache(org: str, storage: SqliteOrgStorage) -> dict[str, Any]:
         return {}
 
 
-def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage) -> None:
+def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage, database_path: str) -> None:
     """Save posture data to cache with current timestamp."""
     updated_at = time.time()
     storage.upsert_cache(org, cache, updated_at)
-    print(f"  Saved cache: {ORG_CACHE_DB_PATH}", file=sys.stderr)
+    print(f"  Saved cache: {database_path}", file=sys.stderr)
 
 
 def run_full_audit(
@@ -64,11 +64,12 @@ def run_full_audit(
     auth_method: Literal["pat", "app", "cli"] | None = None,
     repo_full_names: list[str] | None = None,
     use_cache: bool = False,
+    database_path: str = ""
 ) -> dict[str, Any]:
     """Run a full audit for the given organization."""
-    cache_storage = SqliteOrgStorage(ORG_CACHE_DB_PATH)
+    cache_storage = SqliteOrgStorage(database_path)
     cache_storage.init()
-    cache = _load_cache(org, cache_storage) if use_cache else {}
+    cache = _load_cache(org, cache_storage, database_path) if use_cache else {}
     client = GitHubHttpClient(auth_method)
 
     report: dict[str, Any] = {
@@ -148,7 +149,7 @@ def run_full_audit(
         }
         print(f"  done ({time.monotonic() - t0:.1f}s)", file=sys.stderr)
         cache[section3_col_name] = report[section3_col_name]
-        _save_cache(org, cache, cache_storage)
+        _save_cache(org, cache, cache_storage, database_path)
 
     print("\n Collecting GitHub Actions Posture Data...", file=sys.stderr)
 
@@ -291,8 +292,6 @@ def run(
 
     # Define Variables from Config
     database_path = resolver.database_path(org_security_posture_config.database_path)
-    global ORG_CACHE_DB_PATH
-    ORG_CACHE_DB_PATH = str(database_path)
     github_organization = config.github_organization
     output_filename = org_security_posture_config.output_filename
     repo_file = config.repo_list_file
@@ -340,6 +339,7 @@ def run(
         auth,
         repo_full_names=repo_scope,
         use_cache=use_cache,
+        database_path=str(database_path),
     )
 
     print("\n Audit complete. Building summary...", file=sys.stderr)
