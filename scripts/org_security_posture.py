@@ -34,7 +34,9 @@ section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
 
-def _load_cache(org: str, storage: SqliteOrgStorage, database_path: str) -> dict[str, Any]:
+def _load_cache(
+    org: str, storage: SqliteOrgStorage, database_path: str
+) -> dict[str, Any]:
     """Load cached posture data for an org, if available and not expired."""
     try:
         cached = storage.read_cache(org)
@@ -52,7 +54,9 @@ def _load_cache(org: str, storage: SqliteOrgStorage, database_path: str) -> dict
         return {}
 
 
-def _save_cache(org: str, cache: dict[str, Any], storage: SqliteOrgStorage, database_path: str) -> None:
+def _save_cache(
+    org: str, cache: dict[str, Any], storage: SqliteOrgStorage, database_path: str
+) -> None:
     """Save posture data to cache with current timestamp."""
     updated_at = time.time()
     storage.upsert_cache(org, cache, updated_at)
@@ -64,7 +68,7 @@ def run_full_audit(
     auth_method: Literal["pat", "app", "cli"] | None = None,
     repo_full_names: list[str] | None = None,
     use_cache: bool = False,
-    database_path: str = ""
+    database_path: str = "",
 ) -> dict[str, Any]:
     """Run a full audit for the given organization."""
     cache_storage = SqliteOrgStorage(database_path)
