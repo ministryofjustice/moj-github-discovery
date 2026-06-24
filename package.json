@@ -15,6 +15,10 @@
     "cspell": "^10.0.1",
     "markdownlint-cli2": "^0.22.1"
   },
+  "overrides": {
+      "js-yaml": "^4.2.0",
+      "markdown-it": "^14.2.0"
+    },
   "cspell": {
     "allowCompoundWords": true,
     "dictionaries": [
