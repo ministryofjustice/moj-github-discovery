@@ -396,9 +396,14 @@ def run(
 
     print("Starting repository list collection...", file=sys.stderr)
 
-    if use_cache:
+    if kwargs.get("repo"):
+        repo_list = [kwargs["repo"]]
+    elif kwargs.get("repos"):
+        repo_list = kwargs["repos"]
+    elif use_cache:
         print("Loading repository list from cache...", file=sys.stderr)
         repo_list = _list_repos_from_storage(github_org, storage)
+
     else:
         print("Collecting repository list from GitHub API...", file=sys.stderr)
         repo_list_collector = RepoListCollector(auth_method=auth)

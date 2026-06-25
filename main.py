@@ -121,18 +121,18 @@ def main(argv=None) -> None:
         sys.exit(1)
 
     # Script-Specific Argument Validation
-    if args.repo and "alert_metrics" not in (args.scripts or []) and not args.all:
+    if args.repo and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
-            "The --repo argument currently only applies to the alert_metrics script.",
-            "Please include alert_metrics in --scripts or use --all.",
+            "The --repo argument does not apply to org_security_posture. "
+            "This script operates at org level and does not support single repo targeting.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    if args.repos and "github_workflow" not in (args.scripts or []) and not args.all:
+    if args.repos and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
-            "The --repos argument currently only applies to the github_workflow script.",
-            "Please include github_workflow in --scripts or use --all",
+            "The --repos argument does not apply to org_security_posture. ",
+            "This script operates at org level and does not support multiple repo targeting.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -167,9 +167,9 @@ def main(argv=None) -> None:
         try:
             # Prepare kwargs for scripts that require specific CLI args
             kwargs = {}
-            if name == "alert_metrics" and args.repo:
+            if args.repo and name != "org_security_posture":
                 kwargs["repo"] = args.repo
-            if name == "github_workflow" and args.repos:
+            if args.repos and name != "org_security_posture":
                 kwargs["repos"] = args.repos
             # Pass the global config, auth method, base directories, and any script-specific kwargs
             # to the script's run function
