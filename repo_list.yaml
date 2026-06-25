@@ -199,7 +199,6 @@ repos:
 - ministryofjustice/hmpps-official-visits-ui
 - ministryofjustice/hmpps-organisations-api
 - ministryofjustice/hmpps-person-communication-needs-api
-- ministryofjustice/hmpps-person-match-score
 - ministryofjustice/hmpps-person-record
 - ministryofjustice/hmpps-person-record-manage-ui
 - ministryofjustice/hmpps-personal-relationships-api
