@@ -516,6 +516,7 @@ class TestBranchProtectionEndpoint:
                 "/repos/o/r/branches/main": {
                     "protected": True,
                     "protection": {
+                        "enabled": True,
                         "required_status_checks": {"strict": True},
                         "required_pull_request_reviews": {
                             "dismiss_stale_reviews": True,
@@ -555,6 +556,7 @@ class TestBranchProtectionEndpoint:
                 "/repos/o/r/branches/main": {
                     "protected": True,
                     "protection": {
+                        "enabled": True,
                         "required_status_checks": {"strict": True},
                         "required_pull_request_reviews": {
                             "dismiss_stale_reviews": True,
