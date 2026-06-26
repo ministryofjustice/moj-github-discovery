@@ -110,12 +110,11 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
     list_flags = flags_for_list(data)
 
     # Resolve Compliance Method (Branch Protection vs Rulesets) for the default branch
-    if branch.branch_protection_enabled:
+    compliance_method = "none"
+    if branch and branch.branch_protection_enabled:
         compliance_method = "branch_protection"
-    elif repo_rulesets.has_active_rulesets:
+    elif repo_rulesets and repo_rulesets.has_active_rulesets:
         compliance_method = "rulesets"
-    else:
-        compliance_method = "not set"
 
     # Resolve Compliance Method-Specific Flags
     if compliance_method == "branch_protection":
@@ -143,11 +142,11 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
             repo_rulesets.required_signatures if repo_rulesets else None
         )
     else:
-        enforce_admins = None
-        dismiss_stale_reviews = None
-        require_code_owner_reviews = None
-        required_approving_review_count = None
-        required_signatures = None
+        enforce_admins = False
+        dismiss_stale_reviews = False
+        require_code_owner_reviews = False
+        required_approving_review_count = 0
+        required_signatures = False
 
     return {
         "org": owner,
@@ -183,7 +182,7 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         if repo_rulesets
         else None,
         "protection_settings": branch.protection_settings if branch else None,
-        "enforce_admin_branch_protection": enforce_admins,
+        "enforce_admin_protection": enforce_admins,
         "dismiss_stale_reviews": dismiss_stale_reviews,
         "require_code_owner_reviews": require_code_owner_reviews,
         "required_approving_review_count": required_approving_review_count,

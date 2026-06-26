@@ -619,6 +619,7 @@ class RepoRulesetsEndpoint(BaseEndpoint):
             default_branch = repo_details.default_branch if repo_details else "main"
 
             # Aggregate protection settings from all matching rulesets
+            has_active_rulesets = False
             enforce_admins = False
             dismiss_stale_reviews = False
             require_code_owner_reviews = False
@@ -635,6 +636,17 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                 conditions = ruleset.get("conditions", {})
                 ref_name = conditions.get("ref_name", {})
                 includes = ref_name.get("include", [])
+
+                # Skip rulesets that don't target the default branch
+                # Handle explicit branch name, negated branch name (~branch), and special ~DEFAULT_BRANCH placeholder
+                if includes:
+                    targets_default_branch = (
+                        default_branch in includes
+                        or f"~{default_branch}" in includes
+                        or "~DEFAULT_BRANCH" in includes
+                    )
+                    if not targets_default_branch:
+                        continue
 
                 ruleset_id = ruleset.get("id")
                 if not ruleset_id:
