@@ -63,7 +63,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--auth",
         choices=["pat", "app", "cli"],
-        default="pat",
         help="Authentication method for GitHub API (default: pat)",
     )
     return parser.parse_args()

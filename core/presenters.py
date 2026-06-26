@@ -110,13 +110,12 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
     list_flags = flags_for_list(data)
 
     # Resolve Compliance Method (Branch Protection vs Rulesets) for the default branch
-    if branch and repo_rulesets:
-        if branch.branch_protection_enabled:
-            compliance_method = "branch_protection"
-        elif repo_rulesets.has_active_rulesets:
-            compliance_method = "rulesets"
+    if branch.branch_protection_enabled:
+        compliance_method = "branch_protection"
+    elif repo_rulesets.has_active_rulesets:
+        compliance_method = "rulesets"
     else:
-        compliance_method = "none"
+        compliance_method = "not set"
 
     # Resolve Compliance Method-Specific Flags
     if compliance_method == "branch_protection":
@@ -268,7 +267,7 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
 def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     """Build the summary metrics table used in list_repos outputs."""
     if df.empty:
-        values = [0] * 8
+        values = [0] * 10
     else:
         values = [
             len(df),
@@ -279,6 +278,8 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
             int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
             int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
             int((~df["default_branch_protected"].fillna(False)).sum()),
+            int(df["branch_protection_enabled"].fillna(False).sum()),
+            int(df["has_active_rulesets"].fillna(False).sum()),
         ]
 
     return pd.DataFrame(
@@ -292,6 +293,8 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
                 "repos_with_secret_alerts",
                 "repos_with_code_scanning_alerts",
                 "repos_unprotected_default_branch",
+                "repos_using_classic_branch_protection",
+                "repos_with_active_rulesets",
             ],
             "value": values,
         }
