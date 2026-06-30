@@ -13,7 +13,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install --no-cache-dir --upgrade pip uv
+RUN python -m pip install --no-cache-dir --upgrade pip uv==0.11.24
 
 # Copy dependency metadata first for better layer caching.
 COPY pyproject.toml uv.lock README.md ./
