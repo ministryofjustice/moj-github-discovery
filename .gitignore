@@ -38,6 +38,7 @@ node_modules
 
 internal/
 output/
+outputs/
 
 # Local Docker secret env for audit CLI POC
-docker-audit-cli/.envoutputs/
+docker-audit-cli/.env

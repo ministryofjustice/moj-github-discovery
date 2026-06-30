@@ -95,12 +95,12 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--repo",
         default=None,
-        help="Optionally specify a single repository to target in the format owner/repo. This only applies to the alert_metrics.py script for now.",
+        help="Optionally specify a single repository to target in the format owner/repo. Does not apply to org_security_posture.",
     )
     parser.add_argument(
         "--repos",
         nargs="+",
-        help="Specific repos to scan, e.g. owner/repo owner/repo. Only applies to github_workflow.py for now.",
+        help="Specific repos to scan, e.g. owner/repo owner/repo. Does not apply to org_security_posture.",
     )
     return parser.parse_args(argv)
 
@@ -131,7 +131,7 @@ def main(argv=None) -> None:
 
     if args.repos and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
-            "The --repos argument does not apply to org_security_posture. ",
+            "The --repos argument does not apply to org_security_posture. "
             "This script operates at org level and does not support multiple repo targeting.",
             file=sys.stderr,
         )

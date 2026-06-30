@@ -183,6 +183,11 @@ def run(
         archive_status_lookup = build_archive_status_lookup(
             client, github_organization, repos, pre_fetched_status=None
         )
+    elif kwargs.get("repos"):
+        repos = kwargs["repos"]
+        archive_status_lookup = build_archive_status_lookup(
+            client, github_organization, repos, pre_fetched_status=None
+        )
     else:
         print(f"Fetching repositories for organization: {github_organization}")
         # Single paginated call returns both the repo list and archive status,

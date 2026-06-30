@@ -172,6 +172,57 @@ def test_repo_kwarg_passed_to_alert_metrics(tmp_path):
     assert call_kwargs.get("repo") == "owner/repo"
 
 
+def test_repos_kwarg_passed_to_alert_metrics(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("dummy: config")
+
+    mock_scripts = _make_mock_scripts()
+
+    with (
+        patch("main.SCRIPTS", mock_scripts),
+        patch("main.load_audit_config"),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
+    ):
+        main(
+            [
+                "--config-file",
+                str(config_file),
+                "--scripts",
+                "alert_metrics",
+                "--repos",
+                "owner/repo1",
+                "owner/repo2",
+            ]
+        )
+    call_kwargs = mock_scripts["alert_metrics"].run.call_args.kwargs
+    assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
+
+
+def test_repo_kwarg_passed_to_github_workflow(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("dummy: config")
+
+    mock_scripts = _make_mock_scripts()
+
+    with (
+        patch("main.SCRIPTS", mock_scripts),
+        patch("main.load_audit_config"),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
+    ):
+        main(
+            [
+                "--config-file",
+                str(config_file),
+                "--scripts",
+                "github_workflow",
+                "--repo",
+                "owner/repo",
+            ]
+        )
+    call_kwargs = mock_scripts["github_workflow"].run.call_args.kwargs
+    assert call_kwargs.get("repo") == "owner/repo"
+
+
 def test_repos_kwarg_passed_to_github_workflow(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
@@ -202,7 +253,9 @@ def test_repos_kwarg_passed_to_github_workflow(tmp_path):
 def test_repo_kwarg_passed_to_list_repos(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
+
     mock_scripts = _make_mock_scripts()
+
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
@@ -225,7 +278,9 @@ def test_repo_kwarg_passed_to_list_repos(tmp_path):
 def test_repo_kwarg_passed_to_archive_repos(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
+
     mock_scripts = _make_mock_scripts()
+
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
@@ -248,7 +303,9 @@ def test_repo_kwarg_passed_to_archive_repos(tmp_path):
 def test_repo_kwarg_passed_to_lfs_script(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
+
     mock_scripts = _make_mock_scripts()
+
     with (
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),

@@ -248,7 +248,9 @@ def resolve_repo_list(
       3. ``repo_list.yaml`` in the current working directory, if present
       4. Fall back to listing the org via the GitHub API
     """
-    if args.repos:
+    if isinstance(args.repo, str):
+        repo_list = [args.repo]
+    elif args.repos:
         repo_list = args.repos[: args.limit]
     elif config.repo_list_file and Path(config.repo_list_file).exists():
         print(
@@ -835,6 +837,7 @@ def run(
         limit=workflow_config.repo_limit,
         out_prefix=workflow_config.output_prefix,
         resume=workflow_config.use_cache,
+        repo=kwargs.get("repo", None),
         repos=kwargs.get("repos", None),
     )
 
