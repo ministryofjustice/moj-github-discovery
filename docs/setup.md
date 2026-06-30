@@ -20,7 +20,23 @@ It can be installed via `brew` : `brew install uv`
 
 Verify via `uv --version`
 
+Repository policy for uv versioning:
+
+- This repository pins `uv` CLI `0.11.24` for CI and Docker parity.
+- Related `uv` integrations are updated alongside the CLI where compatible; `uv-pre-commit` is currently SHA pinned to the commit for `0.11.24`.
+- GitHub Action references and Docker base images remain SHA pinned where supported.
+
+If your local `uv --version` output differs from `0.11.24`, upgrade or reinstall `uv` so local runs stay aligned with CI and Docker where practical.
+
 Install dependencies (including local dev dependencies) via `uv sync --group dev`
+
+`uv.lock` is managed by normal `uv` workflows and is not the source of truth for the `uv` binary version.
+Use the standard commands below when dependency resolution changes:
+
+```shell
+uv sync --group dev
+uv lock
+```
 
 ### Github Setup
 
