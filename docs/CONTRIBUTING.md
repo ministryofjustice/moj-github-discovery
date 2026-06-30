@@ -86,6 +86,14 @@ uv run pytest tests/test_integration.py -m integration -o addopts='' -v
 2. Register it in `COMPILERS`.
 3. Add tests for the new compiler behavior in `tests/test_compiler.py`.
 
+## uv Maintenance Expectations
+
+- Do not update uv pins in only one place.
+- Prefer Renovate PRs for uv-related updates.
+- If a manual bump is needed, update all uv pin locations together: `.github/workflows/lint.yml` (`uv-version`), `.github/workflows/pytest.yml` (`uv-version`),
+`docker-audit-cli/Dockerfile` (`uv==...`), `.pre-commit-config.yaml` (`uv-pre-commit` `rev`), and `docs/setup.md` (documented expected uv version).
+- Preserve SHA pinning for GitHub Action refs and Docker image digests.
+
 ## Pull Request Checklist
 
 - Tests pass locally (`pytest -q`).
