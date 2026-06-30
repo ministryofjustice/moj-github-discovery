@@ -19,6 +19,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: uv-version-sync
+        name: uv version sync
+        entry: python3 utils/check_uv_sync.py
+        language: system
+        pass_filenames: false
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
     hooks:
