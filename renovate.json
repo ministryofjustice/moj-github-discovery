@@ -41,26 +41,15 @@
             "pinDigests": true
         },
         {
-            "description": "Group uv CLI pin updates across workflows and Dockerfile",
-            "groupName": "uv cli pins",
-            "groupSlug": "uv-cli-pins",
+            "description": "Group uv-related updates across workflow uv-version, Docker uv pin, and uv-pre-commit",
+            "groupName": "uv related updates",
+            "groupSlug": "uv-related-updates",
             "matchManagers": [
-                "custom.regex"
-            ],
-            "matchDepNames": [
-                "uv"
-            ]
-        },
-        {
-            "description": "Group uv integration updates for setup-uv and uv-pre-commit",
-            "groupName": "uv integrations",
-            "groupSlug": "uv-integrations",
-            "matchManagers": [
-                "github-actions",
+                "custom.regex",
                 "pre-commit"
             ],
             "matchDepNames": [
-                "astral-sh/setup-uv",
+                "uv",
                 "astral-sh/uv-pre-commit"
             ]
         }
