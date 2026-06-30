@@ -1,5 +1,68 @@
 {
     "extends": [
         "github>ministryofjustice/devsecops-actions"
+    ],
+    "pre-commit": {
+        "enabled": true
+    },
+    "customManagers": [
+        {
+            "customType": "regex",
+            "description": "Track uv-version in setup-uv workflow inputs",
+            "fileMatch": [
+                "^\\.github/workflows/.+\\.ya?ml$"
+            ],
+            "matchStrings": [
+                "uv-version:\\s*\"(?<currentValue>[^\"]+)\""
+            ],
+            "datasourceTemplate": "pypi",
+            "depNameTemplate": "uv"
+        },
+        {
+            "customType": "regex",
+            "description": "Track uv CLI version pin in docker-audit-cli Dockerfile",
+            "fileMatch": [
+                "^docker-audit-cli/Dockerfile$"
+            ],
+            "matchStrings": [
+                "pip install[^\\n]*\\buv==(?<currentValue>[^\\s]+)"
+            ],
+            "datasourceTemplate": "pypi",
+            "depNameTemplate": "uv"
+        }
+    ],
+    "packageRules": [
+        {
+            "description": "Preserve digest/SHA pinning for GitHub Actions and Docker images",
+            "matchManagers": [
+                "github-actions",
+                "dockerfile"
+            ],
+            "pinDigests": true
+        },
+        {
+            "description": "Group uv CLI pin updates across workflows and Dockerfile",
+            "groupName": "uv cli pins",
+            "groupSlug": "uv-cli-pins",
+            "matchManagers": [
+                "custom.regex"
+            ],
+            "matchDepNames": [
+                "uv"
+            ]
+        },
+        {
+            "description": "Group uv integration updates for setup-uv and uv-pre-commit",
+            "groupName": "uv integrations",
+            "groupSlug": "uv-integrations",
+            "matchManagers": [
+                "github-actions",
+                "pre-commit"
+            ],
+            "matchDepNames": [
+                "astral-sh/setup-uv",
+                "astral-sh/uv-pre-commit"
+            ]
+        }
     ]
 }
