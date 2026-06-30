@@ -20,47 +20,10 @@ It can be installed via `brew` : `brew install uv`
 
 Verify via `uv --version`
 
-Repository policy for uv versioning:
-
-- This repository pins `uv` CLI `0.11.24` for CI and Docker parity.
-- Related `uv` integrations are updated alongside the CLI where compatible; `uv-pre-commit` is currently SHA pinned to the commit for `0.11.24`.
-- GitHub Action references and Docker base images remain SHA pinned where supported.
-
-If your local `uv --version` output differs from `0.11.24`, upgrade or reinstall `uv` so local runs stay aligned with CI and Docker where practical.
-
-#### Upgrading local `uv`
-
-Use one of the supported approaches below, then verify with `uv --version`.
-
-```shell
-# Homebrew (latest available formula)
-brew upgrade uv
-
-# Or install an explicit version in user site-packages
-python3 -m pip install --user --upgrade "uv==0.11.24"
-```
-
-If `uv --version` still reports an older Homebrew version after a `pip --user` install, your shell is likely resolving `uv` from `/opt/homebrew/bin` first.
-Prefer the user binary path and refresh shell command lookup:
-
-```shell
-export PATH="$HOME/.local/bin:$PATH"
-hash -r
-uv --version
-```
-
-To persist this for future shells:
-
-```shell
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-Pre-commit includes a `uv version sync` check that fails if local `uv` is out of sync with the managed pin, or if `docs/setup.md` is behind the managed version.
+For `uv` version policy, local upgrade guidance, and sync enforcement details, refer to [uv-management.md](uv-management.md).
 
 Install dependencies (including local dev dependencies) via `uv sync --group dev`
 
-`uv.lock` is managed by normal `uv` workflows and is not the source of truth for the `uv` binary version.
 Use the standard commands below when dependency resolution changes:
 
 ```shell

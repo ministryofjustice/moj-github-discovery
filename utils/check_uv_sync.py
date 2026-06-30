@@ -10,11 +10,11 @@ from pathlib import Path
 LINT_WORKFLOW = Path(".github/workflows/lint.yml")
 PYTEST_WORKFLOW = Path(".github/workflows/pytest.yml")
 DOCKERFILE = Path("docker-audit-cli/Dockerfile")
-SETUP_DOC = Path("docs/setup.md")
+UV_MANAGEMENT_DOC = Path("docs/uv-management.md")
 
 UV_VERSION_YAML_RE = re.compile(r"uv-version:\s*\"(?P<version>\d+\.\d+\.\d+)\"")
 UV_VERSION_DOCKER_RE = re.compile(r"\buv==(?P<version>\d+\.\d+\.\d+)\b")
-UV_VERSION_SETUP_RE = re.compile(r"pins\s+`uv`\s+CLI\s+`(?P<version>\d+\.\d+\.\d+)`")
+UV_VERSION_POLICY_RE = re.compile(r"pins\s+`uv`\s+CLI\s+`(?P<version>\d+\.\d+\.\d+)`")
 UV_LOCAL_RE = re.compile(r"uv\s+(?P<version>\d+\.\d+\.\d+)")
 
 
@@ -62,7 +62,7 @@ def get_local_uv_version() -> str:
 
 
 def read_managed_versions() -> tuple[str, str, str, str]:
-    """Read uv versions from workflow pins, Dockerfile pin, and setup docs."""
+    """Read uv versions from workflow pins, Dockerfile pin, and uv management docs."""
     lint_version = extract_version(
         read_text(LINT_WORKFLOW), UV_VERSION_YAML_RE, str(LINT_WORKFLOW)
     )
@@ -72,10 +72,10 @@ def read_managed_versions() -> tuple[str, str, str, str]:
     docker_version = extract_version(
         read_text(DOCKERFILE), UV_VERSION_DOCKER_RE, str(DOCKERFILE)
     )
-    setup_version = extract_version(
-        read_text(SETUP_DOC), UV_VERSION_SETUP_RE, str(SETUP_DOC)
+    documented_version = extract_version(
+        read_text(UV_MANAGEMENT_DOC), UV_VERSION_POLICY_RE, str(UV_MANAGEMENT_DOC)
     )
-    return lint_version, pytest_version, docker_version, setup_version
+    return lint_version, pytest_version, docker_version, documented_version
 
 
 def validate_managed_alignment(
@@ -93,24 +93,24 @@ def validate_managed_alignment(
     return 0, lint_version
 
 
-def validate_setup_version(expected: str, setup_version: str) -> int:
-    """Ensure docs/setup.md matches the managed uv version."""
-    if setup_version == expected:
+def validate_documented_version(expected: str, documented_version: str) -> int:
+    """Ensure docs/uv-management.md matches the managed uv version."""
+    if documented_version == expected:
         return 0
 
-    setup_semver = parse_semver(setup_version)
+    documented_semver = parse_semver(documented_version)
     expected_semver = parse_semver(expected)
-    if setup_semver < expected_semver:
+    if documented_semver < expected_semver:
         print(
-            "uv sync check failed: docs/setup.md is older than the Renovate-managed uv version."
+            "uv sync check failed: docs/uv-management.md is older than the Renovate-managed uv version."
         )
     else:
         print(
-            "uv sync check failed: docs/setup.md does not match the Renovate-managed uv version."
+            "uv sync check failed: docs/uv-management.md does not match the Renovate-managed uv version."
         )
     print(f"- managed uv version: {expected}")
-    print(f"- docs/setup.md version: {setup_version}")
-    print("Update docs/setup.md to match the managed uv version.")
+    print(f"- docs/uv-management.md version: {documented_version}")
+    print("Update docs/uv-management.md to match the managed uv version.")
     return 1
 
 
@@ -129,7 +129,7 @@ def validate_local_version(expected: str) -> int:
 
 def main() -> int:
     """Validate managed, documented, and local uv versions are fully aligned."""
-    lint_version, pytest_version, docker_version, setup_version = (
+    lint_version, pytest_version, docker_version, documented_version = (
         read_managed_versions()
     )
 
@@ -144,9 +144,9 @@ def main() -> int:
             "Expected uv version was not resolved after alignment check."
         )
 
-    setup_status = validate_setup_version(expected, setup_version)
-    if setup_status != 0:
-        return setup_status
+    documented_status = validate_documented_version(expected, documented_version)
+    if documented_status != 0:
+        return documented_status
 
     local_status = validate_local_version(expected)
     if local_status != 0:

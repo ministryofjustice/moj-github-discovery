@@ -91,7 +91,7 @@ uv run pytest tests/test_integration.py -m integration -o addopts='' -v
 - Do not update uv pins in only one place.
 - Prefer Renovate PRs for uv-related updates.
 - If a manual bump is needed, update all uv pin locations together: `.github/workflows/lint.yml` (`uv-version`), `.github/workflows/pytest.yml` (`uv-version`),
-`docker-audit-cli/Dockerfile` (`uv==...`), `.pre-commit-config.yaml` (`uv-pre-commit` `rev`), and `docs/setup.md` (documented expected uv version).
+`docker-audit-cli/Dockerfile` (`uv==...`), `.pre-commit-config.yaml` (`uv-pre-commit` `rev`), and `docs/uv-management.md` (documented expected uv version).
 - Preserve SHA pinning for GitHub Action refs and Docker image digests.
 
 When uv pins are bumped, contributors should upgrade local uv and verify parity with `uv --version`.
