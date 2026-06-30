@@ -94,6 +94,9 @@ uv run pytest tests/test_integration.py -m integration -o addopts='' -v
 `docker-audit-cli/Dockerfile` (`uv==...`), `.pre-commit-config.yaml` (`uv-pre-commit` `rev`), and `docs/setup.md` (documented expected uv version).
 - Preserve SHA pinning for GitHub Action refs and Docker image digests.
 
+When uv pins are bumped, contributors should upgrade local uv and verify parity with `uv --version`.
+If pre-commit still reports an older local uv after `pip --user` install, update PATH precedence so `$HOME/.local/bin` resolves before Homebrew binaries.
+
 ## Pull Request Checklist
 
 - Tests pass locally (`pytest -q`).
