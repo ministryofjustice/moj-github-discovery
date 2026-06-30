@@ -16,6 +16,8 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 
 [Setup Docs](./docs/setup.md)
 
+[Security Alert Check Docs](./docs/security_alert_checking.md)
+
 For guidance on extending the core module and contributing changes, see
 [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 
