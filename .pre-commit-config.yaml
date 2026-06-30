@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/ministryofjustice/devsecops-hooks
-    rev: v1.6.0
+    rev: b5f1f47c014ac21cf0a68c469a1b378f23893d0c # v1.6.0
     hooks:
       - id: baseline
         name: Ministry of Justice - Security scan
@@ -26,7 +26,7 @@ repos:
         pass_filenames: false
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: 6fec9b7edb08fd9989088709d864a7826dc74e80 # v0.15.12
     hooks:
       - id: ruff-check
         name: Ruff Check
