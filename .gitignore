@@ -37,7 +37,7 @@ node_modules
 *.pem
 
 internal/
-output/
+outputs/
 
 # Local Docker secret env for audit CLI POC
 docker-audit-cli/.env

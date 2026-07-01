@@ -63,11 +63,14 @@ def run(
 
     print(sub_section_break, file=sys.stderr)
 
-    try:
-        repo_list = load_repo_list_file(repo_file)
-    except Exception as exc:
-        print(f"Failed to read repo file: {exc}", file=sys.stderr)
-        sys.exit(2)
+    if kwargs.get("repos"):
+        repo_list = kwargs["repos"]
+    else:
+        try:
+            repo_list = load_repo_list_file(repo_file)
+        except Exception as exc:
+            print(f"Failed to read repo file: {exc}", file=sys.stderr)
+            sys.exit(2)
 
     if repo_limit is not None:
         if repo_limit < 0:

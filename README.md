@@ -83,8 +83,7 @@ collection, storage, and report shaping.
   - `org_security_posture`
 - `--all` - Trigger all the scripts in sequence
   - **note:** this will take a significant amount of time due to rate limiting, consider running on an extremely small subset of repos if testing
-- `--repo` - Specify a single repository to target in the form `owner/repo` - currently only applies to `alert_metrics`
-- `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - currently only applies to `github_workflow`
+- `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - does not apply to `org_security_posture`
 
 ### Notes
 
@@ -110,13 +109,13 @@ uv run audit-cli --scripts list_repos
 uv run audit-cli --scripts alert_metrics lfs_script --auth pat
 
 # Run a given script with a custom config file
-uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml
+uv run audit-cli --scripts list_repos--config-file config/audit_config.yaml
 
-# Run github_workflow.py against a specific set of repos
-uv run audit-cli --scripts github_workflow --repos ministryofjustice/<repo1> ministryofjustice/<repo2> 
+# Run github_workflow against a specific set of repos
+uv run audit-cli --scripts github_workflow --repos ministryofjustice/<repo1> ministryofjustice/<repo2>
 
-# Run alert_metrics against a specific repo
-uv run audit-cli --scripts alert_metrics --repo ministryofjustice/<repo name>
+# Run alert_metrics against a single repo
+uv run audit-cli --scripts alert_metrics --repos ministryofjustice/<repo name>
 ```
 
 ### Virtual Environment (Venv)
@@ -167,6 +166,10 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --a
 ```bash
 # Audit all repos from file
 uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --auth app
+
+# Run script against a single repository
+uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --repos ministryofjustice/example-repo
+
 ```
 
 ### 2. `archive_repos.py` - Find Archive Candidates
@@ -215,6 +218,9 @@ uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --aut
 ```bash
 # Export archive candidates to CSV using specific config parameters
 uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --auth pat
+
+# Run script against a single repository
+uv run audit-cli --scripts archive_repos --config-file path/to/config.yaml --repos ministryofjustice/example-repo
 ```
 
 ### 3. `org_security_posture.py` - Audit Organisation Security Posture
@@ -427,7 +433,8 @@ uv run audit-cli --scripts alert_metrics [options]
 uv run audit-cli --scripts alert_metrics --config-file config/audit_config.yaml --auth pat
 
 # Run script against single repository
-uv run audit-cli --scripts alert_metrics --config-file config/audit_config.yaml --repo ministryofjustice/example-repo
+uv run audit-cli --scripts alert_metrics --config-file config/audit_config.yaml --repos ministryofjustice/example-repo
+
 ```
 
 ### 8. `lfs_script.py` - Assess for Unwanted Large Files within GitHub
@@ -459,6 +466,9 @@ uv run audit-cli --scripts lfs_script --config-file config/audit_config.yaml --a
 ```bash
 # Run the LFS analysis
 uv run audit-cli --scripts lfs_script
+
+# Run script against a single repository
+uv run audit-cli --scripts lfs_script --repos ministryofjustice/example-repo
 ```
 
 ## Database Schema

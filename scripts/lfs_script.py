@@ -111,17 +111,18 @@ def run(
     print(sub_section_break, file=sys.stderr)
 
     # Ensure the repo list file exists
-    if not os.path.exists(repo_list_file):
-        print(
-            f"<LFS Analysis> ERROR: Missing repo list file: {repo_list_file}",
-            file=sys.stderr,
-        )
-        raise FileNotFoundError(f"Missing repo list file: {repo_list_file}")
-
-    # Load the list of repositories from the YAML file
-    print("<LFS Analysis> Loading repository list from YAML file", file=sys.stderr)
-    repos = load_repo_list_file(repo_list_file)
-    print(f"<LFS Analysis> Loaded {len(repos)} repositories", file=sys.stderr)
+    if kwargs.get("repos"):
+        repos = kwargs["repos"]
+    else:
+        if not os.path.exists(repo_list_file):
+            print(
+                f"<LFS Analysis> ERROR: Missing repo list file: {repo_list_file}",
+                file=sys.stderr,
+            )
+            raise FileNotFoundError(f"Missing repo list file: {repo_list_file}")
+        print("<LFS Analysis> Loading repository list from YAML file", file=sys.stderr)
+        repos = load_repo_list_file(repo_list_file)
+        print(f"<LFS Analysis> Loaded {len(repos)} repositories", file=sys.stderr)
 
     # Set up storage and collector for fetching repo data
     print("<LFS Analysis> Setting up storage and collector", file=sys.stderr)
