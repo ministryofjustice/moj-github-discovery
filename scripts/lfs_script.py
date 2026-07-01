@@ -111,9 +111,7 @@ def run(
     print(sub_section_break, file=sys.stderr)
 
     # Ensure the repo list file exists
-    if kwargs.get("repo"):
-        repos = [kwargs["repo"]]
-    elif kwargs.get("repos"):
+    if kwargs.get("repos"):
         repos = kwargs["repos"]
     else:
         if not os.path.exists(repo_list_file):

@@ -13,7 +13,6 @@ def test_parse_args_defaults():
     assert args.config_file is None
     assert args.scripts is None
     assert not args.all
-    assert args.repo is None
     assert args.auth is None
 
 
@@ -46,11 +45,6 @@ def test_parse_args_config_file(tmp_path):
     assert args.config_file == custom_config
 
 
-def test_parse_args_repo():
-    args = _parse_args(["--scripts", "alert_metrics", "--repo", "owner/repo"])
-    assert args.repo == "owner/repo"
-
-
 def test_parse_args_repos():
     args = _parse_args(
         ["--scripts", "github_workflow", "--repos", "owner/repo1", "owner/repo2"]
@@ -66,23 +60,6 @@ def test_no_scripts_or_all_exits(tmp_path):
     config_file.write_text("dummy: config")
     with pytest.raises(SystemExit) as exc_info:
         main(["--config-file", str(config_file)])
-    assert exc_info.value.code != 0
-
-
-def test_repo_arg_rejected_for_org_security_posture(tmp_path):
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text("dummy: config")
-    with pytest.raises(SystemExit) as exc_info:
-        main(
-            [
-                "--config-file",
-                str(config_file),
-                "--scripts",
-                "org_security_posture",
-                "--repo",
-                "owner/repo",
-            ]
-        )
     assert exc_info.value.code != 0
 
 
@@ -146,32 +123,6 @@ def test_multiple_scripts_execution(tmp_path):
     mock_scripts["github_workflow"].run.assert_called_once()
 
 
-def test_repo_kwarg_passed_to_alert_metrics(tmp_path):
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text("dummy: config")
-
-    mock_scripts = _make_mock_scripts()
-
-    with (
-        patch("main.SCRIPTS", mock_scripts),
-        patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("outputs", "internal")),
-    ):
-        main(
-            [
-                "--config-file",
-                str(config_file),
-                "--scripts",
-                "alert_metrics",
-                "--repo",
-                "owner/repo",
-            ]
-        )
-
-    call_kwargs = mock_scripts["alert_metrics"].run.call_args.kwargs
-    assert call_kwargs.get("repo") == "owner/repo"
-
-
 def test_repos_kwarg_passed_to_alert_metrics(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
@@ -196,31 +147,6 @@ def test_repos_kwarg_passed_to_alert_metrics(tmp_path):
         )
     call_kwargs = mock_scripts["alert_metrics"].run.call_args.kwargs
     assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
-
-
-def test_repo_kwarg_passed_to_github_workflow(tmp_path):
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text("dummy: config")
-
-    mock_scripts = _make_mock_scripts()
-
-    with (
-        patch("main.SCRIPTS", mock_scripts),
-        patch("main.load_audit_config"),
-        patch("main.base_directory_setup", return_value=("outputs", "internal")),
-    ):
-        main(
-            [
-                "--config-file",
-                str(config_file),
-                "--scripts",
-                "github_workflow",
-                "--repo",
-                "owner/repo",
-            ]
-        )
-    call_kwargs = mock_scripts["github_workflow"].run.call_args.kwargs
-    assert call_kwargs.get("repo") == "owner/repo"
 
 
 def test_repos_kwarg_passed_to_github_workflow(tmp_path):
@@ -250,7 +176,7 @@ def test_repos_kwarg_passed_to_github_workflow(tmp_path):
     assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
 
 
-def test_repo_kwarg_passed_to_list_repos(tmp_path):
+def test_repos_kwarg_passed_to_list_repos(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
 
@@ -267,15 +193,16 @@ def test_repo_kwarg_passed_to_list_repos(tmp_path):
                 str(config_file),
                 "--scripts",
                 "list_repos",
-                "--repo",
-                "owner/repo",
+                "--repos",
+                "owner/repo1",
+                "owner/repo2",
             ]
         )
     call_kwargs = mock_scripts["list_repos"].run.call_args.kwargs
-    assert call_kwargs.get("repo") == "owner/repo"
+    assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
 
 
-def test_repo_kwarg_passed_to_archive_repos(tmp_path):
+def test_repos_kwarg_passed_to_archive_repos(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
 
@@ -292,15 +219,16 @@ def test_repo_kwarg_passed_to_archive_repos(tmp_path):
                 str(config_file),
                 "--scripts",
                 "archive_repos",
-                "--repo",
-                "owner/repo",
+                "--repos",
+                "owner/repo1",
+                "owner/repo2",
             ]
         )
     call_kwargs = mock_scripts["archive_repos"].run.call_args.kwargs
-    assert call_kwargs.get("repo") == "owner/repo"
+    assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
 
 
-def test_repo_kwarg_passed_to_lfs_script(tmp_path):
+def test_repos_kwarg_passed_to_lfs_script(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("dummy: config")
 
@@ -317,12 +245,13 @@ def test_repo_kwarg_passed_to_lfs_script(tmp_path):
                 str(config_file),
                 "--scripts",
                 "lfs_script",
-                "--repo",
-                "owner/repo",
+                "--repos",
+                "owner/repo1",
+                "owner/repo2",
             ]
         )
     call_kwargs = mock_scripts["lfs_script"].run.call_args.kwargs
-    assert call_kwargs.get("repo") == "owner/repo"
+    assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
 
 
 # Summary / Exit Code Tests

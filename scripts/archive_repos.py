@@ -396,9 +396,7 @@ def run(
 
     print("Starting repository list collection...", file=sys.stderr)
 
-    if kwargs.get("repo"):
-        repo_list = [kwargs["repo"]]
-    elif kwargs.get("repos"):
+    if kwargs.get("repos"):
         repo_list = kwargs["repos"]
     elif use_cache:
         print("Loading repository list from cache...", file=sys.stderr)

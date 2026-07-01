@@ -66,7 +66,8 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Unified entrypoint for running one or more GitHub audit scripts using the shared YAML config."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--scripts",
@@ -93,11 +94,6 @@ def _parse_args(argv=None) -> argparse.Namespace:
         help="Select GitHub authentication method explicitly",
     )
     parser.add_argument(
-        "--repo",
-        default=None,
-        help="Optionally specify a single repository to target in the format owner/repo. Does not apply to org_security_posture.",
-    )
-    parser.add_argument(
         "--repos",
         nargs="+",
         help="Specific repos to scan, e.g. owner/repo owner/repo. Does not apply to org_security_posture.",
@@ -121,14 +117,6 @@ def main(argv=None) -> None:
         sys.exit(1)
 
     # Script-Specific Argument Validation
-    if args.repo and "org_security_posture" in (args.scripts or []) and not args.all:
-        print(
-            "The --repo argument does not apply to org_security_posture. "
-            "This script operates at org level and does not support single repo targeting.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     if args.repos and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
             "The --repos argument does not apply to org_security_posture. "
@@ -167,8 +155,6 @@ def main(argv=None) -> None:
         try:
             # Prepare kwargs for scripts that require specific CLI args
             kwargs = {}
-            if args.repo and name != "org_security_posture":
-                kwargs["repo"] = args.repo
             if args.repos and name != "org_security_posture":
                 kwargs["repos"] = args.repos
             # Pass the global config, auth method, base directories, and any script-specific kwargs

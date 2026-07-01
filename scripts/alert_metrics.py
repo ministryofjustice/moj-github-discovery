@@ -176,14 +176,7 @@ def run(
 
     # Configure GitHub connection and gather Repo Information
     client = GitHubHttpClient(auth_method=auth)
-    if kwargs.get("repo"):
-        print(f"Scanning single repository: {kwargs['repo']}")
-        repos = [kwargs["repo"]]
-        # For single repo, build archive status lookup (may use org listing + per-repo fallback)
-        archive_status_lookup = build_archive_status_lookup(
-            client, github_organization, repos, pre_fetched_status=None
-        )
-    elif kwargs.get("repos"):
+    if kwargs.get("repos"):
         repos = kwargs["repos"]
         archive_status_lookup = build_archive_status_lookup(
             client, github_organization, repos, pre_fetched_status=None

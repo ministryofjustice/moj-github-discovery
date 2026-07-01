@@ -63,9 +63,7 @@ def run(
 
     print(sub_section_break, file=sys.stderr)
 
-    if kwargs.get("repo"):
-        repo_list = [kwargs["repo"]]
-    elif kwargs.get("repos"):
+    if kwargs.get("repos"):
         repo_list = kwargs["repos"]
     else:
         try:
