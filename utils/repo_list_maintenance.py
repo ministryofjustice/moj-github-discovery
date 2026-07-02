@@ -60,6 +60,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Remove wrong-org and missing repos from the repo file",
     )
+    parser.add_argument(
+        "--auth",
+        choices=["pat", "app", "cli"],
+        help="Authentication method for GitHub API (default: pat)",
+    )
     return parser.parse_args()
 
 

@@ -122,6 +122,7 @@ class BranchProtection(BaseModel):
     """Classic branch protection status and active settings."""
 
     default_branch_protected: bool = False
+    branch_protection_enabled: bool = False
     protection_settings: list[str] = Field(default_factory=list)
     enforce_admins_enabled: bool = False
     dismiss_stale_reviews: bool = False
@@ -135,6 +136,7 @@ class BranchProtection(BaseModel):
 class RepoRulesetsData(BaseModel):
     """Repository-level rulesets targeting the default branch."""
 
+    has_active_rulesets: bool = False
     enforce_admins: bool = False
     dismiss_stale_reviews: bool = False
     require_code_owner_reviews: bool = False

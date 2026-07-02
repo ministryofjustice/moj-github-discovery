@@ -109,6 +109,45 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
     owner = full_name.split("/", 1)[0] if "/" in full_name else None
     list_flags = flags_for_list(data)
 
+    # Resolve Compliance Method (Branch Protection vs Rulesets) for the default branch
+    compliance_method = "none"
+    if branch and branch.branch_protection_enabled:
+        compliance_method = "branch_protection"
+    elif repo_rulesets and repo_rulesets.has_active_rulesets:
+        compliance_method = "rulesets"
+
+    # Resolve Compliance Method-Specific Flags
+    if compliance_method == "branch_protection":
+        enforce_admins = branch.enforce_admins_enabled if branch else None
+        dismiss_stale_reviews = branch.dismiss_stale_reviews if branch else None
+        require_code_owner_reviews = (
+            branch.require_code_owner_reviews if branch else None
+        )
+        required_approving_review_count = (
+            branch.required_approving_review_count if branch else None
+        )
+        required_signatures = branch.required_signatures_enabled if branch else None
+    elif compliance_method == "rulesets":
+        enforce_admins = repo_rulesets.enforce_admins if repo_rulesets else None
+        dismiss_stale_reviews = (
+            repo_rulesets.dismiss_stale_reviews if repo_rulesets else None
+        )
+        require_code_owner_reviews = (
+            repo_rulesets.require_code_owner_reviews if repo_rulesets else None
+        )
+        required_approving_review_count = (
+            repo_rulesets.required_approving_review_count if repo_rulesets else None
+        )
+        required_signatures = (
+            repo_rulesets.required_signatures if repo_rulesets else None
+        )
+    else:
+        enforce_admins = False
+        dismiss_stale_reviews = False
+        require_code_owner_reviews = False
+        required_approving_review_count = 0
+        required_signatures = False
+
     return {
         "org": owner,
         "repo": repo.name if repo else full_name,
@@ -135,37 +174,19 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         "default_branch_protected": (
             branch.default_branch_protected if branch else None
         ),
+        "compliance_method": compliance_method,
+        "branch_protection_enabled": branch.branch_protection_enabled
+        if branch
+        else None,
+        "has_active_rulesets": repo_rulesets.has_active_rulesets
+        if repo_rulesets
+        else None,
         "protection_settings": branch.protection_settings if branch else None,
-        "branch_protection_enforce_admins": (
-            branch.enforce_admins_enabled if branch else None
-        ),
-        "branch_protection_dismiss_stale_reviews": (
-            branch.dismiss_stale_reviews if branch else None
-        ),
-        "branch_protection_require_code_owner_reviews": (
-            branch.require_code_owner_reviews if branch else None
-        ),
-        "branch_protection_required_approving_review_count": (
-            branch.required_approving_review_count if branch else None
-        ),
-        "branch_protection_required_signatures": (
-            branch.required_signatures_enabled if branch else None
-        ),
-        "ruleset_enforce_admins": (
-            repo_rulesets.enforce_admins if repo_rulesets else None
-        ),
-        "ruleset_dismiss_stale_reviews": (
-            repo_rulesets.dismiss_stale_reviews if repo_rulesets else None
-        ),
-        "ruleset_require_code_owner_reviews": (
-            repo_rulesets.require_code_owner_reviews if repo_rulesets else None
-        ),
-        "ruleset_required_approving_review_count": repo_rulesets.required_approving_review_count
-        if repo_rulesets
-        else None,
-        "ruleset_required_signatures": repo_rulesets.required_signatures
-        if repo_rulesets
-        else None,
+        "enforce_admin_protection": enforce_admins,
+        "dismiss_stale_reviews": dismiss_stale_reviews,
+        "require_code_owner_reviews": require_code_owner_reviews,
+        "required_approving_review_count": required_approving_review_count,
+        "required_signatures": required_signatures,
         "codeowners": codeowners.present if codeowners else None,
         "codeowners_path": codeowners.path if codeowners else None,
         "flags": ", ".join(list_flags),
@@ -245,7 +266,7 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
 def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     """Build the summary metrics table used in list_repos outputs."""
     if df.empty:
-        values = [0] * 8
+        values = [0] * 10
     else:
         values = [
             len(df),
@@ -256,6 +277,8 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
             int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
             int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
             int((~df["default_branch_protected"].fillna(False)).sum()),
+            int(df["branch_protection_enabled"].fillna(False).sum()),
+            int(df["has_active_rulesets"].fillna(False).sum()),
         ]
 
     return pd.DataFrame(
@@ -269,6 +292,8 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
                 "repos_with_secret_alerts",
                 "repos_with_code_scanning_alerts",
                 "repos_unprotected_default_branch",
+                "repos_using_classic_branch_protection",
+                "repos_with_active_rulesets",
             ],
             "value": values,
         }

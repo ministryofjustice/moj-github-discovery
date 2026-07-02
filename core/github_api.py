@@ -497,6 +497,8 @@ class BranchProtectionEndpoint(BaseEndpoint):
             protected = bool(branch.get("protected", False))
             settings: list[str] = []
             bp = branch.get("protection", {})
+            if not bp.get("enabled"):
+                return BranchProtection(default_branch_protected=protected)
             if bp.get("required_status_checks"):
                 settings.append("required_status_checks")
             if bp.get("required_pull_request_reviews"):
@@ -579,6 +581,7 @@ class BranchProtectionEndpoint(BaseEndpoint):
                     pass
 
             return BranchProtection(
+                branch_protection_enabled=True,
                 default_branch_protected=protected,
                 protection_settings=settings,
                 enforce_admins_enabled=enforce_admins_enabled,
@@ -616,6 +619,7 @@ class RepoRulesetsEndpoint(BaseEndpoint):
             default_branch = repo_details.default_branch if repo_details else "main"
 
             # Aggregate protection settings from all matching rulesets
+            has_active_rulesets = False
             enforce_admins = False
             dismiss_stale_reviews = False
             require_code_owner_reviews = False
@@ -632,6 +636,17 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                 conditions = ruleset.get("conditions", {})
                 ref_name = conditions.get("ref_name", {})
                 includes = ref_name.get("include", [])
+
+                # Skip rulesets that don't target the default branch
+                # Handle explicit branch name, negated branch name (~branch), and special ~DEFAULT_BRANCH placeholder
+                if includes:
+                    targets_default_branch = (
+                        default_branch in includes
+                        or f"~{default_branch}" in includes
+                        or "~DEFAULT_BRANCH" in includes
+                    )
+                    if not targets_default_branch:
+                        continue
 
                 ruleset_id = ruleset.get("id")
                 if not ruleset_id:
@@ -652,6 +667,8 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                     for rule in rules:
                         if not isinstance(rule, dict):
                             continue
+
+                        has_active_rulesets = True
 
                         rule_type = rule.get("type")
                         if rule_type == "enforce_admins":
@@ -676,6 +693,7 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                     continue
 
             result = RepoRulesetsData(
+                has_active_rulesets=has_active_rulesets,
                 enforce_admins=enforce_admins,
                 dismiss_stale_reviews=dismiss_stale_reviews,
                 require_code_owner_reviews=require_code_owner_reviews,

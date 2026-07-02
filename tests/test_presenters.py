@@ -23,8 +23,10 @@ class TestBuildRepoSummaryTable:
             "repos_with_secret_alerts",
             "repos_with_code_scanning_alerts",
             "repos_unprotected_default_branch",
+            "repos_using_classic_branch_protection",
+            "repos_with_active_rulesets",
         ]
-        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0]
+        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     def test_counts_non_empty_dataframe(self):
         df = pd.DataFrame(
@@ -36,6 +38,8 @@ class TestBuildRepoSummaryTable:
                     "secret_scanning_alerts": 0,
                     "code_scanning_alerts": 0,
                     "default_branch_protected": True,
+                    "branch_protection_enabled": True,
+                    "has_active_rulesets": False,
                 },
                 {
                     "private": True,
@@ -44,6 +48,8 @@ class TestBuildRepoSummaryTable:
                     "secret_scanning_alerts": 2,
                     "code_scanning_alerts": 3,
                     "default_branch_protected": False,
+                    "branch_protection_enabled": False,
+                    "has_active_rulesets": False,
                 },
             ]
         )
@@ -59,6 +65,8 @@ class TestBuildRepoSummaryTable:
         assert metrics["repos_with_secret_alerts"] == 1
         assert metrics["repos_with_code_scanning_alerts"] == 1
         assert metrics["repos_unprotected_default_branch"] == 1
+        assert metrics["repos_using_classic_branch_protection"] == 1
+        assert metrics["repos_with_active_rulesets"] == 0
 
 
 class TestBuildDashboardDataframe:
