@@ -335,7 +335,10 @@ def _compute_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_datetime(out[col], errors="coerce", utc=True)
 
-    if "last_pushed_at" in out.columns:
+    if "last_pushed_at" in out.columns and "last_push_activity" in out.columns:
+        push_ts = out["last_pushed_at"].combine_first(out["last_push_activity"])
+        out["days_since_push"] = (now - push_ts).dt.days
+    elif "last_pushed_at" in out.columns:
         out["days_since_push"] = (now - out["last_pushed_at"]).dt.days
     elif "last_push_activity" in out.columns:
         out["days_since_push"] = (now - out["last_push_activity"]).dt.days
