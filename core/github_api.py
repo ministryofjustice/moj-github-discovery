@@ -975,6 +975,7 @@ class DefaultBranchCommitEndpoint(BaseEndpoint):
     ) -> DefaultBranchCommitData:
         try:
             from urllib.parse import quote
+
             default_branch = quote(
                 (repo_details.default_branch if repo_details else "main"),
                 safe="",
