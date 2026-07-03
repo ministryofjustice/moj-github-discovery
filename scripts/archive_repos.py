@@ -42,12 +42,15 @@ def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
     # Preserve old behavior as closely as possible: process stale repos first.
     repo_rows.sort(
         key=lambda row: (
-            row[1].default_branch_commit.last_pushed_at
-            if row[1].default_branch_commit
-            and row[1].default_branch_commit.last_pushed_at
-            else row[1].repo_details.pushed_at
-            if row[1].repo_details
-            else "",
+            (
+                (
+                    row[1].default_branch_commit.last_pushed_at
+                    if row[1].default_branch_commit
+                    and row[1].default_branch_commit.last_pushed_at
+                    else row[1].repo_details.pushed_at if row[1].repo_details else ""
+                )
+                or "",
+            ),
             row[0],
         )
     )
