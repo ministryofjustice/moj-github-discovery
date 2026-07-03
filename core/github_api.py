@@ -974,7 +974,11 @@ class DefaultBranchCommitEndpoint(BaseEndpoint):
         repo_details: RepoDetails | None = None,
     ) -> DefaultBranchCommitData:
         try:
-            default_branch = repo_details.default_branch if repo_details else "main"
+            from urllib.parse import quote
+            default_branch = quote(
+                (repo_details.default_branch if repo_details else "main"),
+                safe="",
+            )
             commits = self.client.get(
                 f"/repos/{owner}/{repo}/commits?sha={default_branch}&per_page=1"
             )
