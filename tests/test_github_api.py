@@ -15,6 +15,7 @@ from core.github_api import (
     CodeownersEndpoint,
     CodeSearchEndpoint,
     CommunityProfileEndpoint,
+    DefaultBranchCommitEndpoint,
     DependencyGraphEndpoint,
     ForkTemplateEndpoint,
     GetRepoTreeEndpoint,
@@ -395,7 +396,7 @@ class TestGetRepoTreeEndpoint:
 
 class TestEndpointRegistries:
     def test_repo_endpoints_count(self):
-        assert len(REPO_ENDPOINTS) == 10
+        assert len(REPO_ENDPOINTS) == 11
 
     def test_org_endpoints_count(self):
         assert len(ORG_ENDPOINTS) == 4
@@ -892,6 +893,38 @@ class TestCodeSearchEndpoint:
         client = MockHttpClient()
         result = CodeSearchEndpoint(client).fetch("o", "r")
         assert result.items == []
+
+
+# ── DefaultBranchCommitEndpoint ──────────────────────────────────────
+
+
+class TestDefaultBranchCommitEndpoint:
+    def test_fetch_returns_last_pushed_at(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/repo/commits?sha=main&per_page=1": [
+                    {"commit": {"committer": {"date": "2026-07-02T10:36:34Z"}}}
+                ]
+            }
+        )
+        result = DefaultBranchCommitEndpoint(client).fetch(
+            "org",
+            "repo",
+            repo_details=RepoDetails(
+                full_name="org/repo", name="repo", default_branch="main"
+            ),
+        )
+        assert result.last_pushed_at == "2026-07-02T10:36:34Z"
+
+    def test_fetch_returns_none_when_no_commits(self):
+        client = MockHttpClient({"/repos/org/repo/commits?sha=main&per_page=1": []})
+        result = DefaultBranchCommitEndpoint(client).fetch("org", "repo")
+        assert result.last_pushed_at is None
+
+    def test_fetch_returns_none_on_error(self):
+        client = MockHttpClient()
+        result = DefaultBranchCommitEndpoint(client).fetch("org", "repo")
+        assert result.last_pushed_at is None
 
 
 # ── OrgMembersEndpoint ────────────────────────────────────────────────

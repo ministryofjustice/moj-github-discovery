@@ -42,7 +42,12 @@ def _list_repos_from_storage(org: str, storage: SqliteRepoStorage) -> list[str]:
     # Preserve old behavior as closely as possible: process stale repos first.
     repo_rows.sort(
         key=lambda row: (
-            row[1].repo_details.pushed_at if row[1].repo_details else "",
+            row[1].default_branch_commit.last_pushed_at
+            if row[1].default_branch_commit
+            and row[1].default_branch_commit.last_pushed_at
+            else row[1].repo_details.pushed_at
+            if row[1].repo_details
+            else "",
             row[0],
         )
     )
@@ -272,7 +277,10 @@ def _build_row(org: str, full_name: str, data: RepoData) -> dict[str, Any]:
         if data.repo_archived_at
         else None,
         "active_references": sorted(active_references),
-        "pushed_at": repo.pushed_at if repo else None,
+        "last_pushed_at": data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None,
+        "last_push_activity": repo.pushed_at if repo else None,
         "default_branch": repo.default_branch if repo else None,
         "language": repo.language if repo else None,
         "open_issues": repo.open_issues_count if repo else None,
@@ -314,18 +322,32 @@ def _compute_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     now = pd.Timestamp.now("UTC")
 
-    for col in ("pushed_at", "created_at", "updated_at", "archived_at"):
+    for col in (
+        "last_pushed_at",
+        "last_push_activity",
+        "created_at",
+        "updated_at",
+        "archived_at",
+    ):
         if col in out.columns:
             out[col] = pd.to_datetime(out[col], errors="coerce", utc=True)
 
-    if "pushed_at" in out.columns:
-        out["days_since_push"] = (now - out["pushed_at"]).dt.days
+    if "last_pushed_at" in out.columns:
+        out["days_since_push"] = (now - out["last_pushed_at"]).dt.days
+    elif "last_push_activity" in out.columns:
+        out["days_since_push"] = (now - out["last_push_activity"]).dt.days
     if "created_at" in out.columns:
         out["age_days"] = (now - out["created_at"]).dt.days
     if "archived_at" in out.columns:
         out["days_since_archived"] = (now - out["archived_at"]).dt.days
 
-    for col in ("pushed_at", "created_at", "updated_at", "archived_at"):
+    for col in (
+        "last_pushed_at",
+        "last_push_activity",
+        "created_at",
+        "updated_at",
+        "archived_at",
+    ):
         if col in out.columns:
             out[col] = out[col].dt.strftime("%Y-%m-%d %H:%M:%S")
 
