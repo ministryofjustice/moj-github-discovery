@@ -47,6 +47,7 @@ from core.models import (
     CodeownersData,
     CredentialPostureFinding,
     CommunityProfile,
+    DefaultBranchCommitData,
     DependencyGraphData,
     ForkTemplateData,
     LatestWorkflowRunData,
@@ -959,6 +960,40 @@ class CodeSearchEndpoint(BaseEndpoint):
             return ReferenceData()
 
 
+class DefaultBranchCommitEndpoint(BaseEndpoint):
+    """Most recent commit date on the default branch only."""
+
+    @property
+    def name(self) -> str:
+        return "default_branch_commit"
+
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> DefaultBranchCommitData:
+        try:
+            from urllib.parse import quote
+
+            default_branch = quote(
+                (repo_details.default_branch if repo_details else "main"),
+                safe="",
+            )
+            commits = self.client.get(
+                f"/repos/{owner}/{repo}/commits?sha={default_branch}&per_page=1"
+            )
+            if isinstance(commits, list) and commits:
+                commit = commits[0]
+                last_pushed_at = (
+                    commit.get("commit", {}).get("committer", {}).get("date")
+                )
+                return DefaultBranchCommitData(last_pushed_at=last_pushed_at)
+            return DefaultBranchCommitData()
+        except Exception:
+            return DefaultBranchCommitData()
+
+
 # ── Org-scoped endpoints ──────────────────────────────────────────────
 
 
@@ -1252,6 +1287,7 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
     WorkflowsEndpoint,
     DependencyGraphEndpoint,
     CodeSearchEndpoint,
+    DefaultBranchCommitEndpoint,
 ]
 
 STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
@@ -1263,6 +1299,7 @@ STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
     CodeownersEndpoint,
     ForkTemplateEndpoint,
     WorkflowsEndpoint,
+    DefaultBranchCommitEndpoint,
 ]
 
 ORG_ENDPOINTS: list[type[BaseOrgEndpoint]] = [

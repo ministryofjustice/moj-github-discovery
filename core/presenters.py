@@ -160,7 +160,10 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
             fork_template.is_generated_from_template if fork_template else None
         ),
         "template_source": fork_template.template_source if fork_template else None,
-        "pushed_at": repo.pushed_at if repo else None,
+        "last_pushed_at": data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None,
+        "last_push_activity": repo.pushed_at if repo else None,
         "default_branch": repo.default_branch if repo else None,
         "language": repo.language if repo else None,
         "open_issues": repo.open_issues_count if repo else None,
@@ -215,7 +218,10 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
         "branch_protected": branch.default_branch_protected if branch else None,
         "codeowners": codeowners.present if codeowners else None,
         "flags": ", ".join(dashboard_flags),
-        "pushed_at": repo.pushed_at if repo else "",
+        "last_pushed_at": data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None,
+        "last_push_activity": repo.pushed_at if repo else "",
     }
 
 

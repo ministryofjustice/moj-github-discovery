@@ -84,10 +84,13 @@ class TimestampTransform(BaseTransform):
         now = datetime.now(timezone.utc)
         updates: dict = {}
 
-        if data.repo_details.pushed_at:
-            pushed = datetime.fromisoformat(
-                data.repo_details.pushed_at.replace("Z", "+00:00")
-            )
+        last_pushed_at = (
+            data.default_branch_commit.last_pushed_at
+            if data.default_branch_commit and data.default_branch_commit.last_pushed_at
+            else data.repo_details.pushed_at
+        )
+        if last_pushed_at:
+            pushed = datetime.fromisoformat(last_pushed_at.replace("Z", "+00:00"))
             updates["days_since_push"] = (now - pushed).days
 
         if data.repo_details.created_at:

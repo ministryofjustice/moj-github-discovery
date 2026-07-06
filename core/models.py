@@ -107,6 +107,12 @@ class RepoArchivedAt(BaseModel):
     archived_at: Optional[str] = None
 
 
+class DefaultBranchCommitData(BaseModel):
+    """Most recent commit date on the default branch only."""
+
+    last_pushed_at: Optional[str] = None
+
+
 class AlertData(BaseModel):
     """Open security alert counts for a single repository."""
 
@@ -394,6 +400,7 @@ class RepoData(BaseModel):
     dependency_graph: Optional[DependencyGraphData] = None
     repo_tree: Optional[RepoTreeData] = None
     references: Optional[ReferenceData] = None
+    default_branch_commit: Optional[DefaultBranchCommitData] = None
 
     # Transform-computed fields
     days_since_push: Optional[int] = None
