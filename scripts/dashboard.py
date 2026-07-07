@@ -34,7 +34,7 @@ from core.presenters import (
 from core.storage import SqliteRepoStorage
 
 # Parse arguments
-db_path = "repo_audit.db"
+db_path = "internal/repo_audit.db"
 if "--db" in sys.argv:
     idx = sys.argv.index("--db")
     if idx + 1 < len(sys.argv):
