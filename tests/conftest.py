@@ -49,11 +49,16 @@ class MockHttpClient(BaseHttpClient):
             return self.fixtures[path]
         raise Exception(f"MockHttpClient: no fixture for GET {path}")
 
-    def get_paginated(self, path: str, per_page: int = 100) -> list[Any]:
+    def get_paginated(
+        self, path: str, per_page: int = 100, items_key: str = "items"
+    ) -> list[Any]:
         self.calls.append(("GET_PAGINATED", path))
-        if path in self.fixtures:
-            return self.fixtures[path]
-        raise Exception(f"MockHttpClient: no fixture for GET_PAGINATED {path}")
+        if path not in self.fixtures:
+            raise Exception(f"MockHttpClient: no fixture for GET_PAGINATED {path}")
+        data = self.fixtures[path]
+        if isinstance(data, dict):
+            return data.get(items_key, [])
+        return data
 
     def graphql(
         self,

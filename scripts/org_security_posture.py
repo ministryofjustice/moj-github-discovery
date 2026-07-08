@@ -194,8 +194,16 @@ def run_full_audit(
                 "access": "ok",
                 "total_count": len(org_data["org_webhooks"].installed_apps),
                 "apps": [
-                    {"app_slug": slug}
-                    for slug in org_data["org_webhooks"].installed_apps
+                    {
+                        "app_slug": app.app_slug,
+                        "installation_id": app.installation_id,
+                        "repository_selection": app.repository_selection,
+                        "permissions": ", ".join(
+                            f"{scope}:{level}"
+                            for scope, level in app.permissions.items()
+                        ),
+                    }
+                    for app in org_data["org_webhooks"].installed_apps_detail
                 ],
             },
         }

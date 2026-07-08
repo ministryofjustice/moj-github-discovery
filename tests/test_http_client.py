@@ -493,6 +493,51 @@ class TestGetPaginated:
 
         assert result == [{"id": 1}, {"id": 2}]
 
+    def test_custom_items_key(self):
+        """Some endpoints wrap results under a key other than 'items',
+        e.g. GET /orgs/{org}/installations uses 'installations'."""
+        client = GitHubHttpClient(token="t")
+
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {
+            "total_count": 2,
+            "installations": [{"id": 1}, {"id": 2}],
+        }
+        resp.headers = {}
+
+        with patch.object(client, "_get_session") as mock_sess:
+            mock_sess.return_value.request.return_value = resp
+            result = client.get_paginated(
+                "/orgs/org/installations", items_key="installations"
+            )
+
+        assert result == [{"id": 1}, {"id": 2}]
+
+    def test_custom_items_key_multi_page(self):
+        """Custom items_key should still follow pagination across pages."""
+        client = GitHubHttpClient(token="t")
+
+        resp1 = MagicMock()
+        resp1.raise_for_status.return_value = None
+        resp1.json.return_value = {"installations": [{"id": 1}]}
+        resp1.headers = {
+            "Link": '<https://api.github.com/orgs/org/installations?page=2>; rel="next"'
+        }
+
+        resp2 = MagicMock()
+        resp2.raise_for_status.return_value = None
+        resp2.json.return_value = {"installations": [{"id": 2}]}
+        resp2.headers = {}
+
+        with patch.object(client, "_get_session") as mock_sess:
+            mock_sess.return_value.request.side_effect = [resp1, resp2]
+            result = client.get_paginated(
+                "/orgs/org/installations", items_key="installations"
+            )
+
+        assert result == [{"id": 1}, {"id": 2}]
+
     def test_absolute_url_not_prefixed(self):
         client = GitHubHttpClient(token="t")
 

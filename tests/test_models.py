@@ -16,6 +16,7 @@ from core.models import (
     FieldsConfig,
     FieldType,
     ForkTemplateData,
+    InstalledApp,
     OrgActionsData,
     OrgMembersData,
     OrgRulesetsData,
@@ -318,6 +319,24 @@ class TestOrgModels:
     def test_org_webhooks(self):
         w = OrgWebhooksData(webhooks_count=2, installed_apps=["dependabot", "renovate"])
         assert len(w.installed_apps) == 2
+
+    def test_org_webhooks_installed_apps_detail(self):
+        w = OrgWebhooksData(
+            webhooks_count=1,
+            installed_apps=["renovate"],
+            installed_apps_detail=[
+                InstalledApp(
+                    app_slug="renovate",
+                    installation_id=24703049,
+                    repository_selection="selected",
+                    permissions={"checks": "write", "contents": "write"},
+                )
+            ],
+        )
+        assert len(w.installed_apps_detail) == 1
+        assert w.installed_apps_detail[0].app_slug == "renovate"
+        assert w.installed_apps_detail[0].installation_id == 24703049
+        assert w.installed_apps_detail[0].permissions["checks"] == "write"
 
     def test_org_rulesets_defaults(self):
         r = OrgRulesetsData()

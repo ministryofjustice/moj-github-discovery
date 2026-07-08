@@ -1001,6 +1001,30 @@ class TestOrgWebhooksEndpoint:
         assert result.webhooks_count == 2
         assert result.installed_apps == ["dependabot", "renovate"]
 
+    def test_fetch_captures_app_detail(self):
+        client = MockHttpClient(
+            {
+                "/orgs/o/hooks": [],
+                "/orgs/o/installations": {
+                    "installations": [
+                        {
+                            "app_slug": "renovate",
+                            "id": 24703049,
+                            "repository_selection": "selected",
+                            "permissions": {"checks": "write", "contents": "write"},
+                        },
+                    ],
+                },
+            }
+        )
+        result = OrgWebhooksEndpoint(client).fetch("o")
+        assert len(result.installed_apps_detail) == 1
+        detail = result.installed_apps_detail[0]
+        assert detail.app_slug == "renovate"
+        assert detail.installation_id == 24703049
+        assert detail.repository_selection == "selected"
+        assert detail.permissions["checks"] == "write"
+
 
 # ── OrgRulesetsEndpoint ──────────────────────────────────────────────
 

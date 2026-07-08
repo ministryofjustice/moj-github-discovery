@@ -497,7 +497,9 @@ class GitHubHttpClient(BaseHttpClient):
         url = path if path.startswith("http") else urljoin(self.BASE_URL, path)
         return self._request("GET", url).json()
 
-    def get_paginated(self, path: str, per_page: int = 100) -> list[Any]:
+    def get_paginated(
+        self, path: str, per_page: int = 100, items_key: str = "items"
+    ) -> list[Any]:
         sep = "&" if "?" in path else "?"
         url: str | None = (
             path if path.startswith("http") else urljoin(self.BASE_URL, path)
@@ -512,7 +514,7 @@ class GitHubHttpClient(BaseHttpClient):
                 items.extend(data)
             elif isinstance(data, dict):
                 # Search API wraps results: {"total_count": N, "items": [...]}
-                items.extend(data.get("items", []))
+                items.extend(data.get(items_key, []))
             url = self._next_page_url(resp.headers.get("Link"))
         return items
 
