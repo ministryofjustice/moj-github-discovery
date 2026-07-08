@@ -358,3 +358,17 @@ class TestRepoListCollector:
             "myorg", type="public", sort="full_name", direction="asc"
         )
         assert repos == ["myorg/aaa"]
+
+    def test_prefix_filter(self):
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/abc-one"},
+                    {"full_name": "myorg/ABC-two"},
+                    {"full_name": "myorg/nope"},
+                ],
+            }
+        )
+        collector = RepoListCollector(client=client)
+        repos = collector.collect("myorg", prefix="aBc-")
+        assert repos == ["myorg/abc-one", "myorg/ABC-two"]

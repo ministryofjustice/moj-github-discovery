@@ -85,6 +85,7 @@ def list_org_repos(
     type: Literal["all", "public", "private", "forks", "sources", "member"] = "all",
     sort: Literal["created", "updated", "pushed", "full_name"] = "pushed",
     direction: Literal["asc", "desc"] | None = None,
+    prefix: str | None = None,
 ) -> list[str]:
     """Return a list of ``owner/repo`` strings for all repos in an organisation.
 
@@ -95,12 +96,24 @@ def list_org_repos(
         sort:      Property to sort results by.
         direction: Sort order.  Defaults to ``"asc"`` when *sort* is
                    ``"full_name"``, otherwise ``"desc"`` (GitHub API default).
+        prefix:    Optional repository-name prefix filter (applied to the
+                   name part after ``owner/``).
     """
     params = f"type={type}&sort={sort}"
     if direction is not None:
         params += f"&direction={direction}"
     items = client.get_paginated(f"/orgs/{org}/repos?{params}")
-    return [r["full_name"] for r in items if isinstance(r, dict) and "full_name" in r]
+    repos = [r["full_name"] for r in items if isinstance(r, dict) and "full_name" in r]
+    if not prefix:
+        return repos
+
+    normalized_prefix = prefix.lower()
+
+    return [
+        full_name
+        for full_name in repos
+        if full_name.rsplit("/", 1)[-1].lower().startswith(normalized_prefix)
+    ]
 
 
 def list_org_repos_with_archive_status(

@@ -118,6 +118,32 @@ class TestListOrgRepos:
         list_org_repos("myorg", client)
         assert any("direction" not in call[1] for call in client.calls)
 
+    def test_prefix_filter(self):
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/abc-one"},
+                    {"full_name": "myorg/xyz-two"},
+                    {"full_name": "myorg/abc-three"},
+                ],
+            }
+        )
+        repos = list_org_repos("myorg", client, prefix="abc-")
+        assert repos == ["myorg/abc-one", "myorg/abc-three"]
+
+    def test_prefix_filter_case_insensitive(self):
+        client = MockHttpClient(
+            {
+                "/orgs/myorg/repos?type=all&sort=pushed": [
+                    {"full_name": "myorg/abc-one"},
+                    {"full_name": "myorg/ABC-two"},
+                    {"full_name": "myorg/nope"},
+                ],
+            }
+        )
+        repos = list_org_repos("myorg", client, prefix="AbC-")
+        assert repos == ["myorg/abc-one", "myorg/ABC-two"]
+
 
 # ── list_org_repos_with_archive_status ────────────────────────────
 

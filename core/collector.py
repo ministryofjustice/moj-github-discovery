@@ -360,6 +360,7 @@ class RepoListCollector:
         type: Literal["all", "public", "private", "forks", "sources", "member"] = "all",
         sort: Literal["created", "updated", "pushed", "full_name"] = "pushed",
         direction: Literal["asc", "desc"] | None = None,
+        prefix: str | None = None,
     ) -> list[str]:
         """Return the list of ``owner/repo`` strings for the organisation.
 
@@ -369,6 +370,8 @@ class RepoListCollector:
             sort:      Property to sort results by.
             direction: Sort order.  Defaults to ``"asc"`` when *sort* is
                        ``"full_name"``, otherwise ``"desc"``.
+            prefix:    Optional repository-name prefix filter (applied to the
+                       name part after ``owner/``).
         """
         repos = list_org_repos(
             org,
@@ -376,9 +379,11 @@ class RepoListCollector:
             type=type,
             sort=sort,
             direction=direction,
+            prefix=prefix,
         )
         print(
-            f"Discovered {len(repos)} repo(s) for '{org}' (type={type}, sort={sort})",
+            f"Discovered {len(repos)} repo(s) for '{org}' "
+            f"(type={type}, sort={sort}, prefix={prefix or 'none'})",
             file=sys.stderr,
         )
         return repos

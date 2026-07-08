@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from core.github_api import list_org_repos
+from core.collector import RepoListCollector
 from core.github_client import GitHubHttpClient
 from core.repo_list import load_repo_list_file
 
@@ -64,6 +64,10 @@ def parse_args() -> argparse.Namespace:
         "--auth",
         choices=["pat", "app", "cli"],
         help="Authentication method for GitHub API (default: pat)",
+    )
+    parser.add_argument(
+        "--prefix",
+        help="Optional repository name prefix filter (for example: abc-)",
     )
     return parser.parse_args()
 
@@ -148,6 +152,23 @@ def validate_repo_list(
     return wrong_org, missing
 
 
+def select_repos_to_add(
+    recent_org_repos: list[str],
+    existing_set: set[str],
+    target_count: int,
+    existing_count: int,
+    prefix: str | None,
+) -> list[str]:
+    missing_recent = [repo for repo in recent_org_repos if repo not in existing_set]
+    if prefix:
+        return missing_recent
+
+    needed = target_count - existing_count
+    if needed <= 0:
+        return []
+    return missing_recent[:needed]
+
+
 def main() -> None:
     args = parse_args()
 
@@ -159,14 +180,24 @@ def main() -> None:
     existing_set = set(existing_repos)
 
     client = GitHubHttpClient(auth_method=args.auth)
-    recent_org_repos = list_org_repos(
+    repo_list_collector = RepoListCollector(client=client)
+    recent_org_repos = repo_list_collector.collect(
         args.org,
-        client,
         type="all",
         sort="updated",
         direction="desc",
+        prefix=args.prefix,
     )
-    org_repo_set = set(recent_org_repos)
+    org_repo_set: set[str] = set()
+    if args.mode in {"validate", "both"}:
+        org_repo_set = set(
+            repo_list_collector.collect(
+                args.org,
+                type="all",
+                sort="updated",
+                direction="desc",
+            )
+        )
 
     validation_issues = 0
     if args.mode in {"validate", "both"}:
@@ -212,14 +243,23 @@ def main() -> None:
     if args.mode in {"supplement", "both"}:
         needed = args.target_count - len(existing_repos)
         print(f"Current count: {len(existing_repos)}")
-        print(f"Target count: {args.target_count}")
-        print(f"Needed: {max(0, needed)}")
+        if args.prefix:
+            print(f"Prefix mode active ({args.prefix!r}); ignoring --target-count")
+        else:
+            print(f"Target count: {args.target_count}")
+            print(f"Needed: {max(0, needed)}")
 
-        if needed > 0:
+        if args.prefix or needed > 0:
             missing_recent = [
                 repo for repo in recent_org_repos if repo not in existing_set
             ]
-            repos_to_add = missing_recent[:needed]
+            repos_to_add = select_repos_to_add(
+                recent_org_repos,
+                existing_set,
+                args.target_count,
+                len(existing_repos),
+                args.prefix,
+            )
 
             print(f"Available missing recent repos: {len(missing_recent)}")
             if repos_to_add:

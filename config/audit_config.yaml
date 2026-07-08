@@ -3,7 +3,7 @@
 
 # Global attributes used by all/multiple scripts
 github_organization: "ministryofjustice"
-repo_list_file: "repo_list.yaml"
+repo_list_file: "repo_list_laa.yaml"
 
 
 alert_metrics:
@@ -33,9 +33,9 @@ archive_repos:
 list_repos:
   # Optional override; defaults to list_repos if omitted.
   output_subdir: "list_repos"
-  database_path: "internal/repo_audit.db"
-  output_filename: "list_repos.xlsx"
-  repo_limit: 400
+  database_path: "internal/repo_audit_laa_test.db"
+  output_filename: "list_repos_laa_test.xlsx"
+  repo_limit: null
   resume: true
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
