@@ -305,11 +305,23 @@ class OrgActionsData(BaseModel):
     default_workflow_permissions: Optional[str] = None
 
 
+class InstalledApp(BaseModel):
+    """A single installed GitHub App with its granted permissions."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    app_slug: str = ""
+    installation_id: Optional[int] = None
+    repository_selection: Optional[str] = None
+    permissions: dict[str, str] = Field(default_factory=dict)
+
+
 class OrgWebhooksData(BaseModel):
     """Org webhooks and installed GitHub Apps."""
 
     webhooks_count: int = 0
     installed_apps: list[str] = Field(default_factory=list)
+    installed_apps_detail: list[InstalledApp] = Field(default_factory=list)
 
 
 class OrgRulesetsData(BaseModel):

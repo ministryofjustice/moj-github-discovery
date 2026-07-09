@@ -50,6 +50,7 @@ from core.models import (
     DefaultBranchCommitData,
     DependencyGraphData,
     ForkTemplateData,
+    InstalledApp,
     LatestWorkflowRunData,
     OrgActionsData,
     OrgAuditLogData,
@@ -1239,16 +1240,23 @@ class OrgWebhooksEndpoint(BaseOrgEndpoint):
     def fetch(self, org: str) -> OrgWebhooksData:
         try:
             hooks = self.client.get_paginated(f"/orgs/{org}/hooks")
-            apps = self.client.get(f"/orgs/{org}/installations")
-            app_names = [
-                a.get("app_slug", "")
-                for a in (
-                    apps.get("installations", []) if isinstance(apps, dict) else []
+            installations = self.client.get_paginated(
+                f"/orgs/{org}/installations", items_key="installations"
+            )
+            app_names = [a.get("app_slug", "") for a in installations]
+            app_details = [
+                InstalledApp(
+                    app_slug=a.get("app_slug", ""),
+                    installation_id=a.get("id"),
+                    repository_selection=a.get("repository_selection"),
+                    permissions=a.get("permissions", {}),
                 )
+                for a in installations
             ]
             return OrgWebhooksData(
                 webhooks_count=len(hooks),
                 installed_apps=app_names,
+                installed_apps_detail=app_details,
             )
         except Exception:
             return OrgWebhooksData()

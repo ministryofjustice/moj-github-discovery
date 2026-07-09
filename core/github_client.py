@@ -72,7 +72,9 @@ class BaseHttpClient(ABC):
         """
 
     @abstractmethod
-    def get_paginated(self, path: str, per_page: int = 100) -> list[Any]:
+    def get_paginated(
+        self, path: str, per_page: int = 100, items_key: str = "items"
+    ) -> list[Any]:
         """GET all pages for a paginated endpoint and return a flat list.
 
         Follows ``Link: rel="next"`` headers until the last page.
@@ -80,6 +82,9 @@ class BaseHttpClient(ABC):
         Args:
             path:     API path (may already include query params).
             per_page: Page size to request (GitHub max is 100 for most endpoints).
+            items_key: Key to extract items from when the response is a dict
+                       rather than a list (e.g. ``"installations"`` for
+                       ``/orgs/{org}/installations``). Defaults to ``"items"``.
 
         Returns:
             Concatenated items from all pages.
@@ -497,7 +502,9 @@ class GitHubHttpClient(BaseHttpClient):
         url = path if path.startswith("http") else urljoin(self.BASE_URL, path)
         return self._request("GET", url).json()
 
-    def get_paginated(self, path: str, per_page: int = 100) -> list[Any]:
+    def get_paginated(
+        self, path: str, per_page: int = 100, items_key: str = "items"
+    ) -> list[Any]:
         sep = "&" if "?" in path else "?"
         url: str | None = (
             path if path.startswith("http") else urljoin(self.BASE_URL, path)
@@ -512,7 +519,7 @@ class GitHubHttpClient(BaseHttpClient):
                 items.extend(data)
             elif isinstance(data, dict):
                 # Search API wraps results: {"total_count": N, "items": [...]}
-                items.extend(data.get("items", []))
+                items.extend(data.get(items_key) or [])
             url = self._next_page_url(resp.headers.get("Link"))
         return items
 
