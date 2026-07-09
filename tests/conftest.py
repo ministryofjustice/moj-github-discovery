@@ -31,7 +31,8 @@ class MockHttpClient(BaseHttpClient):
 
     Fixtures should be keyed by API path (e.g. ``"/repos/org/repo"``).
     For ``get()`` the value is the JSON response dict.
-    For ``get_paginated()`` the value is a list of dicts.
+    For ``get_paginated()`` the value is a list of dicts, or a dict
+    wrapping the list under a key matching ``items_key``.
     """
 
     def __init__(

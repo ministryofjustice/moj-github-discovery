@@ -192,7 +192,7 @@ def run_full_audit(
             },
             "github_apps": {
                 "access": "ok",
-                "total_count": len(org_data["org_webhooks"].installed_apps),
+                "total_count": len(org_data["org_webhooks"].installed_apps_detail),
                 "apps": [
                     {
                         "app_slug": app.app_slug,
@@ -200,7 +200,7 @@ def run_full_audit(
                         "repository_selection": app.repository_selection,
                         "permissions": ", ".join(
                             f"{scope}:{level}"
-                            for scope, level in app.permissions.items()
+                            for scope, level in sorted(app.permissions.items())
                         ),
                     }
                     for app in org_data["org_webhooks"].installed_apps_detail
