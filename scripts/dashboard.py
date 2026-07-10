@@ -53,6 +53,7 @@ print(f"Loading data from {db_path}")
 
 
 def _get_storage() -> SqliteRepoStorage:
+    """Get a storage instance for the SQLite database."""
     storage = SqliteRepoStorage(db_path)
     storage.init()
     return storage
@@ -65,6 +66,7 @@ def load_data():
 
 
 def _load_repo_audit_result(full_name: str) -> dict | None:
+    """Load a single repo's audit result from core storage."""
     storage = _get_storage()
     repo_data = storage.read(full_name)
     if repo_data is None:
@@ -74,11 +76,14 @@ def _load_repo_audit_result(full_name: str) -> dict | None:
 
 def run_audit(full_name: str) -> dict:
     """Run a single-repo audit via RepoCollector and map it for the dashboard."""
+
+    # Validate the repo name format
     try:
         owner, repo = full_name.split("/", 1)
     except ValueError:
         return {"error": f"Invalid repository name: {full_name!r}"}
 
+    # Run the audit and handle exceptions
     try:
         storage = _get_storage()
         collector = RepoCollector(
@@ -111,9 +116,10 @@ def get_flag_color(flag_str):
         return {"backgroundColor": "#dc3545", "color": "white"}
 
 
-# Layout
+# Layout for the dashboard
 app.layout = html.Div(
     [
+        # Components and styling for the dashboard
         dcc.Store(
             id="data-store", data=df.to_json(orient="records", date_format="iso")
         ),
@@ -224,6 +230,7 @@ app.layout = html.Div(
 )
 
 
+# Callbacks
 @callback(
     Output("table-container", "children"),
     Input("repo-filter", "value"),
@@ -231,6 +238,7 @@ app.layout = html.Div(
     Input("data-store", "data"),
 )
 def update_table(search, flag_filter, data):
+    """Update the table based on search and flag filters."""
     # Parse the JSON string from the store
     if isinstance(data, str):
         records = json.loads(data)
@@ -747,6 +755,7 @@ def update_detail_panel(selected_repo, audit_data):
     prevent_initial_call=True,
 )
 def on_row_click(n_clicks, current_selected):
+    """Determine which repo row was clicked and update the selected repo store."""
     if not n_clicks or not any(n_clicks):
         return current_selected
 
@@ -774,6 +783,7 @@ def on_row_click(n_clicks, current_selected):
     prevent_initial_call=True,
 )
 def on_audit_click(n_clicks, repo_name):
+    """Handle the audit button click and update the audit data store."""
     if n_clicks == 0 or not repo_name:
         return None, ""
 
@@ -794,6 +804,7 @@ def on_audit_click(n_clicks, repo_name):
 
 
 if __name__ == "__main__":
+    """Run the Dash app."""
     print("\nStarting dashboard at http://localhost:8050")
     print("Press Ctrl+C to stop.\n")
     app.run(debug=True, port=8050)

@@ -41,7 +41,7 @@
       "**/package*.json",
       "**/*.xml",
       "**/*.csv",
-      "repo_list.yaml",
+      "repo_list*.yaml",
       "internal/",
       "output/"
     ],

@@ -70,6 +70,8 @@ def apply_filters(df: pd.DataFrame, filters: list) -> pd.DataFrame:
 
 
 def main():
+    """Main function to parse arguments and display repo audit data."""
+    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="View repo audit data from core storage."
     )
@@ -84,6 +86,7 @@ def main():
     parser.add_argument("--html", help="Optional HTML output path.")
     args = parser.parse_args()
 
+    # Extract arguments
     db_path = args.db
     filters = [parse_filter(raw) for raw in args.filter]
     sort_column = args.sort
@@ -128,7 +131,7 @@ def main():
         file=sys.stderr,
     )
 
-    # Format display columns
+    # Format display columns for table output
     display_df = df[
         [
             "repo",
