@@ -7,40 +7,25 @@ assignees: ''
 
 ---
 
-## 🧑‍💼 User Need
-<!-- Describe the user need using the standard user story format -->
+## 👀 Why are we Doing this?
+<!-- Describe the purpose and value of the work. This can be a combination of: user needs, business needs and/or technical needs alongside the expected impact of the work being complete. An example user need template is provided to optionally complete. -->
 
-**As a**
-**I want**
-**so that**
+- **As a** - **I want** - **So That** -
+-
 
-## 💡 Value / Purpose
-<!-- Describe the value of delivering this story. Does this link to our OKRs? -->
+## 🔧 Engineering Context and Background (Optional)
+<!-- Add technical guidance on any historical engineering context i.e. is there an existing PoC? Does a solution exist that solves some of the problem? Have we agreed any specifics about the implementation? -->
 
-- 
-
-## 🛠️ Description / Context 
-<!-- What should the system do? And how do I achieve it? -->
-
-- 
-
-## 🧪 Testing steps
-<!-- What steps do you need to take to verify this works correctly? -->
-
-- [ ] 
-
-## ✅ Definition of Done
-<!-- What conditions must be met before this story is considered complete -->
-
-- [ ] Document work completed in Developer Experience Team SharePoint
-- [ ] 
-
-## ❓ Additional Information
-<!-- Please add any risks, mitigation, assumptions and constraints -->
-
-- 
+- The solution should align with our teams agreed [Ways of Engineering](https://ministryofjustice.github.io/developer-experience-documentation/documentation/general-information/ways-of-engineering.html#our-ways-of-engineering).
+-
 
 ## 📝 Notes (Optional)
 <!-- Add any extra context, links, discussions, or implementation ideas -->
 
 -
+
+## ✅ Definition of Done
+<!-- What conditions must be met before this story is considered complete -->
+
+- [ ] Document outcome, where appropriate
+- [ ]
