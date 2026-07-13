@@ -4,7 +4,6 @@ about: "\U0001F6E0️ Agreed standard template for creating tickets"
 title: ''
 labels: ''
 assignees: ''
-
 ---
 
 ## 👀 Why are we Doing this?
