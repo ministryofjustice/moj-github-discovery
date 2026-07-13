@@ -43,7 +43,7 @@
       "**/*.csv",
       "repo_list*.yaml",
       "internal/",
-      "output/"
+      "outputs/"
     ],
     "language": "en",
     "noConfigSearch": true,
