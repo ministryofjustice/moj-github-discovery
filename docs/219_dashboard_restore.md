@@ -155,9 +155,12 @@ ministryofjustice/laa-OBIEE Private            Shell      1            4        
 
 ## Development Opportunities
 
+### Short-Term
+
 - [x] Update default arguments to reference new `internal/` directory rather than repository root.
-- [ ] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
 - [ ] PRIVATE = `True/False` -> Visibility: Public/Private/Internal, what's the sitch from repo details's return call if internal?
+- [ ] Is the CLI version 100% necessary at all now? Flags are getting trimmed/cut as well in the output
+- [ ] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
 - [ ] Panels to be extended with info:
   - [ ] Default branch protection
     - [ ] Compliance method
@@ -166,14 +169,15 @@ ministryofjustice/laa-OBIEE Private            Shell      1            4        
   - [ ] Unprotected default branch regardless of visibility
   - [ ] Branch protection compliance
     - [ ] Per-github-community standard flags?
-- [ ] (Optional/Dependent) Does a "public" warning flag need noting if private-by-default becomes apparent.
-- [ ] Filter by specific flags?
 - [ ] How to close a panel - if a new panel's opened it should be front and center for the users
-- [ ] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate)
+- [ ] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate, Postgres is under consideration, potential data model needs thinking about)
+
+### Long-Term
+
+- [ ] Filter by specific flags?
+- [ ] (Optional/Dependent) Does a "public" warning flag need noting if private-by-default becomes apparent.
+- [ ] Dashboard tests will likely be required
 - [ ] Currently only `list_repos`-related data is loadable, the dashboard pages would be required for the rest of the scripts
   - [ ] Spencer's work for the data model likely needs bringing back into the fore to understand the data model overlaps e.g. `archive_repos` shouldn't need to re-collect repo details
   - [ ] How would a dashboard look for say, `github_workflow`?
-- [ ] Styling: We'd want this to align to standard MoJ page styling
-- [ ] Dashboard tests will be required
-- [ ] **Hypothetical:** What if the scripts were running continuously and updating a live DB, THEN the dashboard could perhaps be runnable locally and pointing to the database rather than have them need to run the script?
-- [ ] Is the CLI version 100% necessary at all now? Flags are getting trimmed/cut as well in the output
+- [ ] Styling: We'd want this to align to standard MoJ page styling presumably?
