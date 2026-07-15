@@ -163,7 +163,7 @@ ministryofjustice/laa-OBIEE Private            Shell      1            4        
 
 - [x] Update default arguments to reference new `internal/` directory rather than repository root.
 - [x] Update summary statistics at the top of the dashboard to show flagged/not flagged.
-- [ ] PRIVATE = `True/False` -> Visibility: Public/Private/Internal, what's the sitch from repo details's return call if internal?
+- [ ] PRIVATE = `True/False` -> Visibility: Public/Private/Internal
 - [ ] Make a decision on whether to keep `dashboard_cli.py`
 - [x] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
 - [x] Panels to be extended with info:
@@ -177,6 +177,7 @@ ministryofjustice/laa-OBIEE Private            Shell      1            4        
 - [x] Filter by specific flags (drop-down multi-selection?)
 - [x] How to close a panel - if a new panel's opened it should be front and center for the users
 - [x] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate, Postgres is under consideration, potential data model needs thinking about)
+- [ ] Additional filtering statistics e.g. "how many repos don't have default branch protection?"
 
 ### Long-Term
 
