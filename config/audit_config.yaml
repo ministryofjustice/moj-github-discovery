@@ -37,11 +37,11 @@ list_repos:
   database_path: "internal/repo_audit.db"
   output_filename: "list_repos.xlsx"
   repo_limit: 400
-  resume: false
+  resume: true
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false
-  use_cache: false
+  use_cache: true
 
 # Script config for org_security_posture.py.
 org_security_posture:
