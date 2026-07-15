@@ -41,6 +41,3 @@ outputs/
 
 # Local Docker secret env for audit CLI POC
 docker-audit-cli/.env
-
-# Temporary files
-repo_list_*.yaml
