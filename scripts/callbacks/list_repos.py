@@ -206,16 +206,26 @@ def update_page(
         return 1
     if "prev-page-btn" in trigger:
         return max(1, current_page - 1)
-    if "next-page-btn" in trigger:
+    if "next-page-btn" in trigger or "last-page-btn" in trigger:
         records = json.loads(data) if isinstance(data, str) else data
+        ddf = pd.DataFrame(records)
+
+        if search:
+            ddf = ddf[ddf["repo"].str.contains(search, case=False, na=False)]
+        if flag_filter:
+            mask = ddf["flags"].apply(
+                lambda f: (
+                    any(flag in f.split(", ") for flag in flag_filter) if f else False
+                )
+            )
+            ddf = ddf[mask]
         page_size = page_size_input or DEFAULT_PAGE_SIZE
-        total_pages = max(1, math.ceil(len(pd.DataFrame(records)) / page_size))
-        return min(current_page + 1, total_pages)
-    if "last-page-btn" in trigger:
-        records = json.loads(data) if isinstance(data, str) else data
-        page_size = page_size_input or DEFAULT_PAGE_SIZE
-        total_pages = max(1, math.ceil(len(pd.DataFrame(records)) / page_size))
-        return total_pages
+        total_pages = max(1, math.ceil(len(ddf) / page_size))
+        return (
+            min(current_page + 1, total_pages)
+            if "next-page-btn" in trigger
+            else total_pages
+        )
     # Filter or page-size changed — reset to page 1
     return 1
 
@@ -276,26 +286,6 @@ def update_modal(selected_repo, audit_data):
                 html.P(
                     "No detailed audit data available for this repository.",
                     style={"color": "#666", "marginBottom": "15px"},
-                ),
-                html.Button(
-                    "Run Audit",
-                    id="run-audit-btn",
-                    n_clicks=0,
-                    style={
-                        "width": "100%",
-                        "padding": "10px",
-                        "backgroundColor": "#007bff",
-                        "color": "white",
-                        "border": "none",
-                        "borderRadius": "4px",
-                        "cursor": "pointer",
-                        "fontSize": "14px",
-                        "fontWeight": "bold",
-                    },
-                ),
-                html.Div(
-                    id="audit-status",
-                    style={"marginTop": "15px", "fontSize": "13px"},
                 ),
             ]
         )

@@ -25,7 +25,8 @@ It achieves this by abstracting 3 core technologies into a single interface:
 - **React.js** Renders the user interface (UI) in the browser
 - **Plotly.js** Generates interactive chargs, graphs, and maps
 
-Upon execution, `dashboard.py` starts the web application on port `8095` at `localhost` and attempts to load a SQLite database file via the `--db` arg (defaults to `repo_audit.db` at the repo root if not provided). From here, the SQLite database's data can be analysed. Further details are provided in the [Usage](#dashboardpy-usage) section below. Currently it will only load data generated via `list_repos.py`
+Upon execution, `dashboard.py` starts the web application on port `8050` at `localhost` and attempts to load a SQLite database file via the `--db` arg (defaults to `internal/repo_audit.db` if not provided; falls back to `scripts/repo_audit.db` if that doesn't exist).
+From here, the SQLite database's data can be analysed. Further details are provided in the [Usage](#dashboardpy-usage) section below. Currently it will only load data generated via `list_repos.py`
 
 ### Dashboard.py Usage
 
@@ -40,7 +41,7 @@ This will output the database file to `internal/repo_audit.db` by default if not
 `dashboard.py` can now be executed to load this database:
 
 ```shell
-uv run python scripts/dashboard.py --db internal/repo_audit.py
+uv run python scripts/dashboard.py --db internal/repo_audit.db
 ```
 
 The flask web app can then be loaded (locally) via `http://localhost:8050`, users can then review the data presented per repository to identify compliance issues requiring resolution.
@@ -121,7 +122,7 @@ uv run python scripts/dashboard_cli.py --db /path/to/database.db
 
 At a script level, `dashboard_cli.py` utilises Pandas Dataframes and loads the data from SQLite similar to `dashboard.py`
 
-Upon execution, `dashboard.py` starts the web application on port `8095` at `localhost` and attempts to load a SQLite database file via the `--db` arg (defaults to `repo_audit.db` at the repo root if not provided). From here, the SQLite database's data can be analysed. Further details are provided in the [Usage](#dashboardpy-usage) section below. Currently it will only load data generated via `list_repos.py`
+Upon execution, `dashboard_cli.py` loads a SQLite database file via the `--db` arg and prints the selected data to the terminal. Currently it will only load data generated via `list_repos.py`.
 
 ### Dashboard_CLI.py Usage
 
@@ -136,7 +137,7 @@ This will output the database file to `internal/repo_audit.db` by default if not
 `dashboard.py` can now be executed to load this database:
 
 ```shell
-uv run python scripts/dashboard_cli.py --db internal/repo_audit.py
+uv run python scripts/dashboard_cli.py --db internal/repo_audit.db
 ```
 
 This then prints out the dashboard similar to `dashboard.py` in the terminal. An example follows below:
