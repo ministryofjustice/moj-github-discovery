@@ -245,6 +245,7 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
     codeowners = data.codeowners.model_dump() if data.codeowners else {}
     workflows = data.workflows
     fork_template = data.fork_template.model_dump() if data.fork_template else {}
+    repo_rulesets = data.repo_rulesets.model_dump() if data.repo_rulesets else {}
 
     workflow_analysis: dict[str, Any] = {}
     workflow_payload: dict[str, Any] = {"count": 0, "list": []}
@@ -260,6 +261,7 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
         "repo": repo,
         "alerts": alerts,
         "branch_protection": branch_protection,
+        "repo_rulesets": repo_rulesets,
         "community": community,
         "codeowners": codeowners,
         "workflows": workflow_payload,

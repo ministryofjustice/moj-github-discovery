@@ -1,5 +1,7 @@
 # 219: Dashboard and Dashboard_CLI.py Operational Restoration
 
+**Date:** 15/07/2026
+
 ## Introduction
 
 In the early stages of the DevX GitHub Audit CLI’s development, prototype dashboard scripts were developed to visualise the findings of some of the scripts.  
@@ -75,7 +77,7 @@ For a given repository, once selected from a row, the following details are prov
 | Secret Scanning | Count of open secret scanning issues |
 | Code Scanning   | Count of open secret scanning issues |
 
-**Comunity Files:**
+**Community Files:**
 
 | Field Name      | Description                                        |
 | --------------- | -------------------------------------------------- |
@@ -155,29 +157,67 @@ ministryofjustice/laa-OBIEE Private            Shell      1            4        
 
 ## Development Opportunities
 
+**Note:** Some of these quick wins have been addressed as part of ticket 219, these have been marked accordingly.
+
 ### Short-Term
 
 - [x] Update default arguments to reference new `internal/` directory rather than repository root.
+- [x] Update summary statistics at the top of the dashboard to show flagged/not flagged.
 - [ ] PRIVATE = `True/False` -> Visibility: Public/Private/Internal, what's the sitch from repo details's return call if internal?
-- [ ] Is the CLI version 100% necessary at all now? Flags are getting trimmed/cut as well in the output
-- [ ] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
-- [ ] Panels to be extended with info:
-  - [ ] Default branch protection
-    - [ ] Compliance method
-    - [ ] GitHub-Community-related standards
-- [ ] Flags need extending:
-  - [ ] Unprotected default branch regardless of visibility
+- [ ] Make a decision on whether to keep `dashboard_cli.py`
+- [x] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
+- [x] Panels to be extended with info:
+  - [x] Default branch protection
+    - [x] Compliance method
+    - [x] GitHub-Community-related standards
+- [ ] Consider refining the flags to the biggest pain points:
+  - [ ] Unprotected default branch **regardless of visibility**
   - [ ] Branch protection compliance
-    - [ ] Per-github-community standard flags?
-- [ ] How to close a panel - if a new panel's opened it should be front and center for the users
-- [ ] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate, Postgres is under consideration, potential data model needs thinking about)
+    - [ ] Per-github-community standard flags
+- [x] Filter by specific flags (drop-down multi-selection?)
+- [x] How to close a panel - if a new panel's opened it should be front and center for the users
+- [x] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate, Postgres is under consideration, potential data model needs thinking about)
 
 ### Long-Term
 
-- [ ] Filter by specific flags?
+- [ ] Consider how the dashboard(s) could run in a containerised manner and be set up for cloud-platform hosting.
 - [ ] (Optional/Dependent) Does a "public" warning flag need noting if private-by-default becomes apparent.
-- [ ] Dashboard tests will likely be required
-- [ ] Currently only `list_repos`-related data is loadable, the dashboard pages would be required for the rest of the scripts
-  - [ ] Spencer's work for the data model likely needs bringing back into the fore to understand the data model overlaps e.g. `archive_repos` shouldn't need to re-collect repo details
-  - [ ] How would a dashboard look for say, `github_workflow`?
-- [ ] Styling: We'd want this to align to standard MoJ page styling presumably?
+- [ ] Dashboard unit/integration tests will likely be required
+- [ ] Currently only `list_repos`-related data is wired up, the rest of the scripts will need wiring in.
+  - [ ] Considerations on the data model likely needs bringing back in to understand the data model overlaps e.g. `archive_repos` shouldn't need to re-collect repo details if already present.
+  - [ ] How would a dashboard look for say, `github_workflow`? What if it contains only **some** data from each of the stages?
+- [ ] Styling alignment to MoJ HTML/CSS.
+
+## Integrating Additional Scripts
+
+- Before wiring the other scripts into `dashboard.py`, considerations must be made on an architectural front.
+- As of `15/07/2026`, `dashboard.py` sits in the same directory as the rest of the audit scripts.
+- This could make any functionality extensions get messy very quickly. I therefore recommend pulling `dashboard.py` out into its own directory, where it can be extended without much impact.
+- The proposed structure would look similar to:
+
+```shell
+dashboard/
+|__ app.py # Dash App initialisation and shared config
+|__ main.py # Dashboard entrypoint
+|__ layouts/
+|  |__ shared.py # shared layouts e.g. summary stats, navigation, etc
+|  |__ list_repos.py # list_repos-specific layouts
+|  |__ archive_repos.py
+|  |__ ...
+|__ callbacks/
+|  |__ list_repos.py # list_repos-specific callbacks
+|  |__ archive_repos.py
+|  |__ ...
+```
+
+- `archive_repos`, `lfs_script`, and `alert_metrics` should be priority targets for implementation in this new structure, as they only produce one meaningful output resource.
+- `org_security_posture` and `github_workflows` would require extra effort, as they have multiple outputs in the form of excel sheets, and files; these could be made into separate layouts or tabs within their dedicated pages.
+- `dashboard.py` could then be extended to use Dash's `use_pages=True` functionality to allow linking between each script's layout (assuming each is present/configured to display).
+- This would likely result in:
+  - `dashboard_cli` becoming obsolete
+  - the `--db` argument being deprecated, as it could be config-driven per script
+
+- The proposed approach is therefore:
+  1. Restructure `dashboard.py` into its own directory and debload `dashboard.py` into separate areas e.g. `layouts`, `callbacks`, etc.
+  2. Update `dashboard.py` to be config-driven, similar to that of the rest of the scripts under `scripts/` and link up to `main.py` for `uv run audit-cli`
+  3. Start adding in each script's data incrementally, focusing on `archive_repos`, `lfs_script`, and `alert_metrics` first, before moving to `github_workflows` and `org_security_posture`

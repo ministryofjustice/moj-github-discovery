@@ -15,6 +15,8 @@ import json
 import os
 import sys
 
+import math
+
 import dash
 from dash import dcc, html, callback, Input, Output, State, ALL, callback_context
 import pandas as pd
@@ -23,33 +25,37 @@ import pandas as pd
 # TODO: Remove once pyproject.toml is build-system configured
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.collector import RepoCollector
-from core.github_api import (
-    STANDARD_REPO_AUDIT_ENDPOINTS,
-)
 from core.presenters import (
     build_dashboard_dataframe,
     repo_data_to_audit_result,
 )
 from core.storage import SqliteRepoStorage
 
-# Parse arguments
-db_path = "internal/repo_audit.db"
-if "--db" in sys.argv:
-    idx = sys.argv.index("--db")
-    if idx + 1 < len(sys.argv):
-        db_path = sys.argv[idx + 1]
+# Module-level storage for db_path and df (set in if __name__ == "__main__")
+db_path = None
+df = None
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
-# Use default location next to this script if not specified
-if not os.path.exists(db_path):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(script_dir, "repo_audit.db")
 
-if not os.path.exists(db_path):
-    print(f"Error: Database not found at {db_path}")
-    sys.exit(1)
+def _parse_args() -> str:
+    """Parse CLI arguments and return the resolved database path."""
+    db_path = "internal/repo_audit.db"
+    if "--db" in sys.argv:
+        idx = sys.argv.index("--db")
+        if idx + 1 < len(sys.argv):
+            db_path = sys.argv[idx + 1]
 
-print(f"Loading data from {db_path}")
+    # Use default location next to this script if not specified
+    if not os.path.exists(db_path):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(script_dir, "repo_audit.db")
+
+    if not os.path.exists(db_path):
+        print(f"Error: Database not found at {db_path}")
+        sys.exit(1)
+
+    print(f"Loading data from {db_path}")
+    return db_path
 
 
 def _get_storage() -> SqliteRepoStorage:
@@ -74,39 +80,6 @@ def _load_repo_audit_result(full_name: str) -> dict | None:
     return repo_data_to_audit_result(repo_data)
 
 
-def run_audit(full_name: str) -> dict:
-    """Run a single-repo audit via RepoCollector and map it for the dashboard."""
-
-    # Validate the repo name format
-    try:
-        owner, repo = full_name.split("/", 1)
-    except ValueError:
-        return {"error": f"Invalid repository name: {full_name!r}"}
-
-    # Run the audit and handle exceptions
-    try:
-        storage = _get_storage()
-        collector = RepoCollector(
-            storage=storage,
-            endpoints=STANDARD_REPO_AUDIT_ENDPOINTS,
-        )
-        collector.collect(owner, repos=[full_name], resume=False)
-
-        repo_data = storage.read(full_name)
-        if repo_data is None:
-            return {"error": f"No collected data found for {full_name}"}
-
-        audit_result = repo_data_to_audit_result(repo_data)
-        return audit_result
-    except Exception as e:
-        return {"error": f"Failed to run audit: {str(e)}"}
-
-
-# Initialize app
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
-df = load_data()
-
-
 # Define color functions
 def get_flag_color(flag_str):
     """Color badge based on flags."""
@@ -116,130 +89,340 @@ def get_flag_color(flag_str):
         return {"backgroundColor": "#dc3545", "color": "white"}
 
 
-# Layout for the dashboard
-app.layout = html.Div(
-    [
-        # Components and styling for the dashboard
-        dcc.Store(
-            id="data-store", data=df.to_json(orient="records", date_format="iso")
-        ),
-        dcc.Store(id="selected-repo-store", data=None),
-        dcc.Store(id="audit-data-store", data=None),
-        html.Div(
-            [
-                html.H1("Repository Audit Dashboard", style={"marginBottom": "20px"}),
-                html.P(
-                    f"Total repositories: {len(df)}",
-                    style={"fontSize": "16px", "color": "#666"},
-                ),
-            ],
-            style={
-                "padding": "20px",
-                "backgroundColor": "#f8f9fa",
-                "borderRadius": "8px",
-                "marginBottom": "20px",
-            },
-        ),
-        # Filter section
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.Label("Search repo name:", style={"fontWeight": "bold"}),
-                        dcc.Input(
-                            id="repo-filter",
-                            type="text",
-                            placeholder="Filter by repo name...",
-                            style={
-                                "width": "100%",
-                                "padding": "8px",
-                                "marginTop": "5px",
-                                "border": "1px solid #ddd",
-                                "borderRadius": "4px",
-                            },
-                        ),
-                    ],
-                    style={"marginBottom": "15px"},
-                ),
-                html.Div(
-                    [
-                        html.Label(
-                            "Show only repos with flags:", style={"fontWeight": "bold"}
-                        ),
-                        dcc.Checklist(
-                            id="flag-filter",
-                            options=[
-                                {
-                                    "label": " Yes (show only flagged)",
-                                    "value": "flagged",
-                                }
-                            ],
-                            value=[],
-                            style={"marginTop": "5px"},
-                        ),
-                    ],
-                    style={"marginBottom": "15px"},
-                ),
-            ],
-            style={
-                "padding": "15px",
-                "backgroundColor": "#fff",
-                "border": "1px solid #ddd",
-                "borderRadius": "4px",
-                "marginBottom": "20px",
-            },
-        ),
-        # Main content with table and side panel
-        html.Div(
-            [
-                html.Div(
-                    [
-                        dcc.Loading(
-                            id="loading",
-                            type="default",
-                            children=html.Div(id="table-container"),
-                        )
-                    ],
-                    style={"flex": "1", "marginRight": "20px", "overflowX": "auto"},
-                ),
-                # Side panel for details
-                html.Div(
-                    id="detail-panel",
-                    style={
-                        "width": "350px",
-                        "backgroundColor": "#f8f9fa",
-                        "border": "1px solid #ddd",
-                        "borderRadius": "4px",
-                        "padding": "15px",
-                        "overflowY": "auto",
-                        "maxHeight": "700px",
-                        "display": "none",
-                    },
-                ),
-            ],
-            style={"display": "flex", "gap": "20px"},
-        ),
-    ],
-    style={
-        "maxWidth": "1600px",
-        "margin": "0 auto",
-        "padding": "20px",
-        "fontFamily": "Arial, sans-serif",
-        "backgroundColor": "#ffffff",
+FLAG_FILTER_OPTIONS = [
+    {"label": " archived", "value": "archived"},
+    {"label": " fork", "value": "fork"},
+    {"label": " no_license", "value": "no_license"},
+    {
+        "label": " public_unprotected_default_branch",
+        "value": "public_unprotected_default_branch",
     },
-)
+    {"label": " dependabot_alerts_present", "value": "dependabot_alerts_present"},
+    {"label": " secret_alerts_present", "value": "secret_alerts_present"},
+    {"label": " code_scanning_alerts_present", "value": "code_scanning_alerts_present"},
+    {"label": " no_security_policy", "value": "no_security_policy"},
+    {"label": " no_code_of_conduct", "value": "no_code_of_conduct"},
+    {"label": " no_actions_workflows", "value": "no_actions_workflows"},
+    {"label": " no_detected_tests", "value": "no_detected_tests"},
+    {"label": " no_detected_linting", "value": "no_detected_linting"},
+]
+
+PAGE_SIZE_OPTIONS = [10, 20, 50]
+DEFAULT_PAGE_SIZE = 20
+
+
+def render_header() -> html.Div:
+    """Render the dashboard header."""
+    return html.Div(
+        [html.H1("Repository Audit Dashboard", style={"marginBottom": "0px"})],
+        style={
+            "padding": "20px",
+            "backgroundColor": "#f8f9fa",
+            "borderRadius": "8px",
+            "marginBottom": "10px",
+        },
+    )
+
+
+def render_summary(data: pd.DataFrame) -> html.Div:
+    """Render repository count summary stats."""
+    total = len(data)
+    no_flags = int((data["flags"].isna() | (data["flags"] == "")).sum())
+    has_flags = total - no_flags
+
+    stat_style = {
+        "display": "inline-block",
+        "padding": "10px 20px",
+        "marginRight": "15px",
+        "backgroundColor": "#fff",
+        "border": "1px solid #ddd",
+        "borderRadius": "6px",
+        "textAlign": "center",
+        "minWidth": "160px",
+    }
+    label_style = {"fontSize": "12px", "color": "#888", "marginBottom": "4px"}
+    value_style = {"fontSize": "24px", "fontWeight": "bold"}
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Total Repositories", style=label_style),
+                    html.Div(str(total), style=value_style),
+                ],
+                style=stat_style,
+            ),
+            html.Div(
+                [
+                    html.Div("No Flags", style=label_style),
+                    html.Div(str(no_flags), style={**value_style, "color": "#28a745"}),
+                ],
+                style=stat_style,
+            ),
+            html.Div(
+                [
+                    html.Div("Flagged", style=label_style),
+                    html.Div(str(has_flags), style={**value_style, "color": "#dc3545"}),
+                ],
+                style=stat_style,
+            ),
+        ],
+        style={"padding": "15px 0", "marginBottom": "10px"},
+    )
+
+
+def render_filters() -> html.Div:
+    """Render the search and flag filter controls."""
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Label("Search repo name:", style={"fontWeight": "bold"}),
+                    dcc.Input(
+                        id="repo-filter",
+                        type="text",
+                        placeholder="Filter by repo name...",
+                        style={
+                            "width": "100%",
+                            "padding": "8px",
+                            "marginTop": "5px",
+                            "border": "1px solid #ddd",
+                            "borderRadius": "4px",
+                        },
+                    ),
+                ],
+                style={"marginBottom": "15px"},
+            ),
+            html.Div(
+                [
+                    html.Label(
+                        "Repos per page:",
+                        style={
+                            "fontWeight": "bold",
+                            "marginBottom": "4px",
+                            "display": "inline-block",
+                            "marginRight": "8px",
+                        },
+                    ),
+                    dcc.Dropdown(
+                        id="page-size-dropdown",
+                        options=[
+                            {"label": str(size), "value": size}
+                            for size in PAGE_SIZE_OPTIONS
+                        ],
+                        value=DEFAULT_PAGE_SIZE,
+                        clearable=False,
+                        searchable=False,
+                        style={"width": "80px", "display": "inline-block"},
+                    ),
+                ],
+                style={"marginBottom": "15px"},
+            ),
+            html.Div(
+                [
+                    html.Label(
+                        "Filter by flag (show repos with any selected flag):",
+                        style={
+                            "fontWeight": "bold",
+                            "marginBottom": "8px",
+                            "display": "block",
+                        },
+                    ),
+                    dcc.Checklist(
+                        id="flag-filter",
+                        options=FLAG_FILTER_OPTIONS,
+                        value=[],
+                        labelStyle={
+                            "display": "block",
+                            "marginBottom": "4px",
+                            "fontSize": "13px",
+                        },
+                        style={
+                            "marginTop": "5px",
+                            "columnCount": "2",
+                            "columnGap": "20px",
+                        },
+                    ),
+                ],
+            ),
+        ],
+        style={
+            "padding": "15px",
+            "backgroundColor": "#fff",
+            "border": "1px solid #ddd",
+            "borderRadius": "4px",
+            "marginBottom": "20px",
+        },
+    )
+
+
+def render_main_content() -> html.Div:
+    """Render the main content area: repo table with pagination controls."""
+    btn_style = {
+        "padding": "6px 16px",
+        "border": "1px solid #ddd",
+        "borderRadius": "4px",
+        "backgroundColor": "#fff",
+        "cursor": "pointer",
+        "fontSize": "14px",
+    }
+    return html.Div(
+        [
+            dcc.Loading(
+                id="loading",
+                type="default",
+                children=html.Div(id="table-container"),
+            ),
+            html.Div(
+                [
+                    html.Button(
+                        "⟨⟨ First",
+                        id="first-page-btn",
+                        n_clicks=0,
+                        disabled=True,
+                        style=btn_style,
+                    ),
+                    html.Button(
+                        "← Prev",
+                        id="prev-page-btn",
+                        n_clicks=0,
+                        disabled=True,
+                        style={**btn_style, "marginLeft": "4px"},
+                    ),
+                    html.Span(
+                        id="page-info",
+                        style={"fontSize": "14px", "color": "#555", "margin": "0 14px"},
+                    ),
+                    html.Button(
+                        "Next →",
+                        id="next-page-btn",
+                        n_clicks=0,
+                        disabled=False,
+                        style={**btn_style, "marginRight": "4px"},
+                    ),
+                    html.Button(
+                        "Last ⟩⟩",
+                        id="last-page-btn",
+                        n_clicks=0,
+                        disabled=False,
+                        style=btn_style,
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "padding": "14px 0",
+                    "marginTop": "8px",
+                },
+            ),
+        ],
+    )
+
+
+def render_modal() -> html.Div:
+    """Render the fixed-position modal overlay for repo detail."""
+    return html.Div(
+        id="modal-overlay",
+        style={"display": "none"},
+        children=[
+            # Backdrop
+            html.Div(
+                style={
+                    "position": "fixed",
+                    "top": 0,
+                    "left": 0,
+                    "right": 0,
+                    "bottom": 0,
+                    "backgroundColor": "rgba(0,0,0,0.5)",
+                    "zIndex": 1000,
+                },
+            ),
+            # Dialog
+            html.Div(
+                style={
+                    "position": "fixed",
+                    "top": "5%",
+                    "left": "50%",
+                    "transform": "translateX(-50%)",
+                    "width": "640px",
+                    "maxWidth": "92vw",
+                    "maxHeight": "85vh",
+                    "overflowY": "auto",
+                    "backgroundColor": "#fff",
+                    "borderRadius": "8px",
+                    "padding": "28px 24px 24px",
+                    "zIndex": 1001,
+                    "boxShadow": "0 8px 32px rgba(0,0,0,0.25)",
+                },
+                children=[
+                    html.Button(
+                        "✕",
+                        id="modal-close-btn",
+                        n_clicks=0,
+                        style={
+                            "position": "absolute",
+                            "top": "12px",
+                            "right": "16px",
+                            "background": "none",
+                            "border": "none",
+                            "fontSize": "20px",
+                            "cursor": "pointer",
+                            "color": "#666",
+                            "lineHeight": "1",
+                            "padding": "0",
+                        },
+                    ),
+                    html.Div(id="modal-body"),
+                ],
+            ),
+        ],
+    )
+
+
+def generate_layout(data: pd.DataFrame) -> html.Div:
+    """Compose the full dashboard layout."""
+    return html.Div(
+        [
+            dcc.Store(
+                id="data-store", data=data.to_json(orient="records", date_format="iso")
+            ),
+            dcc.Store(id="selected-repo-store", data=None),
+            dcc.Store(id="audit-data-store", data=None),
+            dcc.Store(id="page-store", data=1),
+            dcc.Store(id="page-size-store", data=DEFAULT_PAGE_SIZE),
+            render_modal(),
+            render_header(),
+            render_summary(data),
+            render_filters(),
+            render_main_content(),
+        ],
+        style={
+            "maxWidth": "1600px",
+            "margin": "0 auto",
+            "padding": "20px",
+            "fontFamily": "Arial, sans-serif",
+            "backgroundColor": "#ffffff",
+        },
+    )
 
 
 # Callbacks
 @callback(
     Output("table-container", "children"),
+    Output("page-info", "children"),
+    Output("first-page-btn", "disabled"),
+    Output("prev-page-btn", "disabled"),
+    Output("next-page-btn", "disabled"),
+    Output("last-page-btn", "disabled"),
     Input("repo-filter", "value"),
     Input("flag-filter", "value"),
+    Input("page-store", "data"),
+    Input("page-size-store", "data"),
     Input("data-store", "data"),
 )
-def update_table(search, flag_filter, data):
-    """Update the table based on search and flag filters."""
-    # Parse the JSON string from the store
+def update_table(search, flag_filter, page, page_size, data):
+    """Update the table based on search, flag filters, page, and page size."""
     if isinstance(data, str):
         records = json.loads(data)
     else:
@@ -250,84 +433,40 @@ def update_table(search, flag_filter, data):
     if search:
         ddf = ddf[ddf["repo"].str.contains(search, case=False, na=False)]
 
-    if "flagged" in flag_filter:
-        ddf = ddf[ddf["flags"].notna() & (ddf["flags"] != "")]
+    if flag_filter:
+        mask = ddf["flags"].apply(
+            lambda f: any(flag in f.split(", ") for flag in flag_filter) if f else False
+        )
+        ddf = ddf[mask]
 
-    # Create table rows with click handlers
+    # Pagination
+    page_size = page_size or DEFAULT_PAGE_SIZE
+    total_repos = len(ddf)
+    total_pages = max(1, math.ceil(total_repos / page_size))
+    page = max(1, min(page or 1, total_pages))
+    page_ddf = ddf.iloc[(page - 1) * page_size : page * page_size]
+    page_info = f"Page {page} of {total_pages}  ({total_repos} repos)"
+
+    # Build table header
+    th_left = {"padding": "10px", "textAlign": "left", "backgroundColor": "#f8f9fa"}
+    th_center = {"padding": "10px", "textAlign": "center", "backgroundColor": "#f8f9fa"}
     table_rows = [
         html.Tr(
             [
-                html.Th(
-                    "Repository",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "left",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Status",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "center",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Language",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "left",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Stars",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "center",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Open Issues",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "center",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Dependabot",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "center",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Branch Protected",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "center",
-                        "backgroundColor": "#f8f9fa",
-                    },
-                ),
-                html.Th(
-                    "Flags",
-                    style={
-                        "padding": "10px",
-                        "textAlign": "left",
-                        "backgroundColor": "#f8f9fa",
-                        "maxWidth": "300px",
-                    },
-                ),
+                html.Th("Repository", style=th_left),
+                html.Th("Status", style=th_center),
+                html.Th("Language", style=th_left),
+                html.Th("Stars", style=th_center),
+                html.Th("Open Issues", style=th_center),
+                html.Th("Dependabot", style=th_center),
+                html.Th("Branch Protected", style=th_center),
+                html.Th("Flags", style={**th_left, "maxWidth": "300px"}),
             ],
             style={"borderBottom": "2px solid #ddd"},
         )
     ]
 
-    for _, row in ddf.iterrows():
+    for _, row in page_ddf.iterrows():
         flags_display = row["flags"] if row["flags"] else "✓ OK"
         flag_color = get_flag_color(row["flags"])
 
@@ -411,7 +550,7 @@ def update_table(search, flag_filter, data):
             )
         )
 
-    return html.Table(
+    table = html.Table(
         table_rows,
         style={
             "width": "100%",
@@ -421,9 +560,86 @@ def update_table(search, flag_filter, data):
             "overflow": "hidden",
         },
     )
+    at_first = page <= 1
+    at_last = page >= total_pages
+    return table, page_info, at_first, at_first, at_last, at_last
 
 
-def format_audit_detail(audit_data: dict) -> html.Div:
+@callback(
+    Output("page-store", "data"),
+    Input("first-page-btn", "n_clicks"),
+    Input("prev-page-btn", "n_clicks"),
+    Input("next-page-btn", "n_clicks"),
+    Input("last-page-btn", "n_clicks"),
+    Input("repo-filter", "value"),
+    Input("flag-filter", "value"),
+    Input("page-size-dropdown", "value"),
+    State("page-store", "data"),
+    State("page-size-store", "data"),
+    State("data-store", "data"),
+    prevent_initial_call=True,
+)
+def update_page(
+    first_clicks,
+    prev_clicks,
+    next_clicks,
+    last_clicks,
+    search,
+    flag_filter,
+    page_size_input,
+    current_page,
+    page_size_store,
+    data,
+):
+    """Navigate pages or reset to page 1 when filters change."""
+    # First, update page-size-store if page size changed
+    ctx = callback_context
+    if not ctx.triggered:
+        return current_page or 1
+
+    trigger = ctx.triggered[0]["prop_id"]
+    current_page = current_page or 1
+
+    # Handle page navigation
+    if "first-page-btn" in trigger:
+        return 1
+    if "prev-page-btn" in trigger:
+        return max(1, current_page - 1)
+    if "next-page-btn" in trigger:
+        # Calculate total pages to check if we can go forward
+        if isinstance(data, str):
+            records = json.loads(data)
+        else:
+            records = data
+        ddf = pd.DataFrame(records)
+        page_size = page_size_input or DEFAULT_PAGE_SIZE
+        total_pages = max(1, math.ceil(len(ddf) / page_size))
+        return min(current_page + 1, total_pages)
+    if "last-page-btn" in trigger:
+        # Calculate total pages
+        if isinstance(data, str):
+            records = json.loads(data)
+        else:
+            records = data
+        ddf = pd.DataFrame(records)
+        page_size = page_size_input or DEFAULT_PAGE_SIZE
+        total_pages = max(1, math.ceil(len(ddf) / page_size))
+        return total_pages
+    # Filter changed — reset to page 1
+    return 1
+
+
+@callback(
+    Output("page-size-store", "data"),
+    Input("page-size-dropdown", "value"),
+    prevent_initial_call=False,
+)
+def update_page_size(page_size_value):
+    """Update the page size store when the dropdown changes."""
+    return page_size_value or DEFAULT_PAGE_SIZE
+
+
+def format_audit_detail(audit_data: dict, repo_name: str = "Unknown") -> html.Div:
     """Format audit data for display in detail panel."""
     if not audit_data or "error" in audit_data:
         return html.Div(
@@ -437,18 +653,21 @@ def format_audit_detail(audit_data: dict) -> html.Div:
             ]
         )
 
-    repo = audit_data.get("repo", {})
-    alerts = audit_data.get("alerts", {})
-    community = audit_data.get("community", {})
-    workflows = audit_data.get("workflows", {})
-    workflow_analysis = audit_data.get("workflow_analysis", {})
+    repo = audit_data.get("repo") or {}
+    alerts = audit_data.get("alerts") or {}
+    community = audit_data.get("community") or {}
+    workflows = audit_data.get("workflows") or {}
+    workflow_analysis = audit_data.get("workflow_analysis") or {}
+    branch_protection = audit_data.get("branch_protection") or {}
+    repo_rulesets = audit_data.get("repo_rulesets") or {}
+    codeowners = audit_data.get("codeowners") or {}
     flags = audit_data.get("flags", [])
 
-    community_files = community.get("files", {})
+    community_files = community.get("files") or {}
 
     sections = [
         html.H3(
-            repo.get("name", "Unknown"),
+            repo_name,
             style={
                 "marginBottom": "15px",
                 "borderBottom": "2px solid #ddd",
@@ -472,13 +691,13 @@ def format_audit_detail(audit_data: dict) -> html.Div:
                 html.Div(
                     [
                         html.P(
-                            f"Name: {repo.get('full_name', 'N/A')}",
+                            f"Name: {repo_name}",
                             style={"margin": "5px 0"},
                         ),
-                        html.P(
-                            f"URL: {repo.get('html_url', 'N/A')}",
-                            style={"margin": "5px 0"},
-                        ),
+                        # html.P(
+                        #     f"URL: {repo.get('html_url', 'N/A')}",
+                        #     style={"margin": "5px 0"},
+                        # ),
                         html.P(
                             f"Private: {'Yes' if repo.get('private') else 'No'}",
                             style={"margin": "5px 0"},
@@ -488,7 +707,7 @@ def format_audit_detail(audit_data: dict) -> html.Div:
                             style={"margin": "5px 0"},
                         ),
                         html.P(
-                            f"License: {repo.get('license') or 'None'}",
+                            f"License: {(repo.get('license') or {}).get('name', 'None')}",
                             style={"margin": "5px 0"},
                         ),
                     ],
@@ -576,6 +795,114 @@ def format_audit_detail(audit_data: dict) -> html.Div:
                                     if community_files.get("contributing")
                                     else "red"
                                 ),
+                            },
+                        ),
+                        html.P(
+                            f"CODEOWNERS: {'✓' if codeowners.get('present') else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": (
+                                    "green" if codeowners.get("present") else "red"
+                                ),
+                            },
+                        ),
+                    ],
+                    style={"fontSize": "13px", "color": "#666"},
+                ),
+            ]
+        )
+    )
+
+    # Default Branch Protection
+    # Determine which protection data to use based on compliance method
+    compliance_method = "none"
+    protection_data = {}
+    if branch_protection.get("branch_protection_enabled"):
+        compliance_method = "branch_protection"
+        protection_data = branch_protection
+    elif repo_rulesets.get("has_active_rulesets"):
+        compliance_method = "rulesets"
+        protection_data = repo_rulesets
+
+    # Extract fields from whichever protection method is active
+    default_branch_protected = (
+        protection_data.get("default_branch_protected")
+        if compliance_method == "branch_protection"
+        else repo_rulesets.get("has_active_rulesets")
+    )
+    enforce_admins = (
+        protection_data.get("enforce_admins_enabled")
+        if compliance_method == "branch_protection"
+        else protection_data.get("enforce_admins")
+    )
+    dismiss_stale = protection_data.get("dismiss_stale_reviews", False)
+    require_codeowner = protection_data.get("require_code_owner_reviews", False)
+    review_count = protection_data.get("required_approving_review_count", 0)
+    require_signatures = (
+        protection_data.get("required_signatures_enabled")
+        if compliance_method == "branch_protection"
+        else protection_data.get("required_signatures")
+    )
+
+    sections.append(
+        html.Div(
+            [
+                html.H4(
+                    "Default Branch Protection",
+                    style={
+                        "marginTop": "15px",
+                        "marginBottom": "10px",
+                        "color": "#333",
+                    },
+                ),
+                html.Div(
+                    [
+                        html.P(
+                            f"Branch Protected: {'✓' if default_branch_protected else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": (
+                                    "green" if default_branch_protected else "red"
+                                ),
+                            },
+                        ),
+                        html.P(
+                            f"Compliance Method: {compliance_method}",
+                            style={"margin": "5px 0"},
+                        ),
+                        html.P(
+                            f"Enforce Admin Protection: {'✓' if enforce_admins else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": ("green" if enforce_admins else "red"),
+                            },
+                        ),
+                        html.P(
+                            f"Dismiss Stale Reviews: {'✓' if dismiss_stale else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": ("green" if dismiss_stale else "red"),
+                            },
+                        ),
+                        html.P(
+                            f"Require Code Owner Reviews: {'✓' if require_codeowner else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": ("green" if require_codeowner else "red"),
+                            },
+                        ),
+                        html.P(
+                            f"Required Approving Review Count: {review_count}",
+                            style={
+                                "margin": "5px 0",
+                                "color": ("green" if review_count > 0 else "red"),
+                            },
+                        ),
+                        html.P(
+                            f"Required Signatures: {'✓' if require_signatures else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": ("green" if require_signatures else "red"),
                             },
                         ),
                     ],
@@ -671,29 +998,20 @@ def format_audit_detail(audit_data: dict) -> html.Div:
 
 
 @callback(
-    Output("detail-panel", "children"),
-    Output("detail-panel", "style"),
+    Output("modal-overlay", "style"),
+    Output("modal-body", "children"),
     Input("selected-repo-store", "data"),
     Input("audit-data-store", "data"),
 )
-def update_detail_panel(selected_repo, audit_data):
+def update_modal(selected_repo, audit_data):
+    """Show or hide the detail modal based on the selected repo."""
+    hidden = {"display": "none"}
+    visible = {"display": "block"}
+
     if not selected_repo:
-        return None, {"display": "none"}
+        return hidden, None
 
-    panel_style = {
-        "width": "350px",
-        "backgroundColor": "#f8f9fa",
-        "border": "1px solid #ddd",
-        "borderRadius": "4px",
-        "padding": "15px",
-        "overflowY": "auto",
-        "maxHeight": "700px",
-        "display": "block",
-    }
-
-    # Try to get audit data from store first, then from database
     if audit_data:
-        # audit_data comes from dcc.Store - it's already parsed as dict by Dash
         if isinstance(audit_data, str):
             try:
                 audit_data = json.loads(audit_data)
@@ -702,13 +1020,11 @@ def update_detail_panel(selected_repo, audit_data):
                 audit_data = None
 
     if not audit_data:
-        # Load audit data from core storage
         audit_data = _load_repo_audit_result(selected_repo)
 
     if audit_data:
-        content = format_audit_detail(audit_data)
+        content = format_audit_detail(audit_data, selected_repo)
     else:
-        # Show button to run audit
         content = html.Div(
             [
                 html.H3(
@@ -745,7 +1061,17 @@ def update_detail_panel(selected_repo, audit_data):
             ]
         )
 
-    return content, panel_style
+    return visible, content
+
+
+@callback(
+    Output("selected-repo-store", "data", allow_duplicate=True),
+    Input("modal-close-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def close_modal(n_clicks):
+    """Close the detail modal by clearing the selected repo."""
+    return None
 
 
 @callback(
@@ -775,36 +1101,11 @@ def on_row_click(n_clicks, current_selected):
     return current_selected
 
 
-@callback(
-    Output("audit-data-store", "data"),
-    Output("audit-status", "children"),
-    Input("run-audit-btn", "n_clicks"),
-    State("selected-repo-store", "data"),
-    prevent_initial_call=True,
-)
-def on_audit_click(n_clicks, repo_name):
-    """Handle the audit button click and update the audit data store."""
-    if n_clicks == 0 or not repo_name:
-        return None, ""
-
-    status_div = html.Div(
-        [dcc.Loading(type="default", children=html.Div("Running audit..."))]
-    )
-
-    audit_result = run_audit(repo_name)
-
-    if "error" in audit_result:
-        return audit_result, html.Div(
-            [html.P(f"Error: {audit_result['error']}", style={"color": "red"})]
-        )
-
-    return audit_result, html.Div(
-        [html.P("✓ Audit completed successfully!", style={"color": "green"})]
-    )
-
-
 if __name__ == "__main__":
     """Run the Dash app."""
+    db_path = _parse_args()
+    df = load_data()
+    app.layout = generate_layout(df)
     print("\nStarting dashboard at http://localhost:8050")
     print("Press Ctrl+C to stop.\n")
     app.run(debug=True, port=8050)
