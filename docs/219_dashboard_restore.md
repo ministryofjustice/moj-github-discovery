@@ -218,6 +218,5 @@ dashboard/
   - the `--db` argument being deprecated, as it could be config-driven per script
 
 - The proposed approach is therefore:
-  1. Restructure `dashboard.py` into its own directory and debload `dashboard.py` into separate areas e.g. `layouts`, `callbacks`, etc.
-  2. Update `dashboard.py` to be config-driven, similar to that of the rest of the scripts under `scripts/` and link up to `main.py` for `uv run audit-cli`
-  3. Start adding in each script's data incrementally, focusing on `archive_repos`, `lfs_script`, and `alert_metrics` first, before moving to `github_workflows` and `org_security_posture`
+  1. Update `dashboard.py` to be config-driven, similar to that of the rest of the scripts under `scripts/` and link up to `main.py` for `uv run audit-cli`
+  2. Start adding in each script's data incrementally, focusing on `archive_repos`, `lfs_script`, and `alert_metrics` first, before moving to `github_workflows` and `org_security_posture`
