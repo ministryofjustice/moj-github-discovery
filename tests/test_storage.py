@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 import warnings
 
@@ -15,7 +16,7 @@ from core.models import (
     RepoData,
     RepoDetails,
 )
-from core.storage import SqliteOrgStorage, SqliteRepoStorage
+from core.storage import SqliteAlertStorage, SqliteOrgStorage, SqliteRepoStorage
 
 
 @pytest.fixture
@@ -205,3 +206,181 @@ class TestSqliteOrgStorage:
         data, ts = cached
         assert data == {"value": 2}
         assert ts == 2000.0
+
+
+class TestSqliteAlertStorage:
+    def test_init_creates_table(self, tmp_path):
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+        # Should not raise on second init (IF NOT EXISTS)
+        db.init()
+
+    def test_insert_new_alert(self, tmp_path):
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "remediated_at": "",
+                "state": "open",
+                "severity": "high",
+                "ttr_days": None,
+            }
+        )
+
+        conn = sqlite3.connect(str(tmp_path / "alerts.db"))
+        row = conn.execute("SELECT * FROM alert_metrics").fetchone()
+        conn.close()
+
+        assert row == (
+            "org/repo",
+            "dependabot",
+            "1",
+            "2026-01-01T00:00:00+00:00",
+            "",
+            "open",
+            "high",
+            None,
+        )
+
+    def test_rerun_updates_not_duplicates(self, tmp_path):
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+
+        alert = {
+            "repo": "org/repo",
+            "type": "dependabot",
+            "id": "1",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "remediated_at": "",
+            "state": "open",
+            "severity": "high",
+            "ttr_days": None,
+        }
+        db.upsert(alert)
+        db.upsert(alert)
+
+        conn = sqlite3.connect(str(tmp_path / "alerts.db"))
+        count = conn.execute("SELECT COUNT(*) FROM alert_metrics").fetchone()[0]
+        conn.close()
+
+        assert count == 1
+
+    def test_same_id_different_type_both_persist(self, tmp_path):
+        """Alert numbers are scoped per type, so (repo, type, id) must be
+        the key — this proves a collision on id alone doesn't happen."""
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "remediated_at": "",
+                "state": "open",
+                "severity": "high",
+                "ttr_days": None,
+            }
+        )
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "code_scanning",
+                "id": "1",
+                "created_at": "2026-01-02T00:00:00+00:00",
+                "remediated_at": "",
+                "state": "open",
+                "severity": "medium",
+                "ttr_days": None,
+            }
+        )
+
+        conn = sqlite3.connect(str(tmp_path / "alerts.db"))
+        count = conn.execute("SELECT COUNT(*) FROM alert_metrics").fetchone()[0]
+        conn.close()
+
+        assert count == 2
+
+    def test_state_change_updates_existing_row(self, tmp_path):
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "remediated_at": "",
+                "state": "open",
+                "severity": "high",
+                "ttr_days": None,
+            }
+        )
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "remediated_at": "2026-01-05T00:00:00+00:00",
+                "state": "fixed",
+                "severity": "high",
+                "ttr_days": 4,
+            }
+        )
+
+        conn = sqlite3.connect(str(tmp_path / "alerts.db"))
+        row = conn.execute(
+            "SELECT state, ttr_days FROM alert_metrics WHERE repo=? AND type=? AND id=?",
+            ("org/repo", "dependabot", "1"),
+        ).fetchone()
+        conn.close()
+
+        assert row == ("fixed", 4)
+
+    def test_created_at_not_overwritten_on_upsert(self, tmp_path):
+        """created_at is intentionally excluded from the ON CONFLICT
+        update clause — it shouldn't change once an alert exists."""
+        db = SqliteAlertStorage(str(tmp_path / "alerts.db"))
+        db.init()
+
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "remediated_at": "",
+                "state": "open",
+                "severity": "high",
+                "ttr_days": None,
+            }
+        )
+        db.upsert(
+            {
+                "repo": "org/repo",
+                "type": "dependabot",
+                "id": "1",
+                "created_at": "2099-01-01T00:00:00+00:00",  # deliberately different
+                "remediated_at": "",
+                "state": "open",
+                "severity": "high",
+                "ttr_days": None,
+            }
+        )
+
+        conn = sqlite3.connect(str(tmp_path / "alerts.db"))
+        row = conn.execute(
+            "SELECT created_at FROM alert_metrics WHERE repo=? AND type=? AND id=?",
+            ("org/repo", "dependabot", "1"),
+        ).fetchone()
+        conn.close()
+
+        assert row[0] == "2026-01-01T00:00:00+00:00"
