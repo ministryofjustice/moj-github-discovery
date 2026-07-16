@@ -241,10 +241,17 @@ def run(
                     (remediated - created).days if created and remediated else None
                 )
 
+                alert_id = alert.get("number") or alert.get("id")
+                if alert_id is None:
+                    print(
+                        f"  [warn] alert missing id, skipping: {alert}", file=sys.stderr
+                    )
+                    continue
+
                 # Write alert data as row ready for compilation
                 rows.append(
                     {
-                        "id": alert.get("number") or alert.get("id"),
+                        "id": str(alert_id),
                         "type": kind,
                         "repo": repo_full,
                         # Include archive status from pre-built lookup; defaults to "unknown" if not found.
