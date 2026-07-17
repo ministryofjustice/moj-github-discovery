@@ -15,6 +15,8 @@ from core.github_api import (
 )
 from core.github_client import GitHubHttpClient
 from core.output_paths import OutputPathResolver
+from core.storage import SqliteAlertStorage
+
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -161,6 +163,9 @@ def run(
 ) -> None:
     resolver = OutputPathResolver(config, base_output_dir, base_internal_dir)
     alert_metrics_config = config.alert_metrics
+    storage_db_path = resolver.database_path(alert_metrics_config.database_path)
+    storage = SqliteAlertStorage(storage_db_path)
+    storage.init()
 
     github_organization = config.github_organization
     output_filename = alert_metrics_config.output_filename
@@ -236,10 +241,17 @@ def run(
                     (remediated - created).days if created and remediated else None
                 )
 
+                alert_id = alert.get("number") or alert.get("id")
+                if alert_id is None:
+                    print(
+                        f"  [warn] alert missing id, skipping: {alert}", file=sys.stderr
+                    )
+                    continue
+
                 # Write alert data as row ready for compilation
                 rows.append(
                     {
-                        "id": alert.get("number") or alert.get("id"),
+                        "id": str(alert_id),
                         "type": kind,
                         "repo": repo_full,
                         # Include archive status from pre-built lookup; defaults to "unknown" if not found.
@@ -254,6 +266,7 @@ def run(
                         "ttr_days": ttr_days,
                     }
                 )
+                storage.upsert(rows[-1])
                 repos_with_alerts.add(repo_full)
 
     # Write rows to final output file

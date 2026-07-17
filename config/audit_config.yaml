@@ -9,6 +9,7 @@ repo_list_file: "repo_list.yaml"
 alert_metrics:
   # Optional override; defaults to alert_metrics if omitted.
   output_subdir: "alert_metrics"
+  database_path: "internal/alert_metrics.db"
   max_alerts: 10000
   output_filename: "github_alerts_limited.csv"
   repo_limit: 400

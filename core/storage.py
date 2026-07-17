@@ -226,3 +226,64 @@ class SqliteOrgStorage:
                 """,
                 (org, json.dumps(cache, default=str), updated_at),
             )
+
+
+_CREATE_ALERTS_TABLE = """
+CREATE TABLE IF NOT EXISTS alert_metrics (
+    repo          TEXT NOT NULL,
+    type          TEXT NOT NULL,
+    id            TEXT NOT NULL,  -- stores GitHub's "number" field, scoped per alert type
+    created_at    TEXT,
+    remediated_at TEXT,
+    state         TEXT,
+    severity      TEXT,
+    ttr_days      INTEGER,
+    PRIMARY KEY (repo, type, id)
+);
+"""
+
+
+class SqliteAlertStorage:
+    """SQLite storage for alert_metrics.py findings.
+
+    One row per alert, keyed by (repo, type, id). Alert numbers are scoped
+    per alert type (Dependabot, code scanning, secret scanning), not
+    unique per repo, so all three fields are required to avoid collisions.
+    """
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init(self) -> None:
+        with self._connect() as conn:
+            conn.execute(_CREATE_ALERTS_TABLE)
+
+    def upsert(self, alert: dict[str, Any]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO alert_metrics
+                    (repo, type, id, created_at, remediated_at, state, severity, ttr_days)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(repo, type, id) DO UPDATE SET
+                    remediated_at = excluded.remediated_at,
+                    state = excluded.state,
+                    severity = excluded.severity,
+                    ttr_days = excluded.ttr_days
+                """,
+                (
+                    alert["repo"],
+                    alert["type"],
+                    str(alert["id"]),
+                    alert.get("created_at"),
+                    alert.get("remediated_at"),
+                    alert.get("state"),
+                    alert.get("severity"),
+                    alert.get("ttr_days"),
+                ),
+            )

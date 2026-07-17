@@ -50,6 +50,7 @@ class AlertMetricsConfig(ScriptOutputConfig):
 
     script_name: ClassVar[str] = "alert_metrics"
 
+    database_path: str = "internal/alert_metrics.db"  # SQLite cache file for alert data
     output_filename: str = "alert_metrics.csv"  # output file for alert data
     max_alerts: Optional[int] = None  # max number of alerts to collect (for testing)
     repo_limit: Optional[int] = None  # max number of repos to audit (for testing)
