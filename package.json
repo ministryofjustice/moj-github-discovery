@@ -41,9 +41,10 @@
       "**/package*.json",
       "**/*.xml",
       "**/*.csv",
-      "repo_list.yaml",
+      "repo_list*.yaml",
       "internal/",
-      "output/"
+      "outputs/",
+      "docs/219_*.md"
     ],
     "language": "en",
     "noConfigSearch": true,
@@ -99,7 +100,8 @@
       "node_modules/**/*.md",
       "internal/*.md",
       ".venv",
-      "LICENSE"
+      "LICENSE",
+      "docs/219_*.md"
     ]
   }
 }
