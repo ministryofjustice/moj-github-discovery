@@ -33,47 +33,87 @@ def render_header() -> html.Div:
 def render_summary(data: pd.DataFrame) -> html.Div:
     """Render repository count summary stats."""
     total = len(data)
+    public = int((~data["private"].fillna(False)).sum())
+    private = int(data["private"].fillna(False).sum())
     no_flags = int((data["flags"].isna() | (data["flags"] == "")).sum())
     has_flags = total - no_flags
 
+    def flag_count(flag_value: str) -> int:
+        return int(
+            data["flags"]
+            .fillna("")
+            .apply(
+                lambda flag_str: (
+                    flag_value in flag_str.split(", ") if flag_str else False
+                )
+            )
+            .sum()
+        )
+
+    def flag_label(flag_value: str) -> str:
+        return flag_value.replace("_", " ").title()
+
     stat_style = {
-        "display": "inline-block",
-        "padding": "10px 20px",
-        "marginRight": "15px",
+        "padding": "12px 16px",
         "backgroundColor": "#fff",
         "border": "1px solid #ddd",
         "borderRadius": "6px",
         "textAlign": "center",
-        "minWidth": "160px",
+        "minHeight": "92px",
+        "display": "flex",
+        "flexDirection": "column",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "boxSizing": "border-box",
     }
-    label_style = {"fontSize": "12px", "color": "#888", "marginBottom": "4px"}
+    label_style = {
+        "fontSize": "12px",
+        "color": "#888",
+        "marginBottom": "6px",
+        "lineHeight": "1.25",
+        "minHeight": "30px",
+        "display": "flex",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "textAlign": "center",
+    }
     value_style = {"fontSize": "24px", "fontWeight": "bold"}
+
+    summary_cards = [
+        ("Total Repositories", total, value_style),
+        ("Total Public", public, {**value_style, "color": "#007bff"}),
+        ("Total Private", private, {**value_style, "color": "#6c757d"}),
+        ("No Flags", no_flags, {**value_style, "color": "#28a745"}),
+        ("Flagged", has_flags, {**value_style, "color": "#dc3545"}),
+    ]
+    summary_cards.extend(
+        (
+            flag_label(option["value"]),
+            flag_count(option["value"]),
+            value_style,
+        )
+        for option in FLAG_FILTER_OPTIONS
+    )
 
     return html.Div(
         [
             html.Div(
                 [
-                    html.Div("Total Repositories", style=label_style),
-                    html.Div(str(total), style=value_style),
+                    html.Div(label, style=label_style),
+                    html.Div(str(value), style=card_value_style),
                 ],
                 style=stat_style,
-            ),
-            html.Div(
-                [
-                    html.Div("No Flags", style=label_style),
-                    html.Div(str(no_flags), style={**value_style, "color": "#28a745"}),
-                ],
-                style=stat_style,
-            ),
-            html.Div(
-                [
-                    html.Div("Flagged", style=label_style),
-                    html.Div(str(has_flags), style={**value_style, "color": "#dc3545"}),
-                ],
-                style=stat_style,
-            ),
+            )
+            for label, value, card_value_style in summary_cards
         ],
-        style={"padding": "15px 0", "marginBottom": "10px"},
+        style={
+            "padding": "15px 0",
+            "marginBottom": "10px",
+            "display": "grid",
+            "gridTemplateColumns": "repeat(auto-fit, minmax(200px, 1fr))",
+            "gap": "15px",
+            "alignItems": "stretch",
+        },
     )
 
 

@@ -33,8 +33,10 @@ def _parse_args() -> str:
     db_path = "internal/repo_audit.db"
     if "--db" in sys.argv:
         idx = sys.argv.index("--db")
-        if idx + 1 < len(sys.argv):
-            db_path = sys.argv[idx + 1]
+        if idx + 1 >= len(sys.argv):
+            print("Error: --db requires a path argument")
+            sys.exit(2)
+        db_path = sys.argv[idx + 1]
 
     # Fall back to a db alongside this script.
     if not os.path.exists(db_path):
