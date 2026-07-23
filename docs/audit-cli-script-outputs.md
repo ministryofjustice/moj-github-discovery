@@ -42,44 +42,44 @@ A concise reference of the fields, headings, and audit flags produced per script
 
 ## archive_repos.py
 
-| Specific Terms / Headings                 |
-| ----------------------------------------- |
-| org                                       |
-| repo                                      |
-| full_name                                 |
-| private                                   |
-| archived                                  |
-| disabled                                  |
-| fork                                      |
-| dependency_graph_enabled                  |
-| references                                |
-| archive_references                        |
-| archived_at                               |
-| active_references                         |
-| pushed_at                                 |
-| default_branch                            |
-| language                                  |
-| open_issues                               |
-| stargazers                                |
-| watchers                                  |
-| forks                                     |
-| description                               |
-| created_at                                |
-| updated_at                                |
-| size                                      |
-| is_template                               |
-| security_and_analysis                     |
-| secret_scanning                           |
-| secret_scanning_push_protection           |
-| dependabot_security_updates               |
-| secret_scanning_non_provider_patterns     |
-| secret_scanning_ai_detection              |
-| secret_scanning_validity_checks           |
-| secret_scanning_delegated_alert_dismissal |
-| flags                                     |
-| days_since_push                           |
-| age_days                                  |
-| days_since_archived                       |
+| Specific Terms / Headings                 | Description                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
+| org                                       | github organisation (e.g. `ministryofjustice`)                           |
+| repo                                      | github repository name e.g. `developer-experience-documentation`         |
+| full_name                                 | {org}/{repo} e.g. `ministryofjustice/developer-experience-documentation` |
+| private                                   | (Boolean) - Is the repository private?                                   |
+| archived                                  | (Boolean) - Is the repository archived?                                  |
+| disabled                                  |                                                                          |
+| fork                                      |                                                                          |
+| dependency_graph_enabled                  |                                                                          |
+| references                                |                                                                          |
+| archive_references                        |                                                                          |
+| archived_at                               |                                                                          |
+| active_references                         |                                                                          |
+| pushed_at                                 |                                                                          |
+| default_branch                            |                                                                          |
+| language                                  |                                                                          |
+| open_issues                               |                                                                          |
+| stargazers                                |                                                                          |
+| watchers                                  |                                                                          |
+| forks                                     |                                                                          |
+| description                               |                                                                          |
+| created_at                                |                                                                          |
+| updated_at                                |                                                                          |
+| size                                      |                                                                          |
+| is_template                               |                                                                          |
+| security_and_analysis                     |                                                                          |
+| secret_scanning                           |                                                                          |
+| secret_scanning_push_protection           |                                                                          |
+| dependabot_security_updates               |                                                                          |
+| secret_scanning_non_provider_patterns     |                                                                          |
+| secret_scanning_ai_detection              |                                                                          |
+| secret_scanning_validity_checks           |                                                                          |
+| secret_scanning_delegated_alert_dismissal |                                                                          |
+| flags                                     |                                                                          |
+| days_since_push                           |                                                                          |
+| age_days                                  |                                                                          |
+| days_since_archived                       |                                                                          |
 
 ## org_security_posture.py
 
