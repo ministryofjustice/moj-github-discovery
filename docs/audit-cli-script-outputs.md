@@ -4,43 +4,41 @@ A concise reference of the fields, headings, and audit flags produced per script
 
 ## list_repos.py
 
-| Specific Terms / Headings                         |
-| ------------------------------------------------- |
-| org                                               |
-| repo                                              |
-| full_name                                         |
-| private                                           |
-| archived                                          |
-| fork                                              |
-| fork_source                                       |
-| is_generated_from_template                        |
-| template_source                                   |
-| pushed_at                                         |
-| default_branch                                    |
-| language                                          |
-| open_issues                                       |
-| stargazers                                        |
-| dependabot_access                                 |
-| dependabot_alerts                                 |
-| code_scanning_access                              |
-| code_scanning_alerts                              |
-| secret_scanning_access                            |
-| secret_scanning_alerts                            |
-| default_branch_protected                          |
-| protection_settings                               |
-| branch_protection_enforce_admins                  |
-| branch_protection_dismiss_stale_reviews           |
-| ruleset_dismiss_stale_reviews                     |
-| branch_protection_required_approving_review_count |
-| branch_protection_required_signatures             |
-| ruleset_enforce_admins                            |
-| ruleset_dismiss_stale_reviews                     |
-| ruleset_require_code_owner_reviews                |
-| ruleset_required_approving_review_count           |
-| ruleset_required_signatures                       |
-| codeowners                                        |
-| codeowners_path                                   |
-| flags                                             |
+| Specific Terms / Headings       | Description                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| org                             | github organisation (e.g. `ministryofjustice`)                                                                 |
+| repo                            | github repository name e.g. `developer-experience-documentation`                                               |
+| full_name                       | {org}/{repo} e.g. `ministryofjustice/developer-experience-documentation`                                       |
+| private                         | (Boolean) - Is the repository private?                                                                         |
+| archived                        | (Boolean) - Is the repository archived?                                                                        |
+| fork                            | (Boolean) - Is the repository a fork of another repository?                                                    |
+| fork_source                     | Fork repo name (if applicable)?                                                                                |
+| is_generated_from_template      | (Boolean) - Is the repository generated via a template?                                                        |
+| template_source                 | Template repo name (if applicable)                                                                             |
+| last_pushed_at                  | Timestamp for last push activity to default branch                                                             |
+| last_pushed_activity            | Timestamp for last push activity to any branch                                                                 |
+| default_branch                  | Default branch for repository e.g. `main`, `master`, etc.                                                      |
+| language                        | Core programming language used within repository.                                                              |
+| open_issues                     | Integer count of number of open issues within repository                                                       |
+| stargazers                      | Integer count of number of stargazers against repository repository                                            |
+| dependabot_access               | Verification of dependabot presence and                                                                        |
+| dependabot_alerts               | Integer count of dependabot alerts                                                                             |
+| code_scanning_access            | Verification of access to dependabot code scanning alerts via `/repos/o/r/code-scanning/alerts?state=open`     |
+| code_scanning_alerts            | Integer count of open code scanning alerts                                                                     |
+| secret_scanning_access          | Verification of access to dependabot secret scanning alerts via `/repos/o/r/secret-scanning/alerts?state=open` |
+| secret_scanning_alerts          | Integer count of open secret scanning alerts                                                                   |
+| default_branch_protected        | Boolean check for if default branch is protected via classic branch protection or repo rulesets                |
+| compliance_method               | branch_protection, rulesets, or none (no protection)                                                           |
+| branch_protection_enabled       | Boolean check for if branch protection is enabled (classic branch protection)                                  |
+| has_active_rulesets             | Boolean check for if the repository has active rulesets (at least 1 targeting the default branch)              |
+| protection_settings             | settings list under classic branch protection for deefault branch e.g. `enforce_admins`, `required_signatures` |
+| enforce_admins                  | Boolean check for if `enforce_admins` is enabled (classic branch protection only)                              |
+| dismiss_stale_reviews           | Boolean check for if `dismiss_stale_reviews` is enabled (classic branch protection or rulesets)                |
+| required_approving_review_count | Integer count of required approving reviews if `required_pull_requests` is enabled                             |
+| required_signatures             | Boolean check for if `required_signatures` is enabled (classic branch protection or rulesets)                  |
+| codeowners                      | Boolean check for if `dismiss_stale_reviews` is enabled (classic branch protection or rulesets)                |
+| codeowners_path                 | Path for `CODEOWNERS` file if found                                                                            |
+| flags                           | List of flags as per [audit-flags](#audit-flags) - derived from field results above                            |
 
 ## archive_repos.py
 
