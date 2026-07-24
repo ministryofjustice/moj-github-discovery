@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Organisation-level security posture report built on core modules."""
 
 from __future__ import annotations

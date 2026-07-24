@@ -38,7 +38,7 @@ import sys
 import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -53,7 +53,6 @@ from core.github_api import (
 from core.github_client import BaseHttpClient, GitHubHttpClient
 from core.models import RepoData
 from core.storage import BaseStorage
-
 
 # ── Abstract base ─────────────────────────────────────────────────────
 
@@ -245,7 +244,7 @@ class RepoCollector(BaseCollector):
         # Stamp the collection timestamp
         self._storage_upsert(
             full_name,
-            RepoData(collected_at=datetime.now(timezone.utc).isoformat()),
+            RepoData(collected_at=datetime.now(UTC).isoformat()),
         )
 
     def _collect_full_name(self, full_name: str, resume: bool) -> None:

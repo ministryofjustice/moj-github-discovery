@@ -33,10 +33,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from core.models import RepoData
-
 
 # ── Schema ────────────────────────────────────────────────────────────
 
@@ -94,7 +93,7 @@ class BaseStorage(ABC):
         """
 
     @abstractmethod
-    def read(self, full_name: str) -> Optional[RepoData]:
+    def read(self, full_name: str) -> RepoData | None:
         """Return the stored data for one repo, or ``None`` if not found.
 
         Args:
@@ -162,7 +161,7 @@ class SqliteRepoStorage(BaseStorage):
                 (full_name, merged.model_dump_json()),
             )
 
-    def read(self, full_name: str) -> Optional[RepoData]:
+    def read(self, full_name: str) -> RepoData | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT data FROM repo_data WHERE full_name = ?",

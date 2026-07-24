@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import datetime as dt
-import pandas as pd
 import sys
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from core.config import AuditConfig
+import pandas as pd
+
 from core.compiler import CsvCompiler
+from core.config import AuditConfig
 from core.github_api import (
     fetch_repo_alerts,
     list_org_repos_with_archive_status,
@@ -16,7 +16,6 @@ from core.github_api import (
 from core.github_client import GitHubHttpClient
 from core.output_paths import OutputPathResolver
 from core.storage import SqliteAlertStorage
-
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -35,7 +34,7 @@ ALERT_SPECS: list[AlertSpec] = [
 
 def parse_iso(value: str | None) -> dt.datetime | None:
     """Utility function: convert ISO 8601 datetime strings into readable datetime object"""
-    return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+    return dt.datetime.fromisoformat(value) if value else None
 
 
 def build_archive_status_lookup(

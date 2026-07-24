@@ -8,11 +8,9 @@ import sys
 
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
-
 from dashboard_utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
 from dashboard_utils.data import _load_repo_audit_result
 from layouts.list_repos import format_audit_detail
-
 
 # ---------------------------------------------------------------------------
 # Table + pagination
@@ -259,13 +257,12 @@ def update_modal(selected_repo, audit_data):
     if not selected_repo:
         return hidden, None
 
-    if audit_data:
-        if isinstance(audit_data, str):
-            try:
-                audit_data = json.loads(audit_data)
-            except Exception as exc:
-                print(f"There was an issue loading audit data: {exc}", file=sys.stderr)
-                audit_data = None
+    if audit_data and isinstance(audit_data, str):
+        try:
+            audit_data = json.loads(audit_data)
+        except Exception as exc:
+            print(f"There was an issue loading audit data: {exc}", file=sys.stderr)
+            audit_data = None
 
     if not audit_data:
         audit_data = _load_repo_audit_result(selected_repo)
@@ -300,7 +297,7 @@ def update_modal(selected_repo, audit_data):
 )
 def close_modal(n_clicks):
     """Close the detail modal by clearing the selected repo."""
-    return None
+    return
 
 
 @callback(

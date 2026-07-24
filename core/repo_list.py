@@ -20,7 +20,7 @@ def _normalize_repo_names(values: list[object], source: str) -> list[str]:
 
     for index, value in enumerate(values, start=1):
         if not isinstance(value, str):
-            raise ValueError(
+            raise TypeError(
                 f"Invalid repo entry at position {index} in {source}: expected string"
             )
 
@@ -60,7 +60,7 @@ def load_repo_list_yaml(path: str | Path) -> list[str]:
     elif isinstance(loaded, list):
         values = loaded
     else:
-        raise ValueError(
+        raise TypeError(
             f"Invalid YAML structure in {file_path}: expected mapping or list"
         )
 
@@ -68,7 +68,7 @@ def load_repo_list_yaml(path: str | Path) -> list[str]:
         return []
 
     if not isinstance(values, list):
-        raise ValueError(f"Invalid 'repos' value in {file_path}: expected a YAML list")
+        raise TypeError(f"Invalid 'repos' value in {file_path}: expected a YAML list")
 
     return _normalize_repo_names(values, str(file_path))
 

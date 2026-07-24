@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-
 import pytest
+from pydantic import BaseModel
 
 from core.collector import (
     BaseCollector,
@@ -18,9 +18,7 @@ from core.github_api import (
     RepoDetailsEndpoint,
 )
 from core.models import AlertData, CodeownersData, OrgMembersData, RepoData
-from pydantic import BaseModel
 from tests.conftest import MockHttpClient, MockStorage
-
 
 # ── Tiny test endpoints ───────────────────────────────────────────────
 

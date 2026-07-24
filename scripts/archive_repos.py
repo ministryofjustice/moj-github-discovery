@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Find archive candidates using the shared core collector stack.
 
 This script keeps the familiar archive_repos.py CLI while delegating API fetch,
@@ -14,8 +12,8 @@ from typing import Any
 
 import pandas as pd
 
-from core.config import AuditConfig
 from core.collector import RepoCollector, RepoListCollector
+from core.config import AuditConfig
 from core.github_api import (
     CodeSearchEndpoint,
     DependencyGraphEndpoint,

@@ -20,13 +20,12 @@ mutating the model in place.  Pydantic models are designed for this pattern.
 
 from __future__ import annotations
 
-from typing import Any
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 import re
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from typing import Any
 
 from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
-
 
 # ── Abstract base ─────────────────────────────────────────────────────
 
@@ -81,7 +80,7 @@ class TimestampTransform(BaseTransform):
         if data.repo_details is None:
             return data
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         updates: dict = {}
 
         last_pushed_at = (
@@ -90,13 +89,11 @@ class TimestampTransform(BaseTransform):
             else data.repo_details.pushed_at
         )
         if last_pushed_at:
-            pushed = datetime.fromisoformat(last_pushed_at.replace("Z", "+00:00"))
+            pushed = datetime.fromisoformat(last_pushed_at)
             updates["days_since_push"] = (now - pushed).days
 
         if data.repo_details.created_at:
-            created = datetime.fromisoformat(
-                data.repo_details.created_at.replace("Z", "+00:00")
-            )
+            created = datetime.fromisoformat(data.repo_details.created_at)
             updates["age_days"] = (now - created).days
 
         return data.model_copy(update=updates) if updates else data
@@ -324,15 +321,18 @@ class CredentialPostureTransform(BaseTransform):
             if stripped.startswith("id-token") and "write" in stripped:
                 has_id_token_write = True
 
-            if stripped.startswith("- uses:") or stripped.startswith("uses:"):
+            if stripped.startswith(("- uses:", "uses:")):
                 for prefix in CredentialPostureTransform.OIDC_ACTION_PREFIXES:
                     if prefix in stripped:
                         oidc_actions.append(prefix)
 
             for pattern in CredentialPostureTransform.CREDENTIAL_SECRET_PATTERNS:
-                if pattern in stripped and "secrets." in stripped.lower():
-                    if pattern not in credential_secrets_found:
-                        credential_secrets_found.append(pattern)
+                if (
+                    pattern in stripped
+                    and "secrets." in stripped.lower()
+                    and pattern not in credential_secrets_found
+                ):
+                    credential_secrets_found.append(pattern)
 
         has_oidc = has_id_token_write or len(oidc_actions) > 0
         has_long_lived = len(credential_secrets_found) > 0
@@ -413,7 +413,7 @@ class TriggerRiskTransform(BaseTransform):
                     on_block_indent = len(line) - len(line.lstrip())
                 continue
 
-            if stripped.startswith('"on":') or stripped.startswith("'on':"):
+            if stripped.startswith(('"on":', "'on':")):
                 rest = stripped.split(":", 1)[1].strip()
                 if rest:
                     rest = rest.strip("[]")
@@ -511,7 +511,7 @@ def parse_workflow_permissions(content: str) -> dict[str, object]:
     for line in content.splitlines():
         stripped = line.strip()
 
-        if line.startswith("permissions:") or line.startswith("permissions :"):
+        if line.startswith(("permissions:", "permissions :")):
             has_permissions = True
             in_permissions_block = True
             parts = stripped.split(":", 1)
@@ -563,7 +563,7 @@ def parse_actions_from_content(
     actions: list[dict[str, str]] = []
     for line in content.splitlines():
         line = line.strip()
-        if line.startswith("uses:") or line.startswith("- uses:"):
+        if line.startswith(("uses:", "- uses:")):
             match = re.search(r'uses:\s*["\']?([^"\'#\s]+)', line)
             if match:
                 ref = match.group(1)

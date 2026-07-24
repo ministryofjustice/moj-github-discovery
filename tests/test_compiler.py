@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from core.compiler import (
@@ -19,14 +18,13 @@ from core.compiler import (
 from core.models import (
     AlertData,
     FieldDefinition,
-    FieldType,
     FieldsConfig,
+    FieldType,
     RepoData,
     RepoDetails,
 )
 from core.transforms import BaseTransform, FlagTransform, TimestampTransform
 from tests.conftest import MockStorage
-
 
 # ── _get_nested ───────────────────────────────────────────────────────
 

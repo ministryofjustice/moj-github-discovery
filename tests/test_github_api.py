@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-
 from core.github_api import (
-    REPO_ENDPOINTS,
     ORG_ENDPOINTS,
+    REPO_ENDPOINTS,
+    AlertsEndpoint,
     BaseEndpoint,
     BaseOrgEndpoint,
-    AlertsEndpoint,
     BranchProtectionEndpoint,
     CodeownersEndpoint,
     CodeSearchEndpoint,
@@ -29,14 +28,14 @@ from core.github_api import (
     RepoDetailsEndpoint,
     RepoRulesetsEndpoint,
     WorkflowsEndpoint,
+    check_credential_posture,
+    check_trigger_risk,
+    check_workflow_permissions,
     dependency_supply_chain_summary,
     fetch_repo_alerts,
     fetch_repo_file_text,
     list_org_repos,
     list_org_repos_with_archive_status,
-    check_workflow_permissions,
-    check_credential_posture,
-    check_trigger_risk,
 )
 from core.models import (
     AlertData,
@@ -61,7 +60,6 @@ from core.models import (
     WorkflowPermissionFinding,
 )
 from tests.conftest import MockHttpClient
-
 
 # ── list_org_repos ────────────────────────────────────────────────────
 
@@ -218,6 +216,7 @@ class TestListOrgReposWithArchiveStatus:
             }
         )
         repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == ["myorg/repo-explicit", "myorg/repo-missing"]
         # Both should map to "non_archived", but we verify the field is handled correctly
         assert status_lookup["myorg/repo-explicit"] == "non_archived"
         assert status_lookup["myorg/repo-missing"] == "non_archived"

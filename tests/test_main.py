@@ -1,10 +1,10 @@
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from main import main, _parse_args, SCRIPTS
 from core.config import AuditConfig
-from main import base_directory_setup
+from main import SCRIPTS, _parse_args, base_directory_setup, main
 
 
 # Parse_Args Tests
@@ -83,7 +83,7 @@ def test_repos_arg_rejected_for_org_security_posture(tmp_path):
 
 # Script Execution Tests
 def _make_mock_scripts():
-    return {name: MagicMock() for name in SCRIPTS.keys()}
+    return {name: MagicMock() for name in SCRIPTS}
 
 
 def test_single_script_execution(tmp_path):
@@ -268,9 +268,9 @@ def test_failed_script_exits_nonzero(tmp_path):
         patch("main.SCRIPTS", mock_scripts),
         patch("main.load_audit_config"),
         patch("main.base_directory_setup", return_value=("outputs", "internal")),
+        pytest.raises(SystemExit) as exc_info,
     ):
-        with pytest.raises(SystemExit) as exc_info:
-            main(["--config-file", str(config_file), "--scripts", "list_repos"])
+        main(["--config-file", str(config_file), "--scripts", "list_repos"])
     assert exc_info.value.code != 0
 
 
