@@ -89,13 +89,11 @@ class TimestampTransform(BaseTransform):
             else data.repo_details.pushed_at
         )
         if last_pushed_at:
-            pushed = datetime.fromisoformat(last_pushed_at.replace("Z", "+00:00"))
+            pushed = datetime.fromisoformat(last_pushed_at)
             updates["days_since_push"] = (now - pushed).days
 
         if data.repo_details.created_at:
-            created = datetime.fromisoformat(
-                data.repo_details.created_at.replace("Z", "+00:00")
-            )
+            created = datetime.fromisoformat(data.repo_details.created_at)
             updates["age_days"] = (now - created).days
 
         return data.model_copy(update=updates) if updates else data

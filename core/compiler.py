@@ -123,7 +123,7 @@ def _coerce(value: Any, field: FieldDefinition) -> Any:
         try:
             from datetime import datetime
 
-            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(str(value))
             return dt.strftime("%Y-%m-%d")
         except Exception:
             return str(value)

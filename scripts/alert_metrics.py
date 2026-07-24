@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import datetime as dt
@@ -36,7 +34,7 @@ ALERT_SPECS: list[AlertSpec] = [
 
 def parse_iso(value: str | None) -> dt.datetime | None:
     """Utility function: convert ISO 8601 datetime strings into readable datetime object"""
-    return dt.datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+    return dt.datetime.fromisoformat(value) if value else None
 
 
 def build_archive_status_lookup(

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Find archive candidates using the shared core collector stack.
 
 This script keeps the familiar archive_repos.py CLI while delegating API fetch,

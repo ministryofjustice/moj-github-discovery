@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """GitHub Actions workflow posture discovery.
 
 Refactored to use core modules:

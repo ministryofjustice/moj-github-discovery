@@ -257,13 +257,12 @@ def update_modal(selected_repo, audit_data):
     if not selected_repo:
         return hidden, None
 
-    if audit_data:
-        if isinstance(audit_data, str):
-            try:
-                audit_data = json.loads(audit_data)
-            except Exception as exc:
-                print(f"There was an issue loading audit data: {exc}", file=sys.stderr)
-                audit_data = None
+    if audit_data and isinstance(audit_data, str):
+        try:
+            audit_data = json.loads(audit_data)
+        except Exception as exc:
+            print(f"There was an issue loading audit data: {exc}", file=sys.stderr)
+            audit_data = None
 
     if not audit_data:
         audit_data = _load_repo_audit_result(selected_repo)

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import csv
 import sys
 from datetime import UTC, datetime
@@ -16,7 +14,7 @@ CSV_FILE = "github_alerts_limited.csv"
 
 
 def parse_dt(value):
-    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+    return datetime.fromisoformat(value) if value else None
 
 
 def main():

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 testEnv.py — Diagnose why `gh` auth differs between terminal and Jupyter (Codespaces).
 

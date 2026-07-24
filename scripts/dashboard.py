@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Dash dashboard to display repo audit data from SQLite.
 
