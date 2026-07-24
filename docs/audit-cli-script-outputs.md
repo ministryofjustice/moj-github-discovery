@@ -16,12 +16,12 @@ A concise reference of the fields, headings, and audit flags produced per script
 | is_generated_from_template      | (Boolean) - Is the repository generated via a template?                                                        |
 | template_source                 | Template repo name (if applicable)                                                                             |
 | last_pushed_at                  | Timestamp for last push activity to default branch                                                             |
-| last_pushed_activity            | Timestamp for last push activity to any branch                                                                 |
+| last_push_activity              | Timestamp for last push activity to any branch                                                                 |
 | default_branch                  | Default branch for repository e.g. `main`, `master`, etc.                                                      |
 | language                        | Core programming language used within repository.                                                              |
 | open_issues                     | Integer count of number of open issues within repository                                                       |
-| stargazers                      | Integer count of number of stargazers against repository repository                                            |
-| dependabot_access               | Verification of dependabot presence and                                                                        |
+| stargazers                      | Integer count of stargazers for the repository                                                                 |
+| dependabot_access               | Dependabot alerts API access status ("ok" or an error message if the call failed)                              |
 | dependabot_alerts               | Integer count of dependabot alerts                                                                             |
 | code_scanning_access            | Verification of access to dependabot code scanning alerts via `/repos/o/r/code-scanning/alerts?state=open`     |
 | code_scanning_alerts            | Integer count of open code scanning alerts                                                                     |
@@ -31,12 +31,12 @@ A concise reference of the fields, headings, and audit flags produced per script
 | compliance_method               | branch_protection, rulesets, or none (no protection)                                                           |
 | branch_protection_enabled       | Boolean check for if branch protection is enabled (classic branch protection)                                  |
 | has_active_rulesets             | Boolean check for if the repository has active rulesets (at least 1 targeting the default branch)              |
-| protection_settings             | settings list under classic branch protection for deefault branch e.g. `enforce_admins`, `required_signatures` |
-| enforce_admins                  | Boolean check for if `enforce_admins` is enabled (classic branch protection only)                              |
+| protection_settings             | settings list under classic branch protection for default branch e.g. `enforce_admins`, `required_signatures`  |
+| enforce_admin_protection        | Boolean check for if `enforce_admins` is enabled (classic branch protection only)                              |
 | dismiss_stale_reviews           | Boolean check for if `dismiss_stale_reviews` is enabled (classic branch protection or rulesets)                |
 | required_approving_review_count | Integer count of required approving reviews if `required_pull_requests` is enabled                             |
 | required_signatures             | Boolean check for if `required_signatures` is enabled (classic branch protection or rulesets)                  |
-| codeowners                      | Boolean check for if `dismiss_stale_reviews` is enabled (classic branch protection or rulesets)                |
+| codeowners                      | (Boolean) - Whether a `CODEOWNERS` file was found in the repository                                            |
 | codeowners_path                 | Path for `CODEOWNERS` file if found                                                                            |
 | flags                           | List of flags as per [audit-flags](#audit-flags) - derived from field results above                            |
 
