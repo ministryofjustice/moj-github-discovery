@@ -20,7 +20,7 @@ repos:
         pass_filenames: false
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.16.0
     hooks:
       - id: ruff-check
         name: Ruff Check
@@ -29,6 +29,6 @@ repos:
         name: Ruff Format
   
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.8
+    rev: 0.11.32
     hooks:
       - id: uv-lock
