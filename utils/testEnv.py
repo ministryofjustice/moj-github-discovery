@@ -40,7 +40,9 @@ def redacted_token_info(name: str) -> str:
 def run(
     cmd, env: dict[str, str] | None = None, timeout: int = 30
 ) -> tuple[int, str, str]:
-    p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
+    p = subprocess.run(
+        cmd, capture_output=True, text=True, env=env, timeout=timeout, check=False
+    )
     return p.returncode, p.stdout, p.stderr
 
 
