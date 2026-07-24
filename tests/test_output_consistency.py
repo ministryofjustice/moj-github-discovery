@@ -37,7 +37,7 @@ def test_each_script_resolves_output_path_from_its_subdir(tmp_path):
         ),
     }
 
-    for _, (subdir, filename) in expected.items():
+    for _, (subdir, filename) in expected.values():
         resolved = resolver.script_output_file(subdir, filename)
         assert resolved == outputs_root / subdir / filename
 

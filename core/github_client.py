@@ -353,16 +353,18 @@ class GitHubHttpClient(BaseHttpClient):
 
             result = subprocess.run(
                 ["gh", "auth", "token"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 check=True,
                 text=True,
             )
             token = result.stdout.strip()
             if token:
                 return token
-        except Exception:
-            pass
+        except Exception as exc:
+            print(
+                f"Warning: Failed to retrieve GitHub CLI token via `gh auth token`: {exc}",
+                file=sys.stderr,
+            )
 
         # Second Attempt - Read from gh CLI config file
         config_path = os.path.expanduser("~/.config/gh/hosts.yml")
@@ -537,6 +539,6 @@ class GitHubHttpClient(BaseHttpClient):
 
         data = body.get("data")
         if not isinstance(data, dict):
-            raise RuntimeError("GraphQL response missing 'data'")
+            raise TypeError("GraphQL response missing 'data'")
 
         return data

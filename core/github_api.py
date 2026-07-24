@@ -29,6 +29,7 @@ the legacy single-repo audit script (``repo_info``, ``community_profile``, ``lis
 from __future__ import annotations
 
 import base64
+import sys
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Literal
@@ -163,7 +164,8 @@ def dependency_supply_chain_summary(
                 continue
             try:
                 repo_data = client.get(f"/repos/{owner}/{name}")
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: failed to fetch {full_name}: {exc}", file=sys.stderr)
                 continue
             if isinstance(repo_data, dict):
                 repos.append(repo_data)
@@ -539,8 +541,11 @@ class BranchProtectionEndpoint(BaseEndpoint):
                         f"/repos/{owner}/{repo}/branches/{default_branch}/protection/enforce_admins"
                     )
                     enforce_admins_enabled = bool(enforce_data.get("enabled", False))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(
+                        f"Warning: failed to fetch enforce admins protection for {owner}/{repo}: {exc}",
+                        file=sys.stderr,
+                    )
 
             pr_keys = bp.get("required_pull_request_reviews")
             has_dismissal_key = pr_keys is not None and (
@@ -566,8 +571,11 @@ class BranchProtectionEndpoint(BaseEndpoint):
                     required_approving_review_count = int(
                         pr_data.get("required_approving_review_count", 0)
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(
+                        f"Warning: failed to fetch PR review protection for {owner}/{repo}: {exc}",
+                        file=sys.stderr,
+                    )
 
             if enforce_admins_enabled and "enforce_admins" not in settings:
                 settings.append("enforce_admins")
@@ -578,8 +586,11 @@ class BranchProtectionEndpoint(BaseEndpoint):
                         f"/repos/{owner}/{repo}/branches/{default_branch}/protection/required_signatures"
                     )
                     required_signatures_enabled = bool(sig_data.get("enabled", False))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(
+                        f"Warning: failed to fetch required signatures for {owner}/{repo}: {exc}",
+                        file=sys.stderr,
+                    )
 
             return BranchProtection(
                 branch_protection_enabled=True,
@@ -690,6 +701,10 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                                 int(params.get("required_approving_review_count", 0)),
                             )
                 except Exception as e:
+                    print(
+                        f"Warning: failed to fetch full details for ruleset {ruleset_id} in {owner}/{repo}: {e}",
+                        file=sys.stderr,
+                    )
                     # If fetching full details fails, continue with next ruleset
                     continue
 
@@ -735,8 +750,6 @@ class CodeownersEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "codeowners"
 
-    _LOCATIONS = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]
-
     def fetch(self, owner: str, repo: str) -> CodeownersData:
         try:
             repo_data = self.client.get(f"/repos/{owner}/{repo}")
@@ -745,11 +758,14 @@ class CodeownersEndpoint(BaseEndpoint):
                 f"/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1"
             )
             paths = {item["path"] for item in tree.get("tree", [])}
-            for loc in self._LOCATIONS:
+            for loc in ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]:
                 if loc in paths:
                     return CodeownersData(present=True, path=loc)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(
+                f"Warning: failed to fetch CODEOWNERS for {owner}/{repo}: {exc}",
+                file=sys.stderr,
+            )
         return CodeownersData(present=False)
 
 

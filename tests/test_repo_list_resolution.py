@@ -9,12 +9,12 @@ from core.config import AuditConfig
 
 
 def _make_args(**overrides):
-    defaults = dict(
-        repos=None,
-        repo_file=None,
-        limit=500,
-        org="ministryofjustice",
-    )
+    defaults = {
+        "repos": None,
+        "repo_file": None,
+        "limit": 500,
+        "org": "ministryofjustice",
+    }
     defaults.update(overrides)
     return MagicMock(**defaults)
 

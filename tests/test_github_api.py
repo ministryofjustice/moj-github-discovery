@@ -216,6 +216,7 @@ class TestListOrgReposWithArchiveStatus:
             }
         )
         repos, status_lookup = list_org_repos_with_archive_status("myorg", client)
+        assert repos == ["myorg/repo-explicit", "myorg/repo-missing"]
         # Both should map to "non_archived", but we verify the field is handled correctly
         assert status_lookup["myorg/repo-explicit"] == "non_archived"
         assert status_lookup["myorg/repo-missing"] == "non_archived"
