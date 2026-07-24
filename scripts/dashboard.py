@@ -25,7 +25,7 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # Importing the callbacks module registers all @callback decorators against the
 # Dash app created above. The import must come after `app` is constructed.
-import callbacks.list_repos  # noqa: E402, F401
+import callbacks.list_repos  # noqa: F401
 
 
 def _parse_args() -> str:

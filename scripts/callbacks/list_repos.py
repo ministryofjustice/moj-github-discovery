@@ -8,11 +8,9 @@ import sys
 
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
-
 from dashboard_utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
 from dashboard_utils.data import _load_repo_audit_result
 from layouts.list_repos import format_audit_detail
-
 
 # ---------------------------------------------------------------------------
 # Table + pagination
@@ -300,7 +298,7 @@ def update_modal(selected_repo, audit_data):
 )
 def close_modal(n_clicks):
     """Close the detail modal by clearing the selected repo."""
-    return None
+    return
 
 
 @callback(

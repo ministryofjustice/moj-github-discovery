@@ -1,10 +1,10 @@
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from main import main, _parse_args, SCRIPTS
 from core.config import AuditConfig
-from main import base_directory_setup
+from main import SCRIPTS, _parse_args, base_directory_setup, main
 
 
 # Parse_Args Tests

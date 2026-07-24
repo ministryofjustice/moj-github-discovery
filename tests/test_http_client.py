@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import time
 import types
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest

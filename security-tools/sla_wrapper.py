@@ -2,7 +2,7 @@
 
 import csv
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # SLA thresholds in days
 SLA = {
@@ -36,7 +36,7 @@ def main():
             if severity not in SLA:
                 continue
 
-            age_days = (datetime.now(timezone.utc) - created).days
+            age_days = (datetime.now(UTC) - created).days
 
             if age_days > SLA[severity]:
                 breaches.append((row["repo"], severity, age_days))

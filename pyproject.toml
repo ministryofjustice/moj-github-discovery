@@ -44,4 +44,4 @@ markers = [
 ]
 
 [tool.ruff.lint]
-ignore = ["F841"]
+ignore = ["E402", "F841"]

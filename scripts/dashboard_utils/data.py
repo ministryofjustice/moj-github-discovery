@@ -6,10 +6,8 @@ called, so all functions pick up the correct database at runtime.
 
 from __future__ import annotations
 
+from core.presenters import build_dashboard_dataframe, repo_data_to_audit_result
 from core.storage import SqliteRepoStorage
-from core.presenters import build_dashboard_dataframe
-from core.presenters import repo_data_to_audit_result
-
 
 # Set by dashboard.py before the app starts.
 db_path: str | None = None

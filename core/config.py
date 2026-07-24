@@ -8,10 +8,10 @@ the ``--config-file`` CLI argument on any script that consumes this module.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import yaml
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
@@ -20,10 +20,10 @@ class ScriptOutputConfig(BaseModel):
     """Shared output subdirectory behaviour for script configs."""
 
     script_name: ClassVar[str]
-    output_subdir: Optional[str] = None
+    output_subdir: str | None = None
 
     @model_validator(mode="after")
-    def derive_output_subdir(self) -> "ScriptOutputConfig":
+    def derive_output_subdir(self) -> ScriptOutputConfig:
         if not self.output_subdir:
             self.output_subdir = self.script_name
         return self
@@ -52,12 +52,12 @@ class AlertMetricsConfig(ScriptOutputConfig):
 
     database_path: str = "internal/alert_metrics.db"  # SQLite cache file for alert data
     output_filename: str = "alert_metrics.csv"  # output file for alert data
-    max_alerts: Optional[int] = None  # max number of alerts to collect (for testing)
-    repo_limit: Optional[int] = None  # max number of repos to audit (for testing)
+    max_alerts: int | None = None  # max number of alerts to collect (for testing)
+    repo_limit: int | None = None  # max number of repos to audit (for testing)
 
     @field_validator("repo_limit", "max_alerts", mode="after")
     @classmethod
-    def must_be_positive(cls, value: Optional[int]) -> Optional[int]:
+    def must_be_positive(cls, value: int | None) -> int | None:
         if value is not None and value <= 0:
             raise ValueError(f"Value must be a positive integer, got {value}")
         return value
@@ -72,7 +72,7 @@ class NamespaceCrossrefConfig(BaseModel):
     root_folder: str = "namespaces"
 
     @model_validator(mode="after")
-    def validate_crossref(self) -> "NamespaceCrossrefConfig":
+    def validate_crossref(self) -> NamespaceCrossrefConfig:
         for field_name in ["target_repo", "target_branch", "root_folder"]:
             if self.enabled and not self.__dict__.get(field_name):
                 raise ValueError(
@@ -90,10 +90,8 @@ class ArchiveReposConfig(ScriptOutputConfig):
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
     )
     output_filename: str = "archive_repos.csv"  # output file for archived repo data
-    page_num: Optional[int] = (
-        None  # page number to process (for pagination of large orgs)
-    )
-    repo_limit: Optional[int] = (
+    page_num: int | None = None  # page number to process (for pagination of large orgs)
+    repo_limit: int | None = (
         None  # limit total number of repos to process (for testing) - set to None for no limit
     )
     sort_by_field: str = "days_since_push"
@@ -107,7 +105,7 @@ class ArchiveReposConfig(ScriptOutputConfig):
 
     @field_validator("page_num", "repo_limit", mode="after")
     @classmethod
-    def must_be_non_negative(cls, value: Optional[int]) -> Optional[int]:
+    def must_be_non_negative(cls, value: int | None) -> int | None:
         if value is not None and value < 0:
             raise ValueError(f"Value must be a non-negative integer, got {value}")
         return value
@@ -122,7 +120,7 @@ class ListReposConfig(ScriptOutputConfig):
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
     )
     output_filename: str = "list_repos.xlsx"  # output file for repo summary data
-    repo_limit: Optional[int] = 400
+    repo_limit: int | None = 400
     use_cache: bool = (
         True  # whether to use database cache to skip endpoints already collected
     )
@@ -158,7 +156,7 @@ class WorkflowAuditConfig(ScriptOutputConfig):
     output_prefix: str = (
         "github_workflow_audit"  # prefix for output files (suffixes added per stage)
     )
-    repo_limit: Optional[int] = (
+    repo_limit: int | None = (
         400  # max number of repos to audit (for testing) - set to None for no limit
     )
     use_cache: bool = (
@@ -188,7 +186,7 @@ class AuditConfig(BaseModel):
     workflow_audit: WorkflowAuditConfig = Field(default_factory=WorkflowAuditConfig)
 
 
-def load_audit_config(config_path: Optional[Path] = None) -> AuditConfig:
+def load_audit_config(config_path: Path | None = None) -> AuditConfig:
     """
     Load an :class:`AuditConfig` from disk.
 

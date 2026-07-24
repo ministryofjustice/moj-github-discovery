@@ -21,7 +21,6 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Dict, Tuple, Optional
 
 ORG = os.environ.get("GITHUB_ORG", "ministryofjustice")  # override if needed
 
@@ -40,13 +39,13 @@ def redacted_token_info(name: str) -> str:
 
 
 def run(
-    cmd, env: Optional[Dict[str, str]] = None, timeout: int = 30
-) -> Tuple[int, str, str]:
+    cmd, env: dict[str, str] | None = None, timeout: int = 30
+) -> tuple[int, str, str]:
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
     return p.returncode, p.stdout, p.stderr
 
 
-def print_kv(title: str, kv: Dict[str, str]):
+def print_kv(title: str, kv: dict[str, str]):
     print(f"\n=== {title} ===")
     for k, v in kv.items():
         print(f"{k}: {v}")
@@ -120,7 +119,7 @@ def main() -> int:
     else:
         print("\nNOTE: No token present to test force-token mode (Variant C).")
 
-    def do_calls(label: str, env: Dict[str, str]):
+    def do_calls(label: str, env: dict[str, str]):
         print(f"\n\n######################## {label} ########################")
 
         # 1) auth status

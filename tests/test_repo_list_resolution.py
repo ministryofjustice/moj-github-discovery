@@ -93,9 +93,11 @@ def test_raises_when_org_listing_fails_and_no_other_source(tmp_path, monkeypatch
     config = AuditConfig(repo_list_file="/nonexistent/path.yaml")
     client = MagicMock()
 
-    with patch(
-        "scripts.github_workflow.list_org_repos",
-        side_effect=Exception("API down"),
+    with (
+        patch(
+            "scripts.github_workflow.list_org_repos",
+            side_effect=Exception("API down"),
+        ),
+        pytest.raises(SystemExit, match="Unable to list repos"),
     ):
-        with pytest.raises(SystemExit, match="Unable to list repos"):
-            scripts.github_workflow.resolve_repo_list(args, client, config)
+        scripts.github_workflow.resolve_repo_list(args, client, config)

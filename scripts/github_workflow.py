@@ -13,25 +13,26 @@ Not yet in core (local implementations retained):
 
 import argparse
 import os
+import sqlite3
 import sys
 import time
-import sqlite3
-import pandas as pd
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
+
+import pandas as pd
 
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
 from core.config import AuditConfig
 from core.github_api import (
     LatestWorkflowRunEndpoint,
-    RepoDetailsEndpoint,
     RepoActionsPermissionsEndpoint,
+    RepoDetailsEndpoint,
     WorkflowsEndpoint,
-    check_workflow_permissions,
     check_credential_posture,
     check_trigger_risk,
+    check_workflow_permissions,
     fetch_repo_file_text,
     list_org_repos,
 )
@@ -50,7 +51,7 @@ def parse_actions_from_workflow(
     owner: str,
     repo_name: str,
     workflow_path: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fetch a workflow file and extract all ``uses:`` references."""
     content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
     if content is None:
@@ -65,7 +66,7 @@ def parse_actions_from_workflow(
 # --- Row builders ---------------------------------------------------------
 
 
-def build_repo_row(full_name: str, data: RepoData) -> Dict[str, Any]:
+def build_repo_row(full_name: str, data: RepoData) -> dict[str, Any]:
     """Build a posture summary row from collected RepoData."""
     repo = data.repo_details
     workflows = data.workflows
@@ -119,11 +120,11 @@ def build_repo_row(full_name: str, data: RepoData) -> Dict[str, Any]:
     }
 
 
-def build_workflow_detail_rows(full_name: str, data: RepoData) -> List[Dict[str, Any]]:
+def build_workflow_detail_rows(full_name: str, data: RepoData) -> list[dict[str, Any]]:
     """Build one detail row per workflow from WorkflowData."""
     owner, _, repo_name = full_name.partition("/")
     workflows = data.workflows
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for wf in workflows.workflows if workflows else []:
         rows.append(
             {
@@ -143,8 +144,8 @@ def build_workflow_detail_rows(full_name: str, data: RepoData) -> List[Dict[str,
 
 def write_summary(
     path: str,
-    repo_rows: List[Dict[str, Any]],
-    detail_rows: List[Dict[str, Any]],
+    repo_rows: list[dict[str, Any]],
+    detail_rows: list[dict[str, Any]],
 ) -> None:
     """Write a human-readable summary report."""
     total = len(repo_rows)
@@ -164,7 +165,7 @@ def write_summary(
     ]
     disable_candidates = [r for r in repo_rows if r.get("disable_candidate")]
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
         "=" * 70,
@@ -239,7 +240,7 @@ def resolve_repo_list(
     args: argparse.Namespace,
     client: GitHubHttpClient,
     config: AuditConfig,
-) -> List[str]:
+) -> list[str]:
     """Stage 1: Resolve the repository list to scan (mandatory).
 
     Resolution order:
@@ -281,7 +282,7 @@ def resolve_repo_list(
 def collect_baseline(
     args: argparse.Namespace,
     client: GitHubHttpClient,
-    repo_list: List[str],
+    repo_list: list[str],
     storage: SqliteRepoStorage,
 ) -> None:
     """Stage 2: Collect baseline repo metadata and workflow inventory."""
@@ -300,7 +301,7 @@ def collect_baseline(
 def collect_additional(
     args: argparse.Namespace,
     client: GitHubHttpClient,
-    repo_list: List[str],
+    repo_list: list[str],
     storage: SqliteRepoStorage,
 ) -> None:
     """Stage 3: Collect remaining workflow posture data."""
@@ -315,7 +316,7 @@ def collect_additional(
     collector.collect(primary_org, repos=repo_list, resume=args.resume)
 
     # 3.2 Collect latest workflow run only for repos that have workflows
-    repos_with_workflows: List[str] = []
+    repos_with_workflows: list[str] = []
     for full_name in repo_list:
         data = storage.read(full_name) or RepoData()
         if data.workflows and data.workflows.count > 0:
@@ -334,8 +335,8 @@ def collect_additional(
 
 
 def build_rows(
-    repo_list: List[str], storage: SqliteRepoStorage
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    repo_list: list[str], storage: SqliteRepoStorage
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Stage 4: Read collected data and build output row sets.
 
     Always runs — downstream stages need ``detail_rows``. Reads are cheap
@@ -344,8 +345,8 @@ def build_rows(
     populated it), this returns empty rows for the affected repos and
     lets later stages no-op gracefully, rather than crash.
     """
-    repo_rows: List[Dict[str, Any]] = []
-    detail_rows: List[Dict[str, Any]] = []
+    repo_rows: list[dict[str, Any]] = []
+    detail_rows: list[dict[str, Any]] = []
     total = len(repo_list)
     for idx, full_name in enumerate(repo_list, start=1):
         print(f"[{idx}/{total}] Augmenting {full_name}...", file=sys.stderr)
@@ -366,8 +367,8 @@ def build_rows(
 
 def write_posture_reports(
     args: argparse.Namespace,
-    repo_rows: List[Dict[str, Any]],
-    detail_rows: List[Dict[str, Any]],
+    repo_rows: list[dict[str, Any]],
+    detail_rows: list[dict[str, Any]],
     output_dir: Path,
 ) -> None:
     """Stage 5: Write repo-level posture reports."""
@@ -392,7 +393,7 @@ def write_posture_reports(
 
 
 def actions_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
@@ -418,7 +419,7 @@ def actions_analysis(
         actions_analysis_path_base / "github_actions_unpinned_detail.csv"
     )
 
-    all_actions: List[Dict[str, Any]] = []
+    all_actions: list[dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         actions = parse_actions_from_workflow(
             client, row["owner"], row["repo_name"], row["path"]
@@ -581,13 +582,13 @@ def actions_analysis(
 
 
 def permissions_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 7: Parse workflow files for permissions posture."""
     print("\n--- Analysing workflow permissions ---")
     permissions_analysis_path_base = output_dir / "permissions_analysis"
     permissions_analysis_path_base.mkdir(parents=True, exist_ok=True)
-    all_permissions: List[Dict[str, Any]] = []
+    all_permissions: list[dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         perm = check_workflow_permissions(
             client, row["owner"], row["repo_name"], row["path"]
@@ -626,12 +627,12 @@ def permissions_analysis(
 
 
 def credentials_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 8: Assess OIDC vs long-lived credentials."""
     print("\n--- Assessing OIDC vs long-lived credentials ---")
 
-    all_credential_findings: List[Dict[str, Any]] = []
+    all_credential_findings: list[dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         finding = check_credential_posture(
             client, row["owner"], row["repo_name"], row["path"]
@@ -653,7 +654,7 @@ def credentials_analysis(
     )
     print(f"Wrote {credentials_analysis_path} ({cred_count} rows)")
 
-    repo_cred_summary: Dict[str, Dict[str, int]] = {}
+    repo_cred_summary: dict[str, dict[str, int]] = {}
     for f in all_credential_findings:
         repo = f["repo"]
         if repo not in repo_cred_summary:
@@ -715,12 +716,12 @@ def credentials_analysis(
 
 
 def trigger_risk_analysis(
-    client: GitHubHttpClient, detail_rows: List[Dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
 ) -> None:
     """Stage 9: Analyse workflow trigger config risk."""
     print("\n--- Analysing workflow trigger risk ---")
 
-    all_trigger_findings: List[Dict[str, Any]] = []
+    all_trigger_findings: list[dict[str, Any]] = []
     for i, row in enumerate(detail_rows):
         finding = check_trigger_risk(
             client, row["owner"], row["repo_name"], row["path"]
@@ -740,7 +741,7 @@ def trigger_risk_analysis(
     )
     print(f"Wrote {trigger_csv_path} ({trigger_count} rows)")
 
-    repo_trigger_summary: Dict[str, Dict[str, int]] = {}
+    repo_trigger_summary: dict[str, dict[str, int]] = {}
     for f in all_trigger_findings:
         repo = f["repo"]
         if repo not in repo_trigger_summary:

@@ -9,16 +9,15 @@ import sys
 
 import pandas as pd
 
-from core.config import AuditConfig
-from core.models import FieldDefinition, FieldsConfig, FieldType
 from core.collector import RepoCollector
+from core.compiler import ExcelCompiler
+from core.config import AuditConfig
 from core.github_api import GetRepoTreeEndpoint, RepoDetailsEndpoint
+from core.models import FieldDefinition, FieldsConfig, FieldType
 from core.output_paths import OutputPathResolver
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
-from core.compiler import ExcelCompiler
 from core.transforms import RepoTreeTransform
-
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"

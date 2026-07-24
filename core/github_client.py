@@ -26,7 +26,7 @@ import os
 import sys
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 from urllib.parse import urljoin
 
 import requests
@@ -211,7 +211,7 @@ class GitHubHttpClient(BaseHttpClient):
 
     @staticmethod
     def _resolve_github_app_installation_id(
-        sess: requests.Session, headers: Dict[str, str]
+        sess: requests.Session, headers: dict[str, str]
     ) -> str:
         """Resolve GitHub App Installation ID via Env or Org Name"""
 
@@ -233,7 +233,7 @@ class GitHubHttpClient(BaseHttpClient):
                 "or GH_ORG/GITHUB_ORG/GITHUB_OWNER to auto-resolve the installation."
             )
 
-        installation_accounts: List[str] = []
+        installation_accounts: list[str] = []
 
         for page in range(1, 11):
             resp = sess.get(
@@ -334,7 +334,7 @@ class GitHubHttpClient(BaseHttpClient):
 
             return token
 
-    def _read_github_app_private_key() -> Optional[str]:
+    def _read_github_app_private_key() -> str | None:
         """Return GitHub App private key from environment variable content."""
         key_value = os.getenv("GITHUB_APP_PRIVATE_KEY") or os.getenv(
             "GH_APP_PRIVATE_KEY"

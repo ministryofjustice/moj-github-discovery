@@ -14,8 +14,8 @@ from typing import Any
 
 import pandas as pd
 
-from core.config import AuditConfig
 from core.collector import RepoCollector, RepoListCollector
+from core.config import AuditConfig
 from core.github_api import (
     CodeSearchEndpoint,
     DependencyGraphEndpoint,

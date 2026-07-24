@@ -24,10 +24,9 @@ See ``CONTRIBUTING.md`` for a full walkthrough.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # ── Fields config models ──────────────────────────────────────────────
 
@@ -54,7 +53,7 @@ class FieldDefinition(BaseModel):
     type: FieldType
     """How to coerce the value before writing."""
 
-    default: Optional[Any] = None
+    default: Any | None = None
     """Fallback when the source path is missing or null."""
 
 
@@ -78,39 +77,39 @@ class RepoDetails(BaseModel):
 
     full_name: str
     name: str
-    org: Optional[str] = None
+    org: str | None = None
     private: bool = False
     archived: bool = False
-    archived_at: Optional[str] = None
+    archived_at: str | None = None
     disabled: bool = False
     fork: bool = False
     is_template: bool = False
-    description: Optional[str] = None
-    language: Optional[str] = None
+    description: str | None = None
+    language: str | None = None
     default_branch: str = "main"
     size: int = 0
-    pushed_at: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    pushed_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
     open_issues_count: int = 0
     stargazers_count: int = 0
     watchers_count: int = 0
     forks_count: int = 0
-    security_and_analysis: Optional[dict[str, Any]] = None
-    license: Optional[dict[str, Any]] = None
+    security_and_analysis: dict[str, Any] | None = None
+    license: dict[str, Any] | None = None
     """Repository license information from the GitHub API (e.g., SPDX key, name)."""
 
 
 class RepoArchivedAt(BaseModel):
     """Repository Archival Date metadata. Also used for calculating days since archival"""
 
-    archived_at: Optional[str] = None
+    archived_at: str | None = None
 
 
 class DefaultBranchCommitData(BaseModel):
     """Most recent commit date on the default branch only."""
 
-    last_pushed_at: Optional[str] = None
+    last_pushed_at: str | None = None
 
 
 class AlertData(BaseModel):
@@ -135,7 +134,7 @@ class BranchProtection(BaseModel):
     require_code_owner_reviews: bool = False
     required_approving_review_count: int = 0
     required_signatures_enabled: bool = False
-    branch_protection_access: Optional[str] = None
+    branch_protection_access: str | None = None
     """Set to an error message when the API call failed (e.g. no admin access)."""
 
 
@@ -148,7 +147,7 @@ class RepoRulesetsData(BaseModel):
     require_code_owner_reviews: bool = False
     required_approving_review_count: int = 0
     required_signatures: bool = False
-    rulesets_access: Optional[str] = None
+    rulesets_access: str | None = None
     """Set to an error message when the API call failed."""
 
 
@@ -156,7 +155,7 @@ class CodeownersData(BaseModel):
     """Whether a CODEOWNERS file exists and where it lives."""
 
     present: bool = False
-    path: Optional[str] = None
+    path: str | None = None
 
 
 class CommunityProfile(BaseModel):
@@ -165,7 +164,7 @@ class CommunityProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     health_percentage: int = 0
-    files: Optional[dict[str, Any]] = None
+    files: dict[str, Any] | None = None
 
 
 class WorkflowAnalysis(BaseModel):
@@ -182,7 +181,7 @@ class WorkflowData(BaseModel):
 
     count: int = 0
     workflows: list[dict[str, Any]] = Field(default_factory=list)
-    analysis: Optional[WorkflowAnalysis] = None
+    analysis: WorkflowAnalysis | None = None
 
 
 class RepoActionsPermissionsData(BaseModel):
@@ -190,14 +189,14 @@ class RepoActionsPermissionsData(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    enabled: Optional[bool] = None
-    allowed_actions: Optional[str] = None
+    enabled: bool | None = None
+    allowed_actions: str | None = None
 
 
 class LatestWorkflowRunData(BaseModel):
     """Timestamp of the most recent workflow run for a repository."""
 
-    created_at: Optional[str] = None
+    created_at: str | None = None
 
 
 class WorkflowPermissionFinding(BaseModel):
@@ -226,9 +225,9 @@ class ForkTemplateData(BaseModel):
     """Fork origin and template source details."""
 
     is_fork: bool = False
-    fork_source: Optional[str] = None
+    fork_source: str | None = None
     is_generated_from_template: bool = False
-    template_source: Optional[str] = None
+    template_source: str | None = None
 
 
 class DependencyGraphData(BaseModel):
@@ -243,11 +242,11 @@ class RepoTreeEntry(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     path: str
-    mode: Optional[str] = None
-    type: Optional[str] = None
-    sha: Optional[str] = None
-    size: Optional[int] = None
-    url: Optional[str] = None
+    mode: str | None = None
+    type: str | None = None
+    sha: str | None = None
+    size: int | None = None
+    url: str | None = None
 
 
 class RepoTreeData(BaseModel):
@@ -255,8 +254,8 @@ class RepoTreeData(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    sha: Optional[str] = None
-    url: Optional[str] = None
+    sha: str | None = None
+    url: str | None = None
     truncated: bool = False
     tree: list[RepoTreeEntry] = Field(default_factory=list)
     access: str = "ok"
@@ -265,7 +264,7 @@ class RepoTreeData(BaseModel):
 class LargeBlobData(BaseModel):
     """Blob metadata for files that exceed the configured size threshold."""
 
-    sha: Optional[str] = None
+    sha: str | None = None
     size_bytes: int
     path: str
 
@@ -274,7 +273,7 @@ class ReferenceItem(BaseModel):
     """A single code-search hit referencing this repository."""
 
     full_name: str
-    path: Optional[str] = None
+    path: str | None = None
     archived: bool = False
 
 
@@ -300,9 +299,9 @@ class OrgActionsData(BaseModel):
     """Org-level Actions configuration — runners, permissions, secrets."""
 
     self_hosted_runners: int = 0
-    allowed_actions_policy: Optional[str] = None
+    allowed_actions_policy: str | None = None
     org_secrets_count: int = 0
-    default_workflow_permissions: Optional[str] = None
+    default_workflow_permissions: str | None = None
 
 
 class InstalledApp(BaseModel):
@@ -311,8 +310,8 @@ class InstalledApp(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     app_slug: str = ""
-    installation_id: Optional[int] = None
-    repository_selection: Optional[str] = None
+    installation_id: int | None = None
+    repository_selection: str | None = None
     permissions: dict[str, str] = Field(default_factory=dict)
 
 
@@ -398,30 +397,30 @@ class RepoData(BaseModel):
     """
 
     # Endpoint-populated fields
-    repo_details: Optional[RepoDetails] = None
-    repo_archived_at: Optional[RepoArchivedAt] = None
-    alerts: Optional[AlertData] = None
-    branch_protection: Optional[BranchProtection] = None
-    repo_rulesets: Optional[RepoRulesetsData] = None
-    community: Optional[CommunityProfile] = None
-    codeowners: Optional[CodeownersData] = None
-    workflows: Optional[WorkflowData] = None
-    repo_actions_permissions: Optional[RepoActionsPermissionsData] = None
-    latest_workflow_run: Optional[LatestWorkflowRunData] = None
-    fork_template: Optional[ForkTemplateData] = None
-    dependency_graph: Optional[DependencyGraphData] = None
-    repo_tree: Optional[RepoTreeData] = None
-    references: Optional[ReferenceData] = None
-    default_branch_commit: Optional[DefaultBranchCommitData] = None
+    repo_details: RepoDetails | None = None
+    repo_archived_at: RepoArchivedAt | None = None
+    alerts: AlertData | None = None
+    branch_protection: BranchProtection | None = None
+    repo_rulesets: RepoRulesetsData | None = None
+    community: CommunityProfile | None = None
+    codeowners: CodeownersData | None = None
+    workflows: WorkflowData | None = None
+    repo_actions_permissions: RepoActionsPermissionsData | None = None
+    latest_workflow_run: LatestWorkflowRunData | None = None
+    fork_template: ForkTemplateData | None = None
+    dependency_graph: DependencyGraphData | None = None
+    repo_tree: RepoTreeData | None = None
+    references: ReferenceData | None = None
+    default_branch_commit: DefaultBranchCommitData | None = None
 
     # Transform-computed fields
-    days_since_push: Optional[int] = None
-    age_days: Optional[int] = None
+    days_since_push: int | None = None
+    age_days: int | None = None
     flags: list[str] = Field(default_factory=list)
-    repo_tree_transform: Optional[RepoTreeProcessedData] = None
+    repo_tree_transform: RepoTreeProcessedData | None = None
 
     # Collection metadata
-    collected_at: Optional[str] = None
+    collected_at: str | None = None
 
 
 class RepoTreeProcessedData(BaseModel):
@@ -431,9 +430,9 @@ class RepoTreeProcessedData(BaseModel):
     configured soft limit.
     """
 
-    repo: Optional[str] = None
+    repo: str | None = None
     largest_blob_bytes: int = 0
-    largest_blob_path: Optional[str] = None
+    largest_blob_path: str | None = None
     large_blobs: list[LargeBlobData] = Field(default_factory=list)
     exceeds_soft_limit: bool = False
     exceeds_hard_limit: bool = False

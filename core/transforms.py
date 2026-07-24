@@ -20,13 +20,12 @@ mutating the model in place.  Pydantic models are designed for this pattern.
 
 from __future__ import annotations
 
-from typing import Any
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 import re
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from typing import Any
 
 from core.models import LargeBlobData, RepoData, RepoTreeProcessedData
-
 
 # ── Abstract base ─────────────────────────────────────────────────────
 
@@ -81,7 +80,7 @@ class TimestampTransform(BaseTransform):
         if data.repo_details is None:
             return data
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         updates: dict = {}
 
         last_pushed_at = (

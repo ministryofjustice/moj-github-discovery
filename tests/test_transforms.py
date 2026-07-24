@@ -20,15 +20,14 @@ from core.transforms import (
     BaseTransform,
     CredentialPostureTransform,
     FlagTransform,
-    RepoTreeTransform,
     ReferenceClassifier,
-    TriggerRiskTransform,
+    RepoTreeTransform,
     TimestampTransform,
-    parse_workflow_permissions,
-    parse_actions_from_content,
+    TriggerRiskTransform,
     is_pinned_to_sha,
+    parse_actions_from_content,
+    parse_workflow_permissions,
 )
-
 
 # ── BaseTransform ─────────────────────────────────────────────────────
 
