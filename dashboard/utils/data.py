@@ -1,6 +1,6 @@
 """Data-access helpers for the dashboard.
 
-``db_path`` is set by the entry-point (``dashboard.py``) before any helper is
+``db_path`` is set by the entry-point (``dashboard/main.py``) before any helper is
 called, so all functions pick up the correct database at runtime.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from core.presenters import build_dashboard_dataframe, repo_data_to_audit_result
 from core.storage import SqliteRepoStorage
 
-# Set by dashboard.py before the app starts.
+# Set by dashboard/main.py before the app starts.
 db_path: str | None = None
 
 
@@ -18,7 +18,7 @@ def _get_storage():
 
     if not db_path:
         raise RuntimeError(
-            "dashboard_utils.data.db_path is not set; set it before calling data helpers."
+            "utils.data.db_path is not set; set it before calling data helpers."
         )
 
     storage = SqliteRepoStorage(db_path)
