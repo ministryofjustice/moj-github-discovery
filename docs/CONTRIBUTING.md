@@ -8,7 +8,7 @@ This repository is organized around a reusable `core/` module, with root scripts
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                                CLI entry points                            │
 │  list_repos.py  archive_repos.py  org_security_posture.py                  │
-│  dashboard.py / dashboard_cli.py (UI layers)                               │
+│  dashboard/main.py (UI layer)                                               │
 └───────────────────────────────┬────────────────────┬───────────────────────┘
                                 │                    │
                         ┌───────▼────────┐    ┌──────▼─────────┐

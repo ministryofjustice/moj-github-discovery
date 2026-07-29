@@ -30,7 +30,7 @@ collection, storage, and report shaping.
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                CLI entry points                                                                 │
 │  list_repos.py  archive_repos.py  org_security_posture.py   github_workflow.py, alert_metrics.py  lfs_script.py │
-│  dashboard.py (UI layer)                                                                                        │
+│  dashboard/main.py (UI layer)                                                                                   │
 └───────────────────────────────┬────────────────────┬────────────────────────────────────────────────────────────┘
         │                    │
       ┌───────▼───────┐    ┌──────▼────────┐
@@ -264,14 +264,14 @@ uv run audit-cli --scripts org_security_posture --config-file /path/to/config.ya
 uv run audit-cli --scripts org_security_posture --config-file config/audit_config.yaml --auth pat
 ```
 
-### 4. `dashboard.py` - Interactive Web Dashboard
+### 4. `dashboard/main.py` - Interactive Web Dashboard
 
 Launches an interactive Dash web dashboard to browse and manage repository audits. Allows searching, filtering, and running new audits directly from the UI.
 
 **Usage:**
 
 ```bash
-uv run python scripts/dashboard.py [options]
+uv run python dashboard/main.py [options]
 ```
 
 **Options:**
@@ -283,10 +283,10 @@ uv run python scripts/dashboard.py [options]
 ```bash
 # Start dashboard with default database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 
 # Start with custom database
-uv run python scripts/dashboard.py --db /tmp/audit.db
+uv run python dashboard/main.py --db /tmp/audit.db
 ```
 
 **Features:**
@@ -509,7 +509,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run python scripts/list_repos.py --config-file config/audit_config.yaml
 
 # 2. Launch dashboard to explore results
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 
 # 3. Click on repos to view details or run deeper audits
 ```
@@ -553,7 +553,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 
 # View in dashboard
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 ```
 
 ### Continuous Monitoring
@@ -564,7 +564,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 
 # Dashboard automatically shows updated data
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 ```
 
 ## Troubleshooting
@@ -625,7 +625,7 @@ uv run audit-cli --scripts list_repos
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 # Select each repo and click "Run Audit" for updated details in core storage
 ```
 
@@ -634,7 +634,7 @@ uv run python scripts/dashboard.py
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
-uv run python scripts/dashboard.py
+uv run python dashboard/main.py
 # Filter by "Show only repos with flags"
 ```
 
