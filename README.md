@@ -594,10 +594,11 @@ This will diagnose differences in PATH, HOME, and token availability.
 - Close other instances of the dashboard
 - Ensure no other processes are accessing the database
 
-### sqlite3.OperationalError: unable to open database file
+### Script exits with no output when run directly
 
-- Caused by running a script directly without `audit-cli`
-- Fix: run via `audit-cli`, or run `mkdir -p internal` first
+- Audit scripts are library modules dispatched by `audit-cli` / `main.py`, not standalone entry points
+- Running one directly (for example `uv run python scripts/list_repos.py`) will show a clear error and exit
+- Fix: run it via `uv run audit-cli --scripts list_repos`, or through `main.py`
 
 ### 403 Rate Limit Errors During a Run
 

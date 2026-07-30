@@ -51,6 +51,7 @@
     "version": "0.2",
     "words": [
       "azuread",
+      "capsys",
       "clientid",
       "clippy",
       "CREDS",

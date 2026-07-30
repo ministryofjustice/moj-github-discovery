@@ -25,6 +25,7 @@ from core.github_client import GitHubHttpClient
 from core.models import RepoData, RepoDetails
 from core.output_paths import OutputPathResolver
 from core.storage import SqliteRepoStorage
+from core.validation import direct_invocation_guard
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
@@ -552,3 +553,7 @@ def run(
         print(json.dumps(records, indent=2))
 
     print(f"Processed {len(records)} repositories", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)

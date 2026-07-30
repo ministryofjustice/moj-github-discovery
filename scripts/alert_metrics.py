@@ -16,6 +16,7 @@ from core.github_api import (
 from core.github_client import GitHubHttpClient
 from core.output_paths import OutputPathResolver
 from core.storage import SqliteAlertStorage
+from core.validation import direct_invocation_guard
 
 # Alerts Config
 AlertSpec = tuple[str, Callable[[dict[str, Any]], str]]
@@ -281,3 +282,7 @@ def run(
 
     if rows:
         summarise_results(output_file_path)
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)
