@@ -18,6 +18,7 @@ from core.output_paths import OutputPathResolver
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import RepoTreeTransform
+from core.validation import direct_invocation_guard
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
@@ -201,3 +202,7 @@ def run(
         )
 
     print("<LFS Analysis> LFS analysis script completed successfully", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)

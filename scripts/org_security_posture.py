@@ -28,6 +28,7 @@ from core.output_paths import OutputPathResolver
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
+from core.validation import direct_invocation_guard
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
@@ -393,3 +394,7 @@ def run(
         org_security_posture_config.output_subdir, output_filename
     )
     write_excel(report, str(excel_path))
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)

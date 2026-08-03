@@ -15,6 +15,7 @@ from core.output_paths import OutputPathResolver
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
+from core.validation import direct_invocation_guard
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
@@ -125,3 +126,7 @@ def run(
             file=sys.stderr,
         )
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)

@@ -86,6 +86,33 @@ uv run pytest tests/test_integration.py -m integration -o addopts='' -v
 2. Register it in `COMPILERS`.
 3. Add tests for the new compiler behavior in `tests/test_compiler.py`.
 
+### 5. Add a new audit script
+
+1. Decide whether the script should be an `audit-cli` entry point or a true
+   standalone script.
+2. For `audit-cli` scripts, keep the root script thin, add a `run()` entry
+   point matching the existing audit scripts, and register it in the
+   `SCRIPTS` dict in `main.py`.
+3. Add the direct invocation guard to non-standalone audit scripts so
+   unsupported direct execution fails with a clear message instead of
+   exiting silently:
+
+   ```python
+   from core.validation import direct_invocation_guard
+
+   if __name__ == "__main__":
+       direct_invocation_guard(__file__)
+   ```
+
+4. Add any script-specific config to `config/audit_config.yaml` with the
+   corresponding model in `core/config.py`, and tests in
+   `tests/test_<script_name>.py`.
+5. Update `README.md` or the relevant docs if the new script changes
+   supported usage or examples.
+
+For standalone scripts, document why they are standalone and how they
+should be executed directly.
+
 ## Pull Request Checklist
 
 - Tests pass locally (`pytest -q`).

@@ -41,6 +41,7 @@ from core.output_paths import OutputPathResolver
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
+from core.validation import direct_invocation_guard
 
 # --- Workflow file parsing ------------------------------------------------
 
@@ -891,3 +892,7 @@ def run(
         _skip("Stage 9", "trigger_risk_analysis")
 
     print("--- Complete ---")
+
+
+if __name__ == "__main__":
+    direct_invocation_guard(__file__)
