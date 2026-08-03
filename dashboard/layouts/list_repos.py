@@ -14,6 +14,7 @@ from dashboard.utils.data import (
     get_dashboard_page_size_default,
     get_dashboard_page_size_options,
 )
+from dashboard.utils.data import get
 
 # ---------------------------------------------------------------------------
 # Section renderers
@@ -35,6 +36,7 @@ def render_header() -> html.Div:
 
 def render_summary(data: pd.DataFrame) -> html.Div:
     """Render repository count summary stats."""
+    visibility = _resolve_visibility_series(data)
     total = len(data)
     public = int((data["visibility"].fillna("") == "public").sum())
     private = int((data["visibility"].fillna("") == "private").sum())
@@ -120,6 +122,18 @@ def render_summary(data: pd.DataFrame) -> html.Div:
             "alignItems": "stretch",
         },
     )
+
+
+def _resolve_visibility_series(data: pd.DataFrame) -> pd.Series:
+    if "visibility" in data.columns:
+        return data["visibility"].fillna("").astype(str).str.lower()
+    if "private" in data.columns:
+        return (
+            data["private"]
+            .fillna(False)
+            .apply(lambda is_private: "private" if is_private else "public")
+        )
+    return pd.Series([""] * len(data), index=data.index)
 
 
 def render_filters() -> html.Div:

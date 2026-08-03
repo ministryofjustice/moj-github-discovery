@@ -54,6 +54,16 @@ def _render_table(search, flag_filter, page, page_size, data):
     records = json.loads(data) if isinstance(data, str) else data
     ddf = pd.DataFrame(records)
 
+    if "visibility" not in ddf.columns:
+        if "private" in ddf.columns:
+            ddf["visibility"] = (
+                ddf["private"]
+                .fillna(False)
+                .apply(lambda is_private: "private" if is_private else "public")
+            )
+        else:
+            ddf["visibility"] = ""
+
     if search:
         ddf = ddf[ddf["repo"].str.contains(search, case=False, na=False)]
 
