@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html
+from dash import ALL, Input, Output, dcc, html
 
 from core.config import AuditConfig
 from dashboard.utils.data import get_available_sources
@@ -22,21 +22,82 @@ def create_app(config: AuditConfig) -> dash.Dash:
 
     # Empty Nav List - Add Links for Available Sources
     nav_items = []
+    nav_paths = []
+    link_style = {
+        "display": "block",
+        "padding": "10px 14px",
+        "textAlign": "center",
+        "textDecoration": "none",
+        "color": "#1f3b57",
+        "fontWeight": "600",
+        "border": "1px solid #d5dce3",
+        "borderRadius": "8px",
+        "backgroundColor": "#ffffff",
+    }
+    active_link_style = {
+        **link_style,
+        "backgroundColor": "#1f3b57",
+        "color": "#ffffff",
+        "border": "1px solid #1f3b57",
+        "boxShadow": "0 4px 12px rgba(31, 59, 87, 0.25)",
+    }
+
+    def add_nav_item(enabled: bool, label: str, path: str) -> None:
+        if not enabled:
+            return
+        nav_paths.append(path)
+        nav_items.append(
+            dcc.Link(
+                label,
+                href=path,
+                id={"type": "nav-link", "index": path},
+                style=link_style,
+            )
+        )
+
     # Iterate through Sources and Add Links to Nav Items if Available
-    if sources.get("list_repos"):
-        nav_items.append(dcc.Link("Repository Compliance", href="/"))
-    if sources.get("archive_repos"):
-        nav_items.append(dcc.Link("Archival Candidacy", href="/archive_repos"))
-    if sources.get("alert_metrics"):
-        nav_items.append(dcc.Link("Alert Metrics", href="/alert_metrics"))
-    if sources.get("lfs"):
-        nav_items.append(dcc.Link("LFS Usage", href="/lfs"))
-    if sources.get("org_security_posture"):
-        nav_items.append(dcc.Link("Org Security Posture", href="/org_security_posture"))
-    if sources.get("github_workflow"):
-        nav_items.append(dcc.Link("GitHub Workflow", href="/github_workflow"))
+    add_nav_item(sources.get("list_repos"), "Repository Compliance", "/")
+    add_nav_item(sources.get("archive_repos"), "Archival Candidacy", "/archive_repos")
+    add_nav_item(sources.get("alert_metrics"), "Alert Metrics", "/alert_metrics")
+    add_nav_item(sources.get("lfs"), "LFS Usage", "/lfs")
+    add_nav_item(
+        sources.get("org_security_posture"),
+        "Org Security Posture",
+        "/org_security_posture",
+    )
+    add_nav_item(sources.get("github_workflow"), "GitHub Workflow", "/github_workflow")
+
+    nav_column_count = max(1, len(nav_items))
 
     # Construct the app layout with a navigation bar and page container for dynamic content
-    app.layout = html.Div([html.Nav(nav_items), dash.page_container])
+    app.layout = html.Div(
+        [
+            dcc.Location(id="nav-url", refresh=False),
+            html.Nav(
+                nav_items,
+                style={
+                    "maxWidth": "1600px",
+                    "margin": "10px auto 0",
+                    "padding": "0 20px",
+                    "display": "grid",
+                    "gridTemplateColumns": f"repeat({nav_column_count}, minmax(0, 1fr))",
+                    "gap": "10px",
+                    "boxSizing": "border-box",
+                },
+            ),
+            dash.page_container,
+        ]
+    )
+
+    @app.callback(
+        Output({"type": "nav-link", "index": ALL}, "style"),
+        Input("nav-url", "pathname"),
+    )
+    def style_active_nav(pathname: str):
+        current_path = pathname or "/"
+        return [
+            active_link_style if current_path == nav_path else link_style
+            for nav_path in nav_paths
+        ]
 
     return app
