@@ -33,7 +33,6 @@ def render_header() -> html.Div:
 
 def render_summary(data: pd.DataFrame) -> html.Div:
     """Render repository count summary stats."""
-    visibility = _resolve_visibility_series(data)
     total = len(data)
     public = int((data["visibility"].fillna("") == "public").sum())
     private = int((data["visibility"].fillna("") == "private").sum())
@@ -86,7 +85,6 @@ def render_summary(data: pd.DataFrame) -> html.Div:
         ("Total Repositories", total, value_style),
         ("Total Public", public, {**value_style, "color": "#007bff"}),
         ("Total Private", private, {**value_style, "color": "#6c757d"}),
-        ("Total Internal", internal, {**value_style, "color": "#17a2b8"}),
         ("No Flags", no_flags, {**value_style, "color": "#28a745"}),
         ("Flagged", has_flags, {**value_style, "color": "#dc3545"}),
     ]
@@ -119,18 +117,6 @@ def render_summary(data: pd.DataFrame) -> html.Div:
             "alignItems": "stretch",
         },
     )
-
-
-def _resolve_visibility_series(data: pd.DataFrame) -> pd.Series:
-    if "visibility" in data.columns:
-        return data["visibility"].fillna("").astype(str).str.lower()
-    if "private" in data.columns:
-        return (
-            data["private"]
-            .fillna(False)
-            .apply(lambda is_private: "private" if is_private else "public")
-        )
-    return pd.Series([""] * len(data), index=data.index)
 
 
 def render_filters() -> html.Div:
@@ -340,34 +326,6 @@ def render_modal() -> html.Div:
             ),
         ],
     )
-
-
-# def generate_layout(data: pd.DataFrame) -> html.Div:
-#     """Compose the full dashboard layout."""
-#     return html.Div(
-#         [
-#             dcc.Store(
-#                 id="data-store",
-#                 data=data.to_json(orient="records", date_format="iso"),
-#             ),
-#             dcc.Store(id="selected-repo-store", data=None),
-#             dcc.Store(id="audit-data-store", data=None),
-#             dcc.Store(id="page-store", data=1),
-#             dcc.Store(id="page-size-store", data=DEFAULT_PAGE_SIZE),
-#             render_modal(),
-#             render_header(),
-#             render_summary(data),
-#             render_filters(),
-#             render_main_content(),
-#         ],
-#         style={
-#             "maxWidth": "1600px",
-#             "margin": "0 auto",
-#             "padding": "20px",
-#             "fontFamily": "Arial, sans-serif",
-#             "backgroundColor": "#ffffff",
-#         },
-#     )
 
 
 def layout():

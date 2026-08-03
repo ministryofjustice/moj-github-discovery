@@ -32,19 +32,25 @@ def get(source: str) -> pd.DataFrame | None:
 
 
 def get_available_sources(config: AuditConfig) -> dict[str, bool]:
+    """Return a dict of available sources and whether they are present in the database."""
     return {"list_repos": Path(config.list_repos.database_path).exists()}
 
 
-def load_list_repos(config: AuditConfig) -> pd.DataFrame:
+def load_list_repos(config: AuditConfig) -> pd.DataFrame | None:
     """Load list_repos data from the database and return a DataFrame."""
     global _list_repos_storage
     db_path = config.list_repos.database_path
     if not Path(db_path).exists():
-        raise FileNotFoundError(f"Database not found at {db_path}")
-    storage = SqliteRepoStorage(db_path)
-    storage.init()
-    _list_repos_storage = storage
-    return build_dashboard_dataframe(storage)
+        print(f"Warning: list_repos Database not found at {db_path}")
+    print(f"Loading list_repos data from {db_path}")
+    try:
+        storage = SqliteRepoStorage(db_path)
+        storage.init()
+        _list_repos_storage = storage
+        return build_dashboard_dataframe(storage)
+    except Exception as e:
+        print(f"Error loading list_repos data from {db_path}: {e}")
+        return None
 
 
 # Stubbed Loader Functions - Extend as Each Script is Added
