@@ -8,9 +8,10 @@ import sys
 
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
-from dashboard_utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
-from dashboard_utils.data import _load_repo_audit_result
-from layouts.list_repos import format_audit_detail
+
+from dashboard.layouts.list_repos import format_audit_detail
+from dashboard.utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
+from dashboard.utils.data import _load_repo_audit_result
 
 # ---------------------------------------------------------------------------
 # Table + pagination

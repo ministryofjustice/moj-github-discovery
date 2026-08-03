@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 from dash import dcc, html
-from dashboard_utils.constants import (
+
+from dashboard.utils.constants import (
     DEFAULT_PAGE_SIZE,
     FLAG_FILTER_OPTIONS,
     PAGE_SIZE_OPTIONS,
