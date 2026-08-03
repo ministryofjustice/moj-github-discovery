@@ -55,27 +55,33 @@ def load_list_repos(config: AuditConfig) -> pd.DataFrame | None:
 
 # Stubbed Loader Functions - Extend as Each Script is Added
 def load_archive_repos(config: AuditConfig) -> pd.DataFrame | None:
+    """Stubbed archive_repos loader function. Extend this function to load data from the archive_repos script."""
     return None
 
 
 def load_alert_metrics(config: AuditConfig) -> pd.DataFrame | None:
+    """Stubbed alert_metrics loader function. Extend this function to load data from the alert_metrics script."""
     return None
 
 
 def load_lfs(config: AuditConfig) -> pd.DataFrame | None:
+    """Stubbed lfs loader function. Extend this function to load data from the lfs script."""
     return None
 
 
 def load_org_security_posture(config: AuditConfig) -> pd.DataFrame | None:
+    """Stubbed org_security_posture loader function. Extend this function to load data from the org_security_posture script."""
     return None
 
 
 def load_github_workflow(config: AuditConfig) -> pd.DataFrame | None:
+    """Stubbed github_workflow loader function. Extend this function to load data from the github_workflow script."""
     return None
 
 
 # Load all available sources
 def load_available_data(config: AuditConfig) -> dict[str, pd.DataFrame | None]:
+    """Load all available sources into a dictionary of DataFrames."""
     sources = get_available_sources(config)
     return {
         "list_repos": load_list_repos(config) if sources["list_repos"] else None,
