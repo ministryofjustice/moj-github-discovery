@@ -78,7 +78,7 @@ class RepoDetails(BaseModel):
     full_name: str
     name: str
     org: str | None = None
-    private: bool = False
+    visibility: str | None = None
     archived: bool = False
     archived_at: str | None = None
     disabled: bool = False

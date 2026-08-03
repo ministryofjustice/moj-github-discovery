@@ -268,7 +268,7 @@ def _build_row(org: str, full_name: str, data: RepoData) -> dict[str, Any]:
         "org": org,
         "repo": repo.name if repo else full_name.split("/", 1)[-1],
         "full_name": full_name,
-        "private": repo.private if repo else None,
+        "visibility": repo.visibility if repo else None,
         "archived": repo.archived if repo else None,
         "disabled": repo.disabled if repo else None,
         "fork": repo.fork if repo else None,

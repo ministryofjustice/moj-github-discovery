@@ -32,8 +32,9 @@ def render_header() -> html.Div:
 def render_summary(data: pd.DataFrame) -> html.Div:
     """Render repository count summary stats."""
     total = len(data)
-    public = int((~data["private"].fillna(False)).sum())
-    private = int(data["private"].fillna(False).sum())
+    public = int((data["visibility"].fillna("") == "public").sum())
+    private = int((data["visibility"].fillna("") == "private").sum())
+    internal = int((data["visibility"].fillna("") == "internal").sum())
     no_flags = int((data["flags"].isna() | (data["flags"] == "")).sum())
     has_flags = total - no_flags
 
@@ -82,6 +83,7 @@ def render_summary(data: pd.DataFrame) -> html.Div:
         ("Total Repositories", total, value_style),
         ("Total Public", public, {**value_style, "color": "#007bff"}),
         ("Total Private", private, {**value_style, "color": "#6c757d"}),
+        ("Total Internal", internal, {**value_style, "color": "#17a2b8"}),
         ("No Flags", no_flags, {**value_style, "color": "#28a745"}),
         ("Flagged", has_flags, {**value_style, "color": "#dc3545"}),
     ]
@@ -411,7 +413,7 @@ def format_audit_detail(audit_data: dict, repo_name: str = "Unknown") -> html.Di
                     [
                         html.P(f"Name: {repo_name}", style={"margin": "5px 0"}),
                         html.P(
-                            f"Private: {'Yes' if repo.get('private') else 'No'}",
+                            f"Visibility: {repo.get('visibility', 'N/A').capitalize()}",
                             style={"margin": "5px 0"},
                         ),
                         html.P(
