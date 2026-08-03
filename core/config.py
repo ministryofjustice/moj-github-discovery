@@ -171,6 +171,15 @@ class WorkflowAuditConfig(ScriptOutputConfig):
     trigger_risk_analysis: bool = True  # stage 9
 
 
+class DashboardConfig(BaseModel):
+    """Config for the Dash dashboard."""
+
+    port: int = 8050  # port to run the dashboard on
+    debug: bool = True  # whether to run the dashboard in debug mode
+    page_size_default: int = 20  # default page size for tables
+    page_size_options: list[int] = [10, 20, 50]  # page size options for tables
+
+
 class AuditConfig(BaseModel):
     """Top-level audit config loaded from ``audit_config.yaml``."""
 
@@ -178,6 +187,7 @@ class AuditConfig(BaseModel):
     repo_list_file: str = "repo_list.yaml"
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
+    dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     lfs_script: LfsScriptConfig = Field(default_factory=LfsScriptConfig)
     list_repos: ListReposConfig = Field(default_factory=ListReposConfig)
     org_security_posture: OrgSecurityPostureConfig = Field(

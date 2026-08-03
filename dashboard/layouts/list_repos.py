@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dash
 import pandas as pd
 from dash import dcc, html
 
@@ -10,6 +11,7 @@ from dashboard.utils.constants import (
     FLAG_FILTER_OPTIONS,
     PAGE_SIZE_OPTIONS,
 )
+from dashboard.utils.data import get
 
 # ---------------------------------------------------------------------------
 # Section renderers
@@ -31,6 +33,7 @@ def render_header() -> html.Div:
 
 def render_summary(data: pd.DataFrame) -> html.Div:
     """Render repository count summary stats."""
+    visibility = _resolve_visibility_series(data)
     total = len(data)
     public = int((data["visibility"].fillna("") == "public").sum())
     private = int((data["visibility"].fillna("") == "private").sum())
@@ -116,6 +119,18 @@ def render_summary(data: pd.DataFrame) -> html.Div:
             "alignItems": "stretch",
         },
     )
+
+
+def _resolve_visibility_series(data: pd.DataFrame) -> pd.Series:
+    if "visibility" in data.columns:
+        return data["visibility"].fillna("").astype(str).str.lower()
+    if "private" in data.columns:
+        return (
+            data["private"]
+            .fillna(False)
+            .apply(lambda is_private: "private" if is_private else "public")
+        )
+    return pd.Series([""] * len(data), index=data.index)
 
 
 def render_filters() -> html.Div:
@@ -327,8 +342,44 @@ def render_modal() -> html.Div:
     )
 
 
-def generate_layout(data: pd.DataFrame) -> html.Div:
-    """Compose the full dashboard layout."""
+# def generate_layout(data: pd.DataFrame) -> html.Div:
+#     """Compose the full dashboard layout."""
+#     return html.Div(
+#         [
+#             dcc.Store(
+#                 id="data-store",
+#                 data=data.to_json(orient="records", date_format="iso"),
+#             ),
+#             dcc.Store(id="selected-repo-store", data=None),
+#             dcc.Store(id="audit-data-store", data=None),
+#             dcc.Store(id="page-store", data=1),
+#             dcc.Store(id="page-size-store", data=DEFAULT_PAGE_SIZE),
+#             render_modal(),
+#             render_header(),
+#             render_summary(data),
+#             render_filters(),
+#             render_main_content(),
+#         ],
+#         style={
+#             "maxWidth": "1600px",
+#             "margin": "0 auto",
+#             "padding": "20px",
+#             "fontFamily": "Arial, sans-serif",
+#             "backgroundColor": "#ffffff",
+#         },
+#     )
+
+
+def layout():
+    data = get("list_repos")
+    if data is None:
+        return html.Div(
+            [
+                html.H2("No data available for this view."),
+                html.P("Please ensure the database is populated and try again."),
+            ],
+            style={"padding": "20px", "textAlign": "center"},
+        )
     return html.Div(
         [
             dcc.Store(
@@ -353,6 +404,10 @@ def generate_layout(data: pd.DataFrame) -> html.Div:
             "backgroundColor": "#ffffff",
         },
     )
+
+
+# Register as a page for Dash's multi-page support.
+dash.register_page(__name__, path="/", name="Repository Compliance", layout=layout)
 
 
 # ---------------------------------------------------------------------------

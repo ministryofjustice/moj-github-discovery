@@ -9,7 +9,6 @@ import sys
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
 
-from dashboard.layouts.list_repos import format_audit_detail
 from dashboard.utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
 from dashboard.utils.data import _load_repo_audit_result
 
@@ -50,6 +49,16 @@ def update_table(search, flag_filter, page, page_size, data):
 def _render_table(search, flag_filter, page, page_size, data):
     records = json.loads(data) if isinstance(data, str) else data
     ddf = pd.DataFrame(records)
+
+    if "visibility" not in ddf.columns:
+        if "private" in ddf.columns:
+            ddf["visibility"] = (
+                ddf["private"]
+                .fillna(False)
+                .apply(lambda is_private: "private" if is_private else "public")
+            )
+        else:
+            ddf["visibility"] = ""
 
     if search:
         ddf = ddf[ddf["repo"].str.contains(search, case=False, na=False)]
@@ -288,6 +297,9 @@ def update_modal(selected_repo, audit_data):
         audit_data = _load_repo_audit_result(selected_repo)
 
     if audit_data:
+        # Import lazily to avoid page registration before Dash app instantiation.
+        from dashboard.layouts.list_repos import format_audit_detail
+
         content = format_audit_detail(audit_data, selected_repo)
     else:
         content = html.Div(

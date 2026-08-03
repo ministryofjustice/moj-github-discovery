@@ -79,3 +79,9 @@ lfs_script:
   hard_limit_mb: 100
   output_filename: "repos_exceeding_thresholds.xlsx"
   use_cache: false
+
+dashboard:
+  port: 8050
+  debug: false
+  page_size_default: 20
+  page_size_options: [10, 20, 50]
