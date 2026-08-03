@@ -33,7 +33,16 @@ def get(source: str) -> pd.DataFrame | None:
 
 def get_available_sources(config: AuditConfig) -> dict[str, bool]:
     """Return a dict of available sources and whether they are present in the database."""
-    return {"list_repos": Path(config.list_repos.database_path).exists()}
+    return {
+        "list_repos": Path(config.list_repos.database_path).exists(),
+        "archive_repos": Path(config.archive_repos.database_path).exists(),
+        "alert_metrics": Path(config.alert_metrics.database_path).exists(),
+        "lfs": Path(config.lfs_script.database_path).exists(),
+        "org_security_posture": Path(
+            config.org_security_posture.database_path
+        ).exists(),
+        "github_workflow": Path(config.workflow_audit.database_path).exists(),
+    }
 
 
 def load_list_repos(config: AuditConfig) -> pd.DataFrame | None:
