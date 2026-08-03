@@ -181,13 +181,15 @@ class RepoCollector(BaseCollector):
                     full_name
                 )
 
-            for future in as_completed(futures):
+            for idx, future in enumerate(as_completed(futures), start=1):
                 full_name = futures[future]
                 try:
                     future.result()
-                    print(f"  [done] {full_name}", file=sys.stderr)
+                    print(f"[{idx}/{total}]  [done] {full_name}", file=sys.stderr)
                 except Exception as exc:
-                    print(f"  [error] {full_name}: {exc}", file=sys.stderr)
+                    print(
+                        f"[{idx}/{total}]  [error] {full_name}: {exc}", file=sys.stderr
+                    )
 
     # ── Internal helpers ──────────────────────────────────────────────
 
