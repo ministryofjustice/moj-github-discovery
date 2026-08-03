@@ -92,22 +92,27 @@ def load_github_workflow(config: AuditConfig) -> pd.DataFrame | None:
 def load_available_data(config: AuditConfig) -> dict[str, pd.DataFrame | None]:
     """Load all available sources into a dictionary of DataFrames."""
     sources = get_available_sources(config)
-    return {
+    data = {
         "list_repos": load_list_repos(config) if sources["list_repos"] else None,
         "archive_repos": load_archive_repos(config)
-        if sources.get("archive_repos")
+        if sources["archive_repos"]
         else None,
         "alert_metrics": load_alert_metrics(config)
-        if sources.get("alert_metrics")
+        if sources["alert_metrics"]
         else None,
-        "lfs": load_lfs(config) if sources.get("lfs") else None,
+        "lfs": load_lfs(config) if sources["lfs"] else None,
         "org_security_posture": load_org_security_posture(config)
-        if sources.get("org_security_posture")
+        if sources["org_security_posture"]
         else None,
         "github_workflow": load_github_workflow(config)
-        if sources.get("github_workflow")
+        if sources["github_workflow"]
         else None,
     }
+    if all(value is None for value in data.values()):
+        raise RuntimeError(
+            "No available sources found in the database. - Run at least one audit-cli script to generate data before starting the dashboard."
+        )
+    return data
 
 
 def _load_repo_audit_result(full_name: str) -> dict | None:
