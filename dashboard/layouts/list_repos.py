@@ -14,7 +14,11 @@ from dashboard.utils.data import (
     get_dashboard_page_size_default,
     get_dashboard_page_size_options,
 )
-from dashboard.utils.data import get
+from dashboard.utils.data import (
+    get,
+    get_dashboard_page_size_default,
+    get_dashboard_page_size_options,
+)
 
 # ---------------------------------------------------------------------------
 # Section renderers
