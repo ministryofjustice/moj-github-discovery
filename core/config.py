@@ -175,9 +175,11 @@ class DashboardConfig(BaseModel):
     """Config for the Dash dashboard."""
 
     port: int = 8050  # port to run the dashboard on
-    debug: bool = True  # whether to run the dashboard in debug mode
+    debug: bool = False  # whether to run the dashboard in debug mode
     page_size_default: int = 20  # default page size for tables
-    page_size_options: list[int] = [10, 20, 50]  # page size options for tables
+    page_size_options: list[int] = Field(
+        default_factory=lambda: [10, 20, 50]
+    )  # page size options for tables
 
 
 class AuditConfig(BaseModel):

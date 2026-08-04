@@ -1,9 +1,10 @@
 """
 Dash dashboard to display repo audit data from SQLite.
 
+Requires at least one script to have been run to generate data in the database. See the `scripts/` directory for available scripts.
+
 Usage:
     python dashboard/main.py
-    python dashboard/main.py --db /path/to/repo_audit.db
 
 Then open http://localhost:8050 in your browser.
 """

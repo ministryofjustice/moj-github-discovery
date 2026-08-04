@@ -94,9 +94,7 @@ def _render_table(search, flag_filter, page, page_size, data):
                     html.Td(
                         row["repo"], style={"padding": "10px", "fontWeight": "bold"}
                     ),
-                    html.Td(
-                        row["visibility"].capitalize() or "—", style={"padding": "10px"}
-                    ),
+                    html.Td(row["visibility"] or "—", style={"padding": "10px"}),
                     html.Td(row["language"] or "—", style={"padding": "10px"}),
                     html.Td(
                         str(row["stars"]),

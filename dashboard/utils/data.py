@@ -1,7 +1,6 @@
 """Data-access helpers for the dashboard.
 
-``db_path`` is set by the entry-point (``dashboard/main.py``) before any helper is
-called, so all functions pick up the correct database at runtime.
+_data is a top-level dictionary that holds loaded DataFrames for each source. Keys are source names, values are DataFrames or None if the source is not available.
 """
 
 from __future__ import annotations
@@ -33,27 +32,38 @@ def get(source: str) -> pd.DataFrame | None:
 
 def get_available_sources(config: AuditConfig) -> dict[str, bool]:
     """Return a dict of available sources and whether they are present in the database."""
+    # Resolve database paths relative to the project root if they are not absolute
+
+    project_root = Path(__file__).resolve().parents[2]
+
+    def resolve(db_path: str) -> Path:
+        path = Path(db_path)
+        return path if path.is_absolute() else (project_root / path)
+
     return {
-        "list_repos": Path(config.list_repos.database_path).exists(),
-        "archive_repos": Path(config.archive_repos.database_path).exists(),
-        "alert_metrics": Path(config.alert_metrics.database_path).exists(),
-        "lfs": Path(config.lfs_script.database_path).exists(),
-        "org_security_posture": Path(
+        "list_repos": resolve(config.list_repos.database_path).exists(),
+        "archive_repos": resolve(config.archive_repos.database_path).exists(),
+        "alert_metrics": resolve(config.alert_metrics.database_path).exists(),
+        "lfs": resolve(config.lfs_script.database_path).exists(),
+        "org_security_posture": resolve(
             config.org_security_posture.database_path
         ).exists(),
-        "github_workflow": Path(config.workflow_audit.database_path).exists(),
+        "github_workflow": resolve(config.workflow_audit.database_path).exists(),
     }
 
 
 def load_list_repos(config: AuditConfig) -> pd.DataFrame | None:
     """Load list_repos data from the database and return a DataFrame."""
     global _list_repos_storage
-    db_path = config.list_repos.database_path
-    if not Path(db_path).exists():
-        print(f"Warning: list_repos Database not found at {db_path}")
-    print(f"Loading list_repos data from {db_path}")
+
+    project_root = Path(__file__).resolve().parents[2]
+    db_path = Path(config.list_repos.database_path)
+    db_path = db_path if db_path.is_absolute() else (project_root / db_path)
+    if not db_path.exists():
+        print(f"Warning: list_repos database not found at {db_path}")
+        return None
     try:
-        storage = SqliteRepoStorage(db_path)
+        storage = SqliteRepoStorage(str(db_path))
         storage.init()
         _list_repos_storage = storage
         return build_dashboard_dataframe(storage)
