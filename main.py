@@ -130,7 +130,8 @@ def main(argv=None) -> None:
         from dashboard.main import run as dashboard_run
 
         dashboard_run(config)
-        return  # Exit after dashboard run
+        # Exit after dashboard run
+        sys.exit(0)
 
     # Global Script Argument Validation
     if not args.scripts and not args.all:
