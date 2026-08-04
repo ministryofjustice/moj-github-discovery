@@ -75,7 +75,7 @@ def build_repo_row(full_name: str, data: RepoData) -> dict[str, Any]:
 
     archived = repo.archived if repo else False
     default_branch = (repo.default_branch if repo else "") or "main"
-    visibility = "private" if (repo and repo.private) else "public"
+    visibility = (repo.visibility if repo else "") or "unknown"
 
     workflow_count = workflows.count if workflows else 0
     has_workflows = workflow_count > 0
