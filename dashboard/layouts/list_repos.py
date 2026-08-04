@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import dash
 import pandas as pd
 from dash import dcc, html
 
 from dashboard.utils.constants import (
-    DEFAULT_PAGE_SIZE,
     FLAG_FILTER_OPTIONS,
-    PAGE_SIZE_OPTIONS,
+)
+from dashboard.utils.data import (
+    get,
+    get_dashboard_page_size_default,
+    get_dashboard_page_size_options,
 )
 
 # ---------------------------------------------------------------------------
@@ -120,6 +124,8 @@ def render_summary(data: pd.DataFrame) -> html.Div:
 
 def render_filters() -> html.Div:
     """Render the search and flag filter controls."""
+    page_size_options = get_dashboard_page_size_options()
+    page_size_default = get_dashboard_page_size_default()
     return html.Div(
         [
             html.Div(
@@ -155,9 +161,9 @@ def render_filters() -> html.Div:
                         id="page-size-dropdown",
                         options=[
                             {"label": str(size), "value": size}
-                            for size in PAGE_SIZE_OPTIONS
+                            for size in page_size_options
                         ],
-                        value=DEFAULT_PAGE_SIZE,
+                        value=page_size_default,
                         clearable=False,
                         searchable=False,
                         style={"width": "80px", "display": "inline-block"},
@@ -327,8 +333,17 @@ def render_modal() -> html.Div:
     )
 
 
-def generate_layout(data: pd.DataFrame) -> html.Div:
-    """Compose the full dashboard layout."""
+def layout():
+    data = get("list_repos")
+    page_size_default = get_dashboard_page_size_default()
+    if data is None:
+        return html.Div(
+            [
+                html.H2("No data available for this view."),
+                html.P("Please ensure the database is populated and try again."),
+            ],
+            style={"padding": "20px", "textAlign": "center"},
+        )
     return html.Div(
         [
             dcc.Store(
@@ -338,7 +353,7 @@ def generate_layout(data: pd.DataFrame) -> html.Div:
             dcc.Store(id="selected-repo-store", data=None),
             dcc.Store(id="audit-data-store", data=None),
             dcc.Store(id="page-store", data=1),
-            dcc.Store(id="page-size-store", data=DEFAULT_PAGE_SIZE),
+            dcc.Store(id="page-size-store", data=page_size_default),
             render_modal(),
             render_header(),
             render_summary(data),
@@ -353,6 +368,10 @@ def generate_layout(data: pd.DataFrame) -> html.Div:
             "backgroundColor": "#ffffff",
         },
     )
+
+
+# Register as a page for Dash's multi-page support.
+dash.register_page(__name__, path="/", name="Repository Compliance", layout=layout)
 
 
 # ---------------------------------------------------------------------------

@@ -18,9 +18,6 @@ FLAG_FILTER_OPTIONS = [
     {"label": " no_detected_linting", "value": "no_detected_linting"},
 ]
 
-PAGE_SIZE_OPTIONS = [10, 20, 50]
-DEFAULT_PAGE_SIZE = 20
-
 
 def get_flag_color(flag_str: str) -> dict:
     """Return a CSS colour dict for a flag badge based on whether flags are present."""
