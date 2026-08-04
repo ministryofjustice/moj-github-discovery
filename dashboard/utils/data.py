@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from core.config import AuditConfig
+from core.config import AuditConfig, DashboardConfig
 from core.presenters import build_dashboard_dataframe, repo_data_to_audit_result
 from core.storage import SqliteRepoStorage
 
@@ -17,12 +17,27 @@ from core.storage import SqliteRepoStorage
 
 _data: dict[str, pd.DataFrame | None] = {}
 _list_repos_storage: SqliteRepoStorage | None = None
+_dashboard_defaults = DashboardConfig()
+_page_size_default: int = _dashboard_defaults.page_size_default
+_page_size_options: list[int] = list(_dashboard_defaults.page_size_options)
 
 
 def initialise_data(config: AuditConfig) -> None:
     """Initialise the data dictionary by loading all available sources."""
-    global _data
+    global _data, _page_size_default, _page_size_options
+    _page_size_default = config.dashboard.page_size_default
+    _page_size_options = list(config.dashboard.page_size_options)
     _data = load_available_data(config)
+
+
+def get_dashboard_page_size_default() -> int:
+    """Return the configured default dashboard page size."""
+    return _page_size_default
+
+
+def get_dashboard_page_size_options() -> list[int]:
+    """Return the configured dashboard page size options."""
+    return _page_size_options
 
 
 def get(source: str) -> pd.DataFrame | None:

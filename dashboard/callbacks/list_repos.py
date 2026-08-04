@@ -9,8 +9,11 @@ import sys
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
 
-from dashboard.utils.constants import DEFAULT_PAGE_SIZE, get_flag_color
-from dashboard.utils.data import _load_repo_audit_result
+from dashboard.utils.constants import get_flag_color
+from dashboard.utils.data import (
+    _load_repo_audit_result,
+    get_dashboard_page_size_default,
+)
 
 # ---------------------------------------------------------------------------
 # Table + pagination
@@ -47,6 +50,7 @@ def update_table(search, flag_filter, page, page_size, data):
 
 
 def _render_table(search, flag_filter, page, page_size, data):
+    default_page_size = get_dashboard_page_size_default()
     records = json.loads(data) if isinstance(data, str) else data
     ddf = pd.DataFrame(records)
 
@@ -59,7 +63,7 @@ def _render_table(search, flag_filter, page, page_size, data):
         )
         ddf = ddf[mask]
 
-    page_size = page_size or DEFAULT_PAGE_SIZE
+    page_size = page_size or default_page_size
     total_repos = len(ddf)
     total_pages = max(1, math.ceil(total_repos / page_size))
     page = max(1, min(page or 1, total_pages))
@@ -201,6 +205,7 @@ def update_page(
     data,
 ):
     """Navigate pages or reset to page 1 when filters change."""
+    default_page_size = get_dashboard_page_size_default()
     ctx = callback_context
     if not ctx.triggered:
         return current_page or 1
@@ -225,7 +230,7 @@ def update_page(
                 )
             )
             ddf = ddf[mask]
-        page_size = page_size_input or DEFAULT_PAGE_SIZE
+        page_size = page_size_input or default_page_size
         total_pages = max(1, math.ceil(len(ddf) / page_size))
         return (
             min(current_page + 1, total_pages)
@@ -243,7 +248,7 @@ def update_page(
 )
 def update_page_size(page_size_value):
     """Update the page size store when the dropdown changes."""
-    return page_size_value or DEFAULT_PAGE_SIZE
+    return page_size_value or get_dashboard_page_size_default()
 
 
 # ---------------------------------------------------------------------------
