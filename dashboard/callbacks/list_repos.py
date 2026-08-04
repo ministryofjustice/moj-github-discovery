@@ -95,12 +95,7 @@ def _render_table(search, flag_filter, page, page_size, data):
                         row["repo"], style={"padding": "10px", "fontWeight": "bold"}
                     ),
                     html.Td(
-                        "Private" if row["private"] else "Public",
-                        style={
-                            "padding": "10px",
-                            "textAlign": "center",
-                            "color": "#666",
-                        },
+                        row["visibility"].capitalize() or "—", style={"padding": "10px"}
                     ),
                     html.Td(row["language"] or "—", style={"padding": "10px"}),
                     html.Td(
