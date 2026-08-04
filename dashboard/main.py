@@ -5,7 +5,7 @@ Requires at least one script to have been run to generate data in the database. 
 
 Usage:
     uv run audit-cli --dashboard
-    uv run python scripts/dashboard.py
+    uv run python dashboard/main.py
 
 Then open http://localhost:8050 in your browser.
 """

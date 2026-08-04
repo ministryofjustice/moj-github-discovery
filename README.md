@@ -274,21 +274,6 @@ Launches an interactive Dash web dashboard to browse and manage repository audit
 uv run audit-cli --dashboard
 ```
 
-**Options:**
-
-- `--db <path>` - Custom database path (default: `internal/repo_audit.db`)
-
-**Examples:**
-
-```bash
-# Start dashboard with default database
-export GITHUB_TOKEN=ghp_xxxx
-uv run audit-cli --dashboard
-
-# Start with custom database - edit `config/audit_config.yaml` database_path for the chosen script
-uv run audit-cli --dashboard
-```
-
 **Features:**
 
 - Search and filter repositories by name

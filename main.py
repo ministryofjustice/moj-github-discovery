@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 
 from core.config import AuditConfig, load_audit_config
-from dashboard.main import run as dashboard_run
+
+# Dashboard import is deferred inside main() to avoid import-time side effects during script runs.
 from scripts import (
     alert_metrics,
     archive_repos,
@@ -126,7 +127,10 @@ def main(argv=None) -> None:
 
     # Run the dashboard if --dashboard is specified
     if args.dashboard:
+        from dashboard.main import run as dashboard_run
+
         dashboard_run(config)
+        return  # Exit after dashboard run
 
     # Global Script Argument Validation
     if not args.scripts and not args.all:
