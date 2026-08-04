@@ -271,7 +271,7 @@ Launches an interactive Dash web dashboard to browse and manage repository audit
 **Usage:**
 
 ```bash
-uv run python dashboard/main.py [options]
+uv run audit-cli --dashboard
 ```
 
 **Options:**
@@ -283,10 +283,10 @@ uv run python dashboard/main.py [options]
 ```bash
 # Start dashboard with default database
 export GITHUB_TOKEN=ghp_xxxx
-uv run python dashboard/main.py
+uv run audit-cli --dashboard
 
-# Start with custom database
-uv run python dashboard/main.py --db /tmp/audit.db
+# Start with custom database - edit `config/audit_config.yaml` database_path for the chosen script
+uv run audit-cli --dashboard
 ```
 
 **Features:**
@@ -509,7 +509,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run python scripts/list_repos.py --config-file config/audit_config.yaml
 
 # 2. Launch dashboard to explore results
-uv run python dashboard/main.py
+uv run audit-cli --dashboard
 
 # 3. Click on repos to view details or run deeper audits
 ```
@@ -553,7 +553,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 
 # View in dashboard
-uv run python dashboard/main.py
+uv run audit-cli --dashboard
 ```
 
 ### Continuous Monitoring
@@ -564,7 +564,7 @@ export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 
 # Dashboard automatically shows updated data
-uv run python dashboard/main.py
+uv run audit-cli --dashboard
 ```
 
 ## Troubleshooting
@@ -626,7 +626,7 @@ uv run audit-cli --scripts list_repos
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
-uv run python dashboard/main.py
+uv run audit-cli --dashboard
 # Select each repo and click "Run Audit" for updated details in core storage
 ```
 
@@ -634,8 +634,8 @@ uv run python dashboard/main.py
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-uv run python scripts/list_repos.py --repo-file repo_list.yaml --db ./path/to/repo_audit.db
-uv run python dashboard/main.py
+uv run audit-cli --scripts list_repos
+uv run audit-cli --dashboard
 # Filter by "Show only repos with flags"
 ```
 

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from core.config import AuditConfig, load_audit_config
+from dashboard.main import run as dashboard_run
 from scripts import (
     alert_metrics,
     archive_repos,
@@ -97,6 +98,11 @@ def _parse_args(argv=None) -> argparse.Namespace:
         nargs="+",
         help="Specific repos to scan, e.g. owner/repo owner/repo. Does not apply to org_security_posture.",
     )
+    parser.add_argument(
+        "--dashboard",
+        help="Run the audit-cli dashboard - requires at least one script to have been run to generate data in the database.",
+        action="store_true",
+    )
     return parser.parse_args(argv)
 
 
@@ -106,6 +112,21 @@ def main(argv=None) -> None:
     __start_time = time.monotonic()
 
     args = _parse_args(argv)
+
+    # Validation for --dashboard and --scripts being provided - only one can be run at a time
+    if args.dashboard and (args.scripts or args.all):
+        print(
+            "Error: --dashboard cannot be used with --scripts or --all. Run scripts first to generate data before starting the dashboard.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Load Config File - Defaults to config/audit_config.yaml if not specified
+    config: AuditConfig = load_audit_config(args.config_file)
+
+    # Run the dashboard if --dashboard is specified
+    if args.dashboard:
+        dashboard_run(config)
 
     # Global Script Argument Validation
     if not args.scripts and not args.all:
@@ -123,9 +144,6 @@ def main(argv=None) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-
-    # Load Config File - Defaults to config/audit_config.yaml if not specified
-    config: AuditConfig = load_audit_config(args.config_file)
 
     scripts_to_run = (
         SCRIPTS if args.all else {name: SCRIPTS[name] for name in args.scripts}
