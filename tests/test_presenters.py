@@ -18,6 +18,7 @@ class TestBuildRepoSummaryTable:
             "repos_total",
             "repos_public",
             "repos_private",
+            "repos_internal",
             "repos_archived",
             "repos_with_dependabot_alerts",
             "repos_with_secret_alerts",
@@ -26,13 +27,13 @@ class TestBuildRepoSummaryTable:
             "repos_using_classic_branch_protection",
             "repos_with_active_rulesets",
         ]
-        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     def test_counts_non_empty_dataframe(self):
         df = pd.DataFrame(
             [
                 {
-                    "private": False,
+                    "visibility": "public",
                     "archived": False,
                     "dependabot_alerts": 1,
                     "secret_scanning_alerts": 0,
@@ -42,7 +43,7 @@ class TestBuildRepoSummaryTable:
                     "has_active_rulesets": False,
                 },
                 {
-                    "private": True,
+                    "visibility": "private",
                     "archived": True,
                     "dependabot_alerts": 0,
                     "secret_scanning_alerts": 2,
@@ -60,6 +61,7 @@ class TestBuildRepoSummaryTable:
         assert metrics["repos_total"] == 2
         assert metrics["repos_public"] == 1
         assert metrics["repos_private"] == 1
+        assert metrics["repos_internal"] == 0
         assert metrics["repos_archived"] == 1
         assert metrics["repos_with_dependabot_alerts"] == 1
         assert metrics["repos_with_secret_alerts"] == 1

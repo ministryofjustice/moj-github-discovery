@@ -28,7 +28,7 @@ def flags_for_list(data: RepoData) -> list[str]:
         flags.append("archived")
     if repo.fork:
         flags.append("fork")
-    if not repo.private and branch and not branch.default_branch_protected:
+    if repo.visibility == "public" and branch and not branch.default_branch_protected:
         flags.append("public_unprotected_default_branch")
     if alerts and alerts.dependabot_alerts > 0:
         flags.append("dependabot_alerts_present")
@@ -70,7 +70,7 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
     license_info = getattr(repo, "license", None)
     if license_info is None:
         flags.append("no_license")
-    if not repo.private and branch and not branch.default_branch_protected:
+    if repo.visibility == "public" and branch and not branch.default_branch_protected:
         flags.append("public_unprotected_default_branch")
     if alerts and alerts.dependabot_alerts > 0:
         flags.append("dependabot_alerts_present")
@@ -152,7 +152,7 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         "org": owner,
         "repo": repo.name if repo else full_name,
         "full_name": full_name,
-        "private": repo.private if repo else None,
+        "visibility": repo.visibility if repo else None,
         "archived": repo.archived if repo else None,
         "fork": repo.fork if repo else None,
         "fork_source": fork_template.fork_source if fork_template else None,
@@ -206,7 +206,7 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
 
     return {
         "repo": full_name,
-        "private": repo.private if repo else None,
+        "visibility": repo.visibility if repo else None,
         "archived": repo.archived if repo else None,
         "fork": repo.fork if repo else None,
         "language": repo.language if repo else None,
@@ -274,12 +274,13 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
 def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     """Build the summary metrics table used in list_repos outputs."""
     if df.empty:
-        values = [0] * 10
+        values = [0] * 11
     else:
         values = [
             len(df),
-            int((~df["private"].fillna(False)).sum()),
-            int(df["private"].fillna(False).sum()),
+            int((df["visibility"].fillna("") == "public").sum()),
+            int((df["visibility"].fillna("") == "private").sum()),
+            int((df["visibility"].fillna("") == "internal").sum()),
             int(df["archived"].fillna(False).sum()),
             int((df["dependabot_alerts"].fillna(0) > 0).sum()),
             int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
@@ -295,6 +296,7 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
                 "repos_total",
                 "repos_public",
                 "repos_private",
+                "repos_internal",
                 "repos_archived",
                 "repos_with_dependabot_alerts",
                 "repos_with_secret_alerts",

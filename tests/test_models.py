@@ -94,7 +94,7 @@ class TestRepoDetails:
         rd = RepoDetails(full_name="org/repo", name="repo")
         assert rd.full_name == "org/repo"
         assert rd.default_branch == "main"
-        assert rd.private is False
+        assert rd.visibility is None
 
     def test_extra_fields_ignored(self):
         """extra='ignore' should silently drop unknown GitHub API fields."""
@@ -121,7 +121,7 @@ class TestRepoDetails:
         rd = RepoDetails(
             full_name="org/repo",
             name="repo",
-            private=True,
+            visibility="private",
             language="Python",
         )
         json_str = rd.model_dump_json()

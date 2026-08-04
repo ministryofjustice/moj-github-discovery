@@ -33,6 +33,21 @@ from dashboard.utils.data import _load_repo_audit_result
 )
 def update_table(search, flag_filter, page, page_size, data):
     """Update the table based on search, flag filters, page, and page size."""
+    try:
+        return _render_table(search, flag_filter, page, page_size, data)
+    except Exception as exc:
+        print(f"[update_table] callback error: {exc}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        error_msg = html.Div(
+            f"Table failed to render: {exc}",
+            style={"color": "red", "padding": "12px", "fontFamily": "monospace"},
+        )
+        return error_msg, "", True, True, True, True
+
+
+def _render_table(search, flag_filter, page, page_size, data):
     records = json.loads(data) if isinstance(data, str) else data
     ddf = pd.DataFrame(records)
 
@@ -58,7 +73,7 @@ def update_table(search, flag_filter, page, page_size, data):
         html.Tr(
             [
                 html.Th("Repository", style=th_left),
-                html.Th("Status", style=th_center),
+                html.Th("Visibility", style=th_center),
                 html.Th("Language", style=th_left),
                 html.Th("Stars", style=th_center),
                 html.Th("Open Issues", style=th_center),
@@ -81,7 +96,11 @@ def update_table(search, flag_filter, page, page_size, data):
                         row["repo"], style={"padding": "10px", "fontWeight": "bold"}
                     ),
                     html.Td(
-                        "Private" if row["private"] else "Public",
+                        "Internal"
+                        if row["visibility"] == "internal"
+                        else (
+                            "Private" if row["visibility"] == "private" else "Public"
+                        ),
                         style={
                             "padding": "10px",
                             "textAlign": "center",

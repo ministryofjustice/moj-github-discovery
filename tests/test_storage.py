@@ -154,7 +154,7 @@ class TestSqliteRepoStorageJsonRoundtrip:
                 full_name="org/repo",
                 name="repo",
                 language="Python",
-                private=True,
+                visibility="private",
             ),
             alerts=AlertData(
                 dependabot_alerts=3,
@@ -168,7 +168,7 @@ class TestSqliteRepoStorageJsonRoundtrip:
 
         result = storage.read("org/repo")
         assert result.repo_details.language == "Python"
-        assert result.repo_details.private is True
+        assert result.repo_details.visibility == "private"
         assert result.alerts.dependabot_alerts == 3
         assert result.flags == ["stale", "no_codeowners"]
         assert result.collected_at == "2024-06-15T12:00:00Z"
