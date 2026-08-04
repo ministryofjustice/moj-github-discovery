@@ -88,6 +88,7 @@ def render_summary(data: pd.DataFrame) -> html.Div:
         ("Total Repositories", total, value_style),
         ("Total Public", public, {**value_style, "color": "#007bff"}),
         ("Total Private", private, {**value_style, "color": "#6c757d"}),
+        ("Total Internal", internal, {**value_style, "color": "#17a2b8"}),
         ("No Flags", no_flags, {**value_style, "color": "#28a745"}),
         ("Flagged", has_flags, {**value_style, "color": "#dc3545"}),
     ]
