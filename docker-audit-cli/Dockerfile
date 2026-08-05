@@ -3,7 +3,8 @@ FROM python:3.14-slim@sha256:a01e48f10f90ac3ee65ef6937b9d7c831a3570c81b98d39a547
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
 WORKDIR /app
 
@@ -21,6 +22,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY core core
 COPY dashboard dashboard
 COPY scripts scripts
+COPY config config
 COPY main.py ./
 
 # Full dependency installation, including the project itself.
@@ -38,7 +40,7 @@ RUN groupadd -r audit-runner && useradd -r -m -d /home/audit-runner -g audit-run
 # Create volume directories and set ownership.
 RUN mkdir -p outputs internal && \
     mkdir -p "$XDG_CACHE_HOME" && \
-    chown -R audit-runner:audit-runner /app /home/audit-runner /opt/venv
+    chown -R audit-runner:audit-runner /app /home/audit-runner /opt/venv /opt/uv-python
 
 # Switch to non-root user.
 USER audit-runner
@@ -60,7 +62,7 @@ RUN groupadd -r dashboard-runner && useradd -r -m -d /home/dashboard-runner -g d
 # Create volume directories and set ownership.
 RUN mkdir -p internal && \
     mkdir -p "$XDG_CACHE_HOME" && \
-    chown -R dashboard-runner:dashboard-runner /app /home/dashboard-runner /opt/venv
+    chown -R dashboard-runner:dashboard-runner /app /home/dashboard-runner /opt/venv /opt/uv-python
 
 # Switch to non-root user.
 USER dashboard-runner
