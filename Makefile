@@ -1,3 +1,4 @@
+DASHBOARD_PORT ?= 8050
 IMAGE_NAME_BASE ?= developer-experience-
 IMAGE_NAME_CLI ?= $(IMAGE_NAME_BASE)audit-cli
 IMAGE_NAME_DASHBOARD ?= $(IMAGE_NAME_BASE)audit-dashboard
@@ -52,9 +53,9 @@ audit-dashboard-build:
 
 audit-dashboard-run: 
 	@mkdir -p internal
-	@echo "Running audit dashboard on http://localhost:8050"
+	@echo "Running audit dashboard on http://localhost:$(DASHBOARD_PORT)"
 	docker run --rm \
 		--platform $(DOCKER_PLATFORM) \
 		-v "$(PWD)/internal:/app/internal" \
-		-p 8050:8050 \
+		-p $(DASHBOARD_PORT):$(DASHBOARD_PORT) \
 		$(IMAGE_NAME_DASHBOARD)
