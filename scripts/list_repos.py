@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from core.collector import RepoCollector
+from core.collector import RepoCollector, RepoListCollector
 from core.config import AuditConfig
 from core.github_api import (
     REPO_ENDPOINTS,
@@ -13,7 +13,6 @@ from core.github_api import (
 )
 from core.output_paths import OutputPathResolver
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
-from core.repo_list import load_repo_list_file
 from core.storage import SqliteRepoStorage
 from core.validation import direct_invocation_guard
 
@@ -65,11 +64,28 @@ def run(
     if kwargs.get("repos"):
         repo_list = kwargs["repos"]
     else:
-        try:
-            repo_list = load_repo_list_file(repo_file)
-        except Exception as exc:
-            print(f"Failed to read repo file: {exc}", file=sys.stderr)
-            sys.exit(2)
+        if repo_limit is not None:
+            if repo_limit < 0:
+                print("--limit must be >= 0", file=sys.stderr)
+                sys.exit(2)
+            else:
+                print(
+                    f"Collecting repository list from {repo_file} with limit {repo_limit}...",
+                    file=sys.stderr,
+                )
+        else:
+            print("Collecting repository list from GitHub API...", file=sys.stderr)
+            repo_list_collector = RepoListCollector(auth_method=auth)
+            repo_list = repo_list_collector.collect(
+                "ministryofjustice",  # Replace with your organization
+                sort="pushed",
+                direction="asc",
+            )
+        # try:
+        #     repo_list = load_repo_list_file(repo_file)
+        # except Exception as exc:
+        #     print(f"Failed to read repo file: {exc}", file=sys.stderr)
+        #     sys.exit(2)
 
     if repo_limit is not None:
         if repo_limit < 0:
@@ -90,6 +106,7 @@ def run(
         if list_repos_config.standard_endpoints_only
         else REPO_ENDPOINTS
     )
+
     collector = RepoCollector(
         storage=storage, endpoints=selected_endpoints, auth_method=auth
     )
