@@ -16,7 +16,7 @@ DOCKER_PLATFORM ?= linux/amd64
 audit-cli: audit-cli-build audit-cli-run
 
 audit-cli-build:
-	docker build --platform $(DOCKER_PLATFORM) -f docker-audit-cli/Dockerfile -t $(IMAGE_NAME_CLI) .
+	docker build --platform $(DOCKER_PLATFORM) -f docker-audit-cli/Dockerfile --target cli -t $(IMAGE_NAME_CLI) .
 
 audit-cli-check-env:
 	@if [ ! -f $(ENV_FILE) ]; then \
@@ -49,7 +49,7 @@ audit-cli-smoke:
 audit-dashboard: audit-dashboard-build audit-dashboard-run
 
 audit-dashboard-build:
-	docker build --platform $(DOCKER_PLATFORM) -f docker-audit-cli/Dockerfile.dashboard -t $(IMAGE_NAME_DASHBOARD) .
+	docker build --platform $(DOCKER_PLATFORM) -f docker-audit-cli/Dockerfile --target dashboard -t $(IMAGE_NAME_DASHBOARD) .
 
 audit-dashboard-run: 
 	@mkdir -p internal
