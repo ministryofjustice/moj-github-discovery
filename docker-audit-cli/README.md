@@ -79,3 +79,5 @@ Similar to `make audit-cli`, this will
 - run the built image on `localhost:8050` with `internal/` mounted as a volume
 
 The dashboard can then be accessed via `http://localhost:8050`, allowing viewing of `internal/`'s data.
+
+## CI/CD and Cloud Platform Considerations
