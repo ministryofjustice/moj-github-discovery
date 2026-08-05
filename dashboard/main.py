@@ -26,7 +26,8 @@ def run(config: AuditConfig) -> None:
     # Start the Dash server
     print(f"\nStarting dashboard at http://localhost:{config.dashboard.port}")
     print("Press Ctrl+C to stop.\n")
-    app.run(debug=config.dashboard.debug, port=config.dashboard.port)
+    # Run app with host 0.0.0.0 to allow access from outside the container if running in Docker
+    app.run(host="0.0.0.0", debug=config.dashboard.debug, port=config.dashboard.port)
 
 
 if __name__ == "__main__":
