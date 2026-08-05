@@ -19,7 +19,14 @@ RUN python -m pip install --no-cache-dir --upgrade pip uv
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY . .
+# Copy the rest of the application code.
+COPY core core
+COPY dashboard dashboard
+COPY scripts scripts
+COPY main.py ./
+
+# Full dependency installation, including the project itself.
+RUN uv sync --frozen --no-dev
 
 # Create non-root user for security (org-wide, scheduled deployments).
 RUN groupadd -r audit-runner && useradd -r -m -d /home/audit-runner -g audit-runner audit-runner
@@ -34,5 +41,9 @@ USER audit-runner
 
 VOLUME ["/app/outputs", "/app/internal"]
 
+# Add audit-cli executable to PATH
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
 ENTRYPOINT ["uv", "run", "--no-dev", "python", "main.py"]
+# ENTRYPOINT ["audit-cli"]
