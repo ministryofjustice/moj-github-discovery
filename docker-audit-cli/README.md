@@ -3,6 +3,11 @@
 This folder contains all files related to the Docker proof of concept for the
 audit CLI scripts and dashboard.
 
+Both container images are now built from a single multi-stage Dockerfile:
+
+- `docker-audit-cli/Dockerfile` with target `cli`
+- `docker-audit-cli/Dockerfile` with target `dashboard`
+
 For full project setup and authentication guidance, refer to `docs/setup.md`.
 For full CLI/script usage, refer to the root `README.md`.
 
@@ -77,6 +82,25 @@ Similar to `make audit-cli`, this will
 
 - build the dashboard container image, default name is `developer-experience-audit-dashboard`
 - run the built image on `localhost:8050` with `internal/` mounted as a volume
+
+## Build Targets
+
+From the repo root, explicit build commands are:
+
+```bash
+# CLI image
+docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target cli -t developer-experience-audit-cli .
+
+# Dashboard image
+docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target dashboard -t developer-experience-audit-dashboard .
+```
+
+If you are using the root `Makefile`, these are wrapped by:
+
+```bash
+make audit-cli-build
+make audit-dashboard-build
+```
 
 The dashboard can then be accessed via `http://localhost:8050`, allowing viewing of `internal/`'s data.
 
