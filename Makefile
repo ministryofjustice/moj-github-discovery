@@ -3,7 +3,7 @@ IMAGE_NAME_CLI ?= $(IMAGE_NAME_BASE)audit-cli
 IMAGE_NAME_DASHBOARD ?= $(IMAGE_NAME_BASE)audit-dashboard
 ENV_FILE ?= docker-audit-cli/.env
 AUDIT_ARGS ?= --scripts list_repos
-AUDIT_SMOKE_ARGS ?= --scripts alert_metrics --repo ministryofjustice/moj-github-discovery
+AUDIT_SMOKE_ARGS ?= --scripts alert_metrics --repos ministryofjustice/moj-github-discovery
 DOCKER_PLATFORM ?= linux/amd64
 
 .PHONY: audit-cli audit-cli-build audit-cli-run audit-cli-smoke audit-cli-check-env audit-dashboard audit-dashboard-build audit-dashboard-run
