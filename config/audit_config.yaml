@@ -34,9 +34,9 @@ archive_repos:
 list_repos:
   # Optional override; defaults to list_repos if omitted.
   output_subdir: "list_repos"
-  database_path: "internal/repo_audit.db"
-  output_filename: "list_repos.xlsx"
-  repo_limit: 400
+  database_path: "internal/repo_audit_full.db"
+  output_filename: "list_repos_full.xlsx"
+  repo_limit: null # null for no limit, or set to an integer to limit
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false
