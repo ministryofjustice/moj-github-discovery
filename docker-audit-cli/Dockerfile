@@ -45,5 +45,4 @@ VOLUME ["/app/outputs", "/app/internal"]
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
-ENTRYPOINT ["uv", "run", "--no-dev", "python", "main.py"]
-# ENTRYPOINT ["audit-cli"]
+ENTRYPOINT ["audit-cli"]
