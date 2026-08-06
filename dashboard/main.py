@@ -33,7 +33,8 @@ def run(config: AuditConfig) -> None:
     # Start the Dash server
     print(f"\nStarting dashboard at http://localhost:{config.dashboard.port}")
     print("Press Ctrl+C to stop.\n")
-    app.run(debug=config.dashboard.debug, port=config.dashboard.port)
+    # Run the app with the specified host, debug mode, and port from the configuration
+    app.run(host="0.0.0.0", debug=config.dashboard.debug, port=config.dashboard.port)
 
 
 if __name__ == "__main__":

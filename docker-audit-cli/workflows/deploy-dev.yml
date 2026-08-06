@@ -1,0 +1,118 @@
+name: Deploy to Dev
+run-name: Deploy to Dev
+
+on:
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy-dev:
+    name: Build, Push, Deploy (Dev)
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Validate ECR configuration
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -z "${{ secrets.DEV_ECR_ROLE_TO_ASSUME }}" ]]; then
+          echo "Missing required secret: DEV_ECR_ROLE_TO_ASSUME"
+          exit 1
+        fi
+        if [[ -z "${{ vars.ECR_REGION }}" ]]; then
+          echo "Missing required variable: ECR_REGION"
+          exit 1
+        fi
+        if [[ -z "${{ vars.ECR_REPOSITORY }}" ]]; then
+          echo "Missing required variable: ECR_REPOSITORY"
+          exit 1
+        fi
+
+    - name: Configure AWS credentials for ECR
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      with:
+        role-to-assume: ${{ secrets.DEV_ECR_ROLE_TO_ASSUME }}
+        aws-region: ${{ vars.ECR_REGION }}
+
+    - name: Login to Amazon ECR
+      id: ecr-login
+      uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
+
+    # TODO: Container Image Scanning Needs to be implemented here - Snyk is likely candidate
+    - name: Build and push image
+      id: build-push
+      shell: bash
+      run: |
+        set -euo pipefail
+        IMAGE_URI="${{ steps.ecr-login.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${IMAGE_TAG}"
+        docker buildx build --platform linux/amd64 --load \
+          -f docker-audit-cli/Dockerfile \
+          --target dashboard \
+          -t "${IMAGE_URI}" \
+          .
+        docker push "${IMAGE_URI}"
+        echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+
+    - name: Configure Kubernetes access
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Use Cloud Platform-provisioned DEV_* GitHub secrets.
+
+        # Validate that secrets are not empty
+        if [[ -z "${{ secrets.DEV_KUBE_CLUSTER }}" ]]; then
+          echo "ERROR: DEV_KUBE_CLUSTER secret is empty or not set"
+          echo "This should be configured in Settings → Environments → dev → Secrets"
+          exit 1
+        fi
+
+        echo "${{ secrets.DEV_KUBE_CERT }}" > ca.crt
+        kubectl config set-cluster cp-cluster --server="${{ secrets.DEV_KUBE_CLUSTER }}" --certificate-authority=ca.crt
+        kubectl config set-credentials github-actions --token="${{ secrets.DEV_KUBE_TOKEN }}"
+        kubectl config set-context dev --cluster=cp-cluster --user=github-actions --namespace="${{ secrets.DEV_KUBE_NAMESPACE }}"
+        kubectl config use-context dev
+
+        # Debug: verify configuration
+        echo "Current kubectl context:"
+        kubectl config current-context
+        echo "Kubectl config view:"
+        kubectl config view --minify
+        echo "Kubeconfig location: ${KUBECONFIG:-$HOME/.kube/config}"
+
+        # Make kubeconfig location available to subsequent steps
+        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+
+    - name: Deploy manifests
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Using kubeconfig: $KUBECONFIG"
+        kubectl config current-context
+        sed \
+          -e "s|IMAGE_PLACEHOLDER|${{ steps.build-push.outputs.image_uri }}|g" \
+          -e "s|^\([[:space:]]*namespace:\)[[:space:]]*.*$|\1 ${{ secrets.DEV_KUBE_NAMESPACE }}|" \
+          docker-audit-cli/k8s/dev/deployment.yaml | kubectl apply -f -
+        kubectl rollout status deployment/developer-experience-audit-dashboard --namespace "${{ secrets.DEV_KUBE_NAMESPACE }}" --timeout=180s
+    

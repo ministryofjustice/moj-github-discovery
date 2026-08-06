@@ -1,12 +1,50 @@
 # Audit CLI Docker POC
 
 This folder contains all files related to the Docker proof of concept for the
-audit CLI.
+audit CLI scripts and dashboard.
+
+## Status
+
+This Docker and Kubernetes setup is intentionally a placeholder/POC.
+
+- It is not production-ready.
+- It is not yet intended for active feature development.
+- CI/CD is not yet established for image build/publish/deploy.
+- Kubernetes manifests currently provide an initial deployment shape only.
+
+Use this folder as a starting point for future platform work, not as a final
+runtime architecture.
+
+Both container images are now built from a single multi-stage Dockerfile:
+
+- `docker-audit-cli/Dockerfile` with target `cli`
+- `docker-audit-cli/Dockerfile` with target `dashboard`
+
+## Initial Workflows in This POC
+
+The initial workflows included here are manual/local workflows:
+
+- Build CLI image using the `cli` target.
+- Run CLI scripts via `make audit-cli-run`.
+- Build dashboard image using the `dashboard` target.
+- Run dashboard locally via `make audit-dashboard-run`.
+
+The repo root `Makefile` provides these convenience targets:
+
+- `make audit-cli-build`
+- `make audit-cli-run`
+- `make audit-dashboard-build`
+- `make audit-dashboard-run`
+
+At this stage, these workflows are intentionally lightweight and are not yet
+integrated into a release pipeline.
 
 For full project setup and authentication guidance, refer to `docs/setup.md`.
 For full CLI/script usage, refer to the root `README.md`.
 
-## Quick start
+## Audit-CLI Scripts
+
+### Quick start
 
 From the repo root:
 
@@ -16,11 +54,11 @@ make audit-cli
 
 This will:
 
-- build the Docker image
+- build the Docker image - default name is `developer-experience-audit-cli`
 - check `docker-audit-cli/.env` exists
 - run the container with mounted `outputs/` and `internal/`
 
-## Individual commands
+### Individual commands
 
 ```bash
 make audit-cli-build
@@ -49,7 +87,7 @@ The leading `run` token is optional:
 make audit-cli-run AUDIT_ARGS="--scripts list_repos"
 ```
 
-## Secrets and environment variables
+### Secrets and environment variables
 
 For required credentials and setup options, refer to `docs/setup.md`.
 
@@ -62,3 +100,80 @@ cp docker-audit-cli/.env.example docker-audit-cli/.env
 Put real secret values in `docker-audit-cli/.env`.
 
 `make audit-cli-run` validates this file exists and fails with guidance if it is missing.
+
+## Audit-CLI Dashboard
+
+Ensuring at least one script from `audit-cli` has been ran e.g. `uv run audit-cli --scripts list_repos` (or the commands above), from the repo root, execute
+
+```shell
+make audit-dashboard
+```
+
+Similar to `make audit-cli`, this will
+
+- build the dashboard container image, default name is `developer-experience-audit-dashboard`
+- run the built image on `localhost:8050` with `internal/` mounted as a volume
+
+## Build Targets
+
+From the repo root, explicit build commands are:
+
+```bash
+# CLI image
+docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target cli -t developer-experience-audit-cli .
+
+# Dashboard image
+docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target dashboard -t developer-experience-audit-dashboard .
+```
+
+If you are using the root `Makefile`, these are wrapped by:
+
+```bash
+make audit-cli-build
+make audit-dashboard-build
+```
+
+The dashboard can then be accessed via `http://localhost:8050`, allowing viewing of `internal/`'s data.
+
+## CI/CD and Cloud Platform Considerations
+
+### Deployment Workflows (POC)
+
+Initial placeholder workflow files are included at:
+
+- `docker-audit-cli/workflows/deploy-dev.yml`
+- `docker-audit-cli/workflows/deploy-prod.yml`
+
+These are draft workflows intended to describe a future deployment shape:
+
+- Build/push dashboard image to ECR.
+- Apply dashboard manifests to Kubernetes.
+- Wait for rollout on the dashboard Deployment.
+
+Important limitations:
+
+- These files are POC-only and not yet treated as active delivery pipelines.
+- They are currently stored under `docker-audit-cli/workflows` as draft assets.
+- Final GitHub Actions wiring/location and promotion controls are still to be
+    defined.
+
+### Kubernetes Manifests (POC)
+
+Initial Kubernetes manifests are included at:
+
+- `docker-audit-cli/k8s/dev/deployment.yaml`
+- `docker-audit-cli/k8s/prod/deployment.yaml`
+
+They currently include:
+
+- Deployment, Service, and Ingress resources for the dashboard.
+- `IMAGE_PLACEHOLDER` image references for manual substitution.
+- Basic pod/container hardening defaults (`runAsNonRoot`, dropped capabilities,
+  no service account token mount).
+
+POC constraints and follow-up work:
+
+- No automated image promotion or manifest templating.
+- No readiness/liveness probes yet.
+- No resource requests/limits yet.
+- No environment-specific overlay tooling yet.
