@@ -3,7 +3,9 @@
 
 # Global attributes used by all/multiple scripts
 github_organization: "ministryofjustice"
-repo_list_file: "repo_list.yaml"
+default_repo_list: "repo_list.yaml"
+repo_search_scope: "org" # file or org
+repo_limit: 400 # null for no limit, or set to an integer to limit
 
 
 alert_metrics:
@@ -36,7 +38,6 @@ list_repos:
   output_subdir: "list_repos"
   database_path: "internal/repo_audit.db"
   output_filename: "list_repos.xlsx"
-  repo_limit: 400 # null for no limit, or set to an integer to limit
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false

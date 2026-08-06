@@ -100,6 +100,12 @@ def _parse_args(argv=None) -> argparse.Namespace:
         help="Specific repos to scan, e.g. owner/repo owner/repo. Does not apply to org_security_posture.",
     )
     parser.add_argument(
+        "--repo-file",
+        type=Path,
+        default=None,
+        help="Path to a repo selection file. Mutually exclusive with --repos.",
+    )
+    parser.add_argument(
         "--dashboard",
         help="Run the audit-cli dashboard - requires at least one script to have been run to generate data in the database.",
         action="store_true",
@@ -142,10 +148,29 @@ def main(argv=None) -> None:
         sys.exit(1)
 
     # Script-Specific Argument Validation
+    if args.repos and args.repo_file:
+        print(
+            "--repos and --repo-file cannot be used together. Choose one or neither.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if args.repos and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
             "The --repos argument does not apply to org_security_posture. "
             "This script operates at org level and does not support multiple repo targeting.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if (
+        args.repo_file
+        and "org_security_posture" in (args.scripts or [])
+        and not args.all
+    ):
+        print(
+            "The --repo-file argument does not apply to org_security_posture. "
+            "This script operates at org level and does not support repo list targeting.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -179,6 +204,8 @@ def main(argv=None) -> None:
             kwargs = {}
             if args.repos and name != "org_security_posture":
                 kwargs["repos"] = args.repos
+            if args.repo_file and name != "org_security_posture":
+                kwargs["repo_file"] = args.repo_file
             # Pass the global config, auth method, base directories, and any script-specific kwargs
             # to the script's run function
             script.run(
