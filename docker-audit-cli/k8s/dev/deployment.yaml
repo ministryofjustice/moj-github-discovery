@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: developer-experience-audit-dashboard
+  namespace: developer-experience-audit-dashboard-dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: developer-experience-audit-dashboard
+  template:
+    metadata:
+      labels:
+        app: developer-experience-audit-dashboard
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: dashboard-runner
+        runAsGroup: dashboard-runner
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: developer-experience-audit-dashboard
+        image: IMAGE_PLACEHOLDER
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 8050

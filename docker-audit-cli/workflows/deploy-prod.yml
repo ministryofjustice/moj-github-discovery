@@ -1,0 +1,93 @@
+name: Deploy to Prod
+run-name: Deploy to Prod
+
+on:
+  workflow_dispatch:
+
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy-prod:
+    name: Build, Push, Deploy (Prod)
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Validate ECR configuration
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -z "${{ secrets.PROD_ECR_ROLE_TO_ASSUME }}" ]]; then
+          echo "Missing required secret: PROD_ECR_ROLE_TO_ASSUME"
+          exit 1
+        fi
+        if [[ -z "${{ vars.ECR_REGION }}" ]]; then
+          echo "Missing required variable: ECR_REGION"
+          exit 1
+        fi
+        if [[ -z "${{ vars.ECR_REPOSITORY }}" ]]; then
+          echo "Missing required variable: ECR_REPOSITORY"
+          exit 1
+        fi
+
+    - name: Configure AWS credentials for ECR
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      with:
+        role-to-assume: ${{ secrets.PROD_ECR_ROLE_TO_ASSUME }}
+        aws-region: ${{ vars.ECR_REGION }}
+
+    - name: Login to Amazon ECR
+      id: ecr-login
+      uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
+  
+
+    # TODO: Container Image Scanning Needs to be implemented here - Snyk is likely candidate
+    - name: Build and push image
+      id: build-push
+      shell: bash
+      run: |
+        set -euo pipefail
+        IMAGE_URI="${{ steps.ecr-login.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${IMAGE_TAG}"
+        docker buildx build --platform linux/amd64 --load -t "${IMAGE_URI}" .
+        docker push "${IMAGE_URI}"
+        echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+
+    - name: Configure Kubernetes access
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Use Cloud Platform-provisioned PROD_* GitHub secrets.
+        echo "${{ secrets.PROD_KUBE_CERT }}" > ca.crt
+        kubectl config set-cluster cp-cluster --server="${{ secrets.PROD_KUBE_CLUSTER }}" --certificate-authority=ca.crt
+        kubectl config set-credentials github-actions --token="${{ secrets.PROD_KUBE_TOKEN }}"
+        kubectl config set-context prod --cluster=cp-cluster --user=github-actions --namespace="${{ secrets.PROD_KUBE_NAMESPACE }}"
+        kubectl config use-context prod
+
+        # Make kubeconfig location available to subsequent steps
+        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+
+    - name: Deploy manifests
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed \
+          -e "s|IMAGE_PLACEHOLDER|${{ steps.build-push.outputs.image_uri }}|g" \
+          -e "s|^\([[:space:]]*namespace:\)[[:space:]]*.*$|\1 ${{ secrets.PROD_KUBE_NAMESPACE }}|" \
+          k8s/prod/deployment.yaml | kubectl apply -f -
+        kubectl rollout status deployment/developer-portal --namespace "${{ secrets.PROD_KUBE_NAMESPACE }}" --timeout=180s
