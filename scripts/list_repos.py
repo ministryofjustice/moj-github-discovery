@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from core.collector import RepoCollector, RepoListCollector
+from core.collector import RepoCollector
 from core.config import AuditConfig
 from core.github_api import (
     REPO_ENDPOINTS,
@@ -13,6 +13,7 @@ from core.github_api import (
 )
 from core.output_paths import OutputPathResolver
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
+from core.repo_list import resolve_repo_selection
 from core.storage import SqliteRepoStorage
 from core.validation import direct_invocation_guard
 
@@ -33,8 +34,9 @@ def run(
     # Define Variables from Config and CLI Args
     database_path = resolver.database_path(list_repos_config.database_path)
     output_filename = list_repos_config.output_filename
-    repo_file = config.repo_list_file
-    repo_limit = list_repos_config.repo_limit
+    repo_file = config.default_repo_list
+    repo_limit = config.repo_limit
+    repo_search_scope = config.repo_search_scope
     use_cache = list_repos_config.use_cache
     sort_by_field = list_repos_config.sort_by_field
     sort_asc = list_repos_config.sort_ascending
@@ -51,6 +53,7 @@ def run(
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
+    print(f"Repo search scope: {repo_search_scope}", file=sys.stderr)
     print(f"use_cache: {use_cache}", file=sys.stderr)
     print(f"Sort by field: {sort_by_field}", file=sys.stderr)
     print(f"Sort ascending: {sort_asc}", file=sys.stderr)
@@ -61,37 +64,16 @@ def run(
 
     print(sub_section_break, file=sys.stderr)
 
-    if kwargs.get("repos"):
-        repo_list = kwargs["repos"]
-    else:
-        if repo_limit is not None:
-            if repo_limit < 0:
-                print("--limit must be >= 0", file=sys.stderr)
-                sys.exit(2)
-            else:
-                print(
-                    f"Collecting repository list from {repo_file} with limit {repo_limit}...",
-                    file=sys.stderr,
-                )
-        else:
-            print("Collecting repository list from GitHub API...", file=sys.stderr)
-            repo_list_collector = RepoListCollector(auth_method=auth)
-            repo_list = repo_list_collector.collect(
-                "ministryofjustice",  # Replace with your organization
-                sort="pushed",
-                direction="asc",
-            )
-        # try:
-        #     repo_list = load_repo_list_file(repo_file)
-        # except Exception as exc:
-        #     print(f"Failed to read repo file: {exc}", file=sys.stderr)
-        #     sys.exit(2)
-
-    if repo_limit is not None:
-        if repo_limit < 0:
-            print("--limit must be >= 0", file=sys.stderr)
-            sys.exit(2)
-        repo_list = repo_list[:repo_limit]
+    try:
+        repo_list = resolve_repo_selection(
+            config,
+            auth,
+            repos=kwargs.get("repos"),
+            repo_file=kwargs.get("repo_file"),
+        )
+    except (FileNotFoundError, TypeError, ValueError) as exc:
+        print(f"Failed to resolve repository list: {exc}", file=sys.stderr)
+        sys.exit(2)
 
     if not repo_list:
         print(

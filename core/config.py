@@ -8,10 +8,10 @@ the ``--config-file`` CLI argument on any script that consumes this module.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 DEFAULT_CONFIG_PATH = Path("config/audit_config.yaml")
 
@@ -120,7 +120,6 @@ class ListReposConfig(ScriptOutputConfig):
         "internal/repo_audit.db"  # SQLite cache file for repo audit data
     )
     output_filename: str = "list_repos.xlsx"  # output file for repo summary data
-    repo_limit: int | None = 400
     use_cache: bool = (
         True  # whether to use database cache to skip endpoints already collected
     )
@@ -186,7 +185,12 @@ class AuditConfig(BaseModel):
     """Top-level audit config loaded from ``audit_config.yaml``."""
 
     github_organization: str = "ministryofjustice"
-    repo_list_file: str = "repo_list.yaml"
+    default_repo_list: str = Field(
+        default="repo_list.yaml",
+        validation_alias=AliasChoices("default_repo_list", "repo_list_file"),
+    )
+    repo_search_scope: Literal["file", "org"] = "file"
+    repo_limit: int | None = None
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
@@ -196,6 +200,18 @@ class AuditConfig(BaseModel):
         default_factory=OrgSecurityPostureConfig
     )
     workflow_audit: WorkflowAuditConfig = Field(default_factory=WorkflowAuditConfig)
+
+    @field_validator("repo_limit", mode="after")
+    @classmethod
+    def validate_global_repo_limit(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError(f"repo_limit must be >= 0, got {value}")
+        return value
+
+    @property
+    def repo_list_file(self) -> str:
+        """Backward-compatible alias for older script paths/tests."""
+        return self.default_repo_list
 
 
 def load_audit_config(config_path: Path | None = None) -> AuditConfig:
