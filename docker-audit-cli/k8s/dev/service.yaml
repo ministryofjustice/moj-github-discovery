@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: developer-experience-audit-dashboard
+  namespace: developer-experience-audit-dashboard-dev
+spec:
+  selector:
+    app: developer-experience-audit-dashboard
+  ports:
+  - port: 80
+    targetPort: 8050
+    protocol: TCP
+    name: http
