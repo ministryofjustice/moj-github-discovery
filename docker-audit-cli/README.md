@@ -3,10 +3,41 @@
 This folder contains all files related to the Docker proof of concept for the
 audit CLI scripts and dashboard.
 
+## Status
+
+This Docker and Kubernetes setup is intentionally a placeholder/POC.
+
+- It is not production-ready.
+- It is not yet intended for active feature development.
+- CI/CD is not yet established for image build/publish/deploy.
+- Kubernetes manifests currently provide an initial deployment shape only.
+
+Use this folder as a starting point for future platform work, not as a final
+runtime architecture.
+
 Both container images are now built from a single multi-stage Dockerfile:
 
 - `docker-audit-cli/Dockerfile` with target `cli`
 - `docker-audit-cli/Dockerfile` with target `dashboard`
+
+## Initial Workflows in This POC
+
+The initial workflows included here are manual/local workflows:
+
+- Build CLI image using the `cli` target.
+- Run CLI scripts via `make audit-cli-run`.
+- Build dashboard image using the `dashboard` target.
+- Run dashboard locally via `make audit-dashboard-run`.
+
+The repo root `Makefile` provides these convenience targets:
+
+- `make audit-cli-build`
+- `make audit-cli-run`
+- `make audit-dashboard-build`
+- `make audit-dashboard-run`
+
+At this stage, these workflows are intentionally lightweight and are not yet
+integrated into a release pipeline.
 
 For full project setup and authentication guidance, refer to `docs/setup.md`.
 For full CLI/script usage, refer to the root `README.md`.
@@ -105,3 +136,44 @@ make audit-dashboard-build
 The dashboard can then be accessed via `http://localhost:8050`, allowing viewing of `internal/`'s data.
 
 ## CI/CD and Cloud Platform Considerations
+
+### Deployment Workflows (POC)
+
+Initial placeholder workflow files are included at:
+
+- `docker-audit-cli/workflows/deploy-dev.yml`
+- `docker-audit-cli/workflows/deploy-prod.yml`
+
+These are draft workflows intended to describe a future deployment shape:
+
+- Build/push dashboard image to ECR.
+- Apply dashboard manifests to Kubernetes.
+- Wait for rollout on the dashboard Deployment.
+
+Important limitations:
+
+- These files are POC-only and not yet treated as active delivery pipelines.
+- They are currently stored under `docker-audit-cli/workflows` as draft assets.
+- Final GitHub Actions wiring/location and promotion controls are still to be
+    defined.
+
+### Kubernetes Manifests (POC)
+
+Initial Kubernetes manifests are included at:
+
+- `docker-audit-cli/k8s/dev/deployment.yaml`
+- `docker-audit-cli/k8s/prod/deployment.yaml`
+
+They currently include:
+
+- Deployment, Service, and Ingress resources for the dashboard.
+- `IMAGE_PLACEHOLDER` image references for manual substitution.
+- Basic pod/container hardening defaults (`runAsNonRoot`, dropped capabilities,
+  no service account token mount).
+
+POC constraints and follow-up work:
+
+- No automated image promotion or manifest templating.
+- No readiness/liveness probes yet.
+- No resource requests/limits yet.
+- No environment-specific overlay tooling yet.

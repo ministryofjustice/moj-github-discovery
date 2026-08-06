@@ -61,7 +61,11 @@ jobs:
       run: |
         set -euo pipefail
         IMAGE_URI="${{ steps.ecr-login.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${IMAGE_TAG}"
-        docker buildx build --platform linux/amd64 --load -t "${IMAGE_URI}" .
+        docker buildx build --platform linux/amd64 --load \
+          -f docker-audit-cli/Dockerfile \
+          --target dashboard \
+          -t "${IMAGE_URI}" \
+          .
         docker push "${IMAGE_URI}"
         echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
 
@@ -89,5 +93,5 @@ jobs:
         sed \
           -e "s|IMAGE_PLACEHOLDER|${{ steps.build-push.outputs.image_uri }}|g" \
           -e "s|^\([[:space:]]*namespace:\)[[:space:]]*.*$|\1 ${{ secrets.PROD_KUBE_NAMESPACE }}|" \
-          k8s/prod/deployment.yaml | kubectl apply -f -
-        kubectl rollout status deployment/developer-portal --namespace "${{ secrets.PROD_KUBE_NAMESPACE }}" --timeout=180s
+          docker-audit-cli/k8s/prod/deployment.yaml | kubectl apply -f -
+        kubectl rollout status deployment/developer-experience-audit-dashboard --namespace "${{ secrets.PROD_KUBE_NAMESPACE }}" --timeout=180s
