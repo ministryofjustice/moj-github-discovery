@@ -16,8 +16,6 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: dashboard-runner
-        runAsGroup: dashboard-runner
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -29,8 +27,20 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /home/dashboard-runner/.cache
         ports:
-        - containerPort: 8050
+        - name: http
+          containerPort: 8050
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
