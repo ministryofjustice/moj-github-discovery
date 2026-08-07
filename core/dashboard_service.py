@@ -122,10 +122,12 @@ class DashboardDataService:
             if sources["github_workflow"]
             else None,
         }
+        # Validate that at least one source is available and loaded
         if not any(sources.values()):
             raise RuntimeError(
                 "No available sources found in the database. - Run at least one audit-cli script to generate data before starting the dashboard."
             )
+        # Validate that at least one source was successfully loaded
         if all(value is None for value in data.values()):
             raise RuntimeError(
                 "Failed to load any available sources (database files were found, but no datasets could be loaded). Check earlier warnings/errors for details."
