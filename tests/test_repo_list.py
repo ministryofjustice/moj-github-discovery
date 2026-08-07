@@ -6,6 +6,7 @@ import pytest
 
 from core.config import AuditConfig
 from core.repo_list import (
+    iter_repo_batches,
     load_repo_list_file,
     load_repo_list_yaml,
     resolve_repo_selection,
@@ -168,3 +169,18 @@ def test_resolve_repo_selection_org_scope_uses_collector_and_limit(tmp_path):
         direction="asc",
     )
     assert result == ["a/b"]
+
+
+def test_iter_repo_batches_splits_into_expected_chunks():
+    repos = [f"owner/repo-{i}" for i in range(1, 6)]
+    batches = list(iter_repo_batches(repos, 2))
+    assert batches == [
+        ["owner/repo-1", "owner/repo-2"],
+        ["owner/repo-3", "owner/repo-4"],
+        ["owner/repo-5"],
+    ]
+
+
+def test_iter_repo_batches_rejects_non_positive_batch_size():
+    with pytest.raises(ValueError, match="batch_size"):
+        list(iter_repo_batches(["owner/repo-1"], 0))

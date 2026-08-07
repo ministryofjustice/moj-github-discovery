@@ -10,6 +10,7 @@ repos:
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Literal
 
@@ -151,3 +152,11 @@ def resolve_repo_selection(
         direction="asc",
     )
     return _apply_repo_limit(selected, config.repo_limit, "org API")
+
+
+def iter_repo_batches(repos: list[str], batch_size: int) -> Iterator[list[str]]:
+    """Yield deterministic repository batches of up to ``batch_size`` entries."""
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be > 0, got {batch_size}")
+    for start in range(0, len(repos), batch_size):
+        yield repos[start : start + batch_size]

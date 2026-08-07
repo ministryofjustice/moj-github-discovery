@@ -17,7 +17,7 @@ from core.github_api import (
 )
 from core.output_paths import OutputPathResolver
 from core.presenters import build_repo_summary_table, repo_data_to_list_row
-from core.repo_list import resolve_repo_selection
+from core.repo_list import iter_repo_batches, resolve_repo_selection
 from core.storage import SqliteRepoStorage
 from core.validation import direct_invocation_guard
 
@@ -40,6 +40,7 @@ def run(
     output_filename = list_repos_config.output_filename
     repo_file = config.default_repo_list
     repo_limit = config.repo_limit
+    repo_batch_size = config.repo_batch_size
     repo_search_scope = config.repo_search_scope
     use_cache = list_repos_config.use_cache
     sort_by_field = list_repos_config.sort_by_field
@@ -57,6 +58,7 @@ def run(
     print(f"Database Path: {database_path}", file=sys.stderr)
     print(f"Repo Search Scope: {repo_search_scope}", file=sys.stderr)
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
+    print(f"Repo batch size: {repo_batch_size}", file=sys.stderr)
     if repo_search_scope == "file":
         print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"use_cache: {use_cache}", file=sys.stderr)
@@ -69,6 +71,7 @@ def run(
 
     print(sub_section_break, file=sys.stderr)
 
+    # Resolve Repository List Scope and Apply Limit
     try:
         repo_list = resolve_repo_selection(
             config,
@@ -98,8 +101,20 @@ def run(
         storage=storage, endpoints=selected_endpoints, auth_method=auth
     )
 
-    primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=use_cache)
+    batches = list(iter_repo_batches(repo_list, repo_batch_size))
+    for idx, batch in enumerate(batches, start=1):
+        batch_label = f"batch {idx}/{len(batches)}"
+        print(
+            f"Collecting batch {idx}/{len(batches)} ({len(batch)} repos)",
+            file=sys.stderr,
+        )
+        primary_org = batch[0].split("/", 1)[0]
+        collector.collect(
+            primary_org,
+            repos=batch,
+            resume=use_cache,
+            batch_label=batch_label,
+        )
 
     rows: list[dict[str, Any]] = []
     for full_name in repo_list:
