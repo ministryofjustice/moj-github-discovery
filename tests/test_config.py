@@ -23,6 +23,7 @@ def test_defaults_all_stages_enabled():
     assert config.repo_list_file == "repo_list.yaml"
     assert config.repo_search_scope == "file"
     assert config.repo_limit is None
+    assert config.repo_batch_size == 100
 
 
 def test_script_output_subdir_python_fallback_defaults():
@@ -273,3 +274,13 @@ def test_empty_yaml_returns_defaults(tmp_path):
     config_file.write_text("")
     config = load_audit_config(config_file)
     assert config == AuditConfig()
+
+
+def test_repo_batch_size_must_be_positive():
+    with pytest.raises(ValueError, match="repo_batch_size"):
+        AuditConfig(repo_batch_size=0)
+
+
+def test_repo_batch_size_must_be_at_most_100():
+    with pytest.raises(ValueError, match="repo_batch_size"):
+        AuditConfig(repo_batch_size=101)

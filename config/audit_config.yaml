@@ -6,6 +6,7 @@ github_organization: "ministryofjustice"
 default_repo_list: "repo_list.yaml"
 repo_search_scope: "org" # file or org
 repo_limit: 400 # null for no limit, or set to an integer to limit
+repo_batch_size: 100 # max repos collected per batch (1-100)
 
 
 alert_metrics:
@@ -41,7 +42,7 @@ list_repos:
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false
-  use_cache: true
+  use_cache: false
 
 # Script config for org_security_posture.py.
 org_security_posture:

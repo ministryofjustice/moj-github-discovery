@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from core.models import RepoData, RepoDetails
-from core.presenters import build_dashboard_dataframe, build_repo_summary_table
+from core.models import DefaultBranchCommitData, ForkTemplateData, RepoData, RepoDetails
+from core.presenters import (
+    build_dashboard_dataframe,
+    build_repo_summary_table,
+    repo_data_to_dashboard_row,
+    repo_data_to_list_row,
+)
 from tests.conftest import MockStorage
 
 
@@ -83,3 +88,109 @@ class TestBuildDashboardDataframe:
 
         assert len(df) == 1
         assert df.iloc[0]["repo"] == "org/repo"
+
+
+class TestPresenterFallbacks:
+    def test_list_row_uses_na_for_non_fork_when_fork_template_missing(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    fork=False,
+                )
+            ),
+        )
+        assert row["fork"] is False
+        assert row["fork_source"] == "N/A"
+
+    def test_list_row_falls_back_last_pushed_at_to_last_push_activity(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at="2026-08-01T10:00:00Z",
+                ),
+                default_branch_commit=DefaultBranchCommitData(last_pushed_at=None),
+            ),
+        )
+        assert row["last_push_activity"] == "2026-08-01T10:00:00Z"
+        assert row["last_pushed_at"] == "2026-08-01T10:00:00Z"
+
+    def test_list_row_visibility_defaults_to_unknown(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    visibility=None,
+                )
+            ),
+        )
+        assert row["visibility"] == "unknown"
+
+    def test_list_row_uses_unknown_for_missing_fork_source_when_is_fork_true(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    fork=True,
+                ),
+                fork_template=ForkTemplateData(is_fork=True, fork_source=None),
+            ),
+        )
+        assert row["fork"] is True
+        assert row["fork_source"] == "UNKNOWN"
+
+    def test_dashboard_row_last_pushed_at_falls_back_to_last_push_activity(self):
+        row = repo_data_to_dashboard_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at="2026-08-01T10:00:00Z",
+                ),
+                default_branch_commit=DefaultBranchCommitData(last_pushed_at=None),
+            ),
+        )
+        assert row["last_push_activity"] == "2026-08-01T10:00:00Z"
+        assert row["last_pushed_at"] == "2026-08-01T10:00:00Z"
+
+    def test_list_row_empty_repo_uses_na_for_push_timestamps_and_flag(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at=None,
+                ),
+                default_branch_commit=DefaultBranchCommitData(last_pushed_at=None),
+            ),
+        )
+        assert row["last_push_activity"] == "N/A"
+        assert row["last_pushed_at"] == "N/A"
+        assert "empty_repo_no_push_activity" in row["flags"]
+
+    def test_dashboard_row_empty_repo_uses_na_for_push_timestamps_and_flag(self):
+        row = repo_data_to_dashboard_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    pushed_at=None,
+                ),
+                default_branch_commit=DefaultBranchCommitData(last_pushed_at=None),
+            ),
+        )
+        assert row["last_push_activity"] == "N/A"
+        assert row["last_pushed_at"] == "N/A"
+        assert "empty_repo_no_push_activity" in row["flags"]

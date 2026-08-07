@@ -549,6 +549,24 @@ class TestBranchProtectionEndpoint:
         assert result.required_approving_review_count == 2
         assert result.required_signatures_enabled is True
 
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = BranchProtectionEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.default_branch_protected is False
+        assert result.branch_protection_enabled is False
+        assert result.branch_protection_access == "empty_repo_no_default_branch"
+        assert client.calls == []
+
     def test_protected_branch_nested_review_settings_without_subendpoints(self):
         details = RepoDetails(full_name="o/r", name="r", default_branch="main")
         client = MockHttpClient(
@@ -759,6 +777,22 @@ class TestCodeownersEndpoint:
         result = CodeownersEndpoint(client).fetch("o", "r")
         assert result.present is False
 
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = CodeownersEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.present is False
+        assert client.calls == []
+
 
 # ── ForkTemplateEndpoint ──────────────────────────────────────────────
 
@@ -843,6 +877,22 @@ class TestWorkflowsEndpoint:
         assert result.count == 0
         assert result.analysis is None
 
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = WorkflowsEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.count == 0
+        assert client.calls == []
+
 
 # ── DependencyGraphEndpoint ───────────────────────────────────────────
 
@@ -924,6 +974,22 @@ class TestDefaultBranchCommitEndpoint:
         client = MockHttpClient()
         result = DefaultBranchCommitEndpoint(client).fetch("org", "repo")
         assert result.last_pushed_at is None
+
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = DefaultBranchCommitEndpoint(client).fetch(
+            "org",
+            "repo",
+            repo_details=RepoDetails(
+                full_name="org/repo",
+                name="repo",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.last_pushed_at is None
+        assert client.calls == []
 
 
 # ── OrgMembersEndpoint ────────────────────────────────────────────────

@@ -220,6 +220,19 @@ def dependency_supply_chain_summary(
     }
 
 
+def _is_empty_repo(repo_details: RepoDetails | None) -> bool:
+    """Heuristic for repos created but never initialized with a commit."""
+    if repo_details is None:
+        return False
+    # Require creation metadata as confirmation to avoid false positives when
+    # tests or callers provide minimal RepoDetails stubs with default values.
+    return (
+        (repo_details.size == 0)
+        and (not repo_details.pushed_at)
+        and bool(repo_details.created_at)
+    )
+
+
 def fetch_repo_file_text(
     client: BaseHttpClient,
     owner: str,
@@ -494,6 +507,12 @@ class BranchProtectionEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> BranchProtection:
+        if _is_empty_repo(repo_details):
+            return BranchProtection(
+                default_branch_protected=False,
+                branch_protection_enabled=False,
+                branch_protection_access="empty_repo_no_default_branch",
+            )
         try:
             default_branch = repo_details.default_branch if repo_details else "main"
             branch = self.client.get(f"/repos/{owner}/{repo}/branches/{default_branch}")
@@ -750,10 +769,21 @@ class CodeownersEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "codeowners"
 
-    def fetch(self, owner: str, repo: str) -> CodeownersData:
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> CodeownersData:
+        if _is_empty_repo(repo_details):
+            return CodeownersData(present=False)
+
         try:
-            repo_data = self.client.get(f"/repos/{owner}/{repo}")
-            default_branch = repo_data.get("default_branch", "main")
+            default_branch = (
+                repo_details.default_branch
+                if repo_details and repo_details.default_branch
+                else "main"
+            )
             tree = self.client.get(
                 f"/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1"
             )
@@ -816,7 +846,15 @@ class WorkflowsEndpoint(BaseEndpoint):
         {"lint", "ruff", "flake8", "eslint", "pylint", "rubocop"}
     )
 
-    def fetch(self, owner: str, repo: str) -> WorkflowData:
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> WorkflowData:
+        if _is_empty_repo(repo_details):
+            return WorkflowData()
+
         try:
             resp = self.client.get(f"/repos/{owner}/{repo}/actions/workflows")
             workflows = resp.get("workflows", []) if isinstance(resp, dict) else []
@@ -924,6 +962,9 @@ class GetRepoTreeEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> RepoTreeData:
+        if _is_empty_repo(repo_details):
+            return RepoTreeData(access="empty_repo_no_default_branch")
+
         try:
             default_branch = repo_details.default_branch if repo_details else "main"
             data = self.client.get(
@@ -989,6 +1030,9 @@ class DefaultBranchCommitEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> DefaultBranchCommitData:
+        if _is_empty_repo(repo_details):
+            return DefaultBranchCommitData()
+
         try:
             from urllib.parse import quote
 

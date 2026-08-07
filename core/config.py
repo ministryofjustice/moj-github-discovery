@@ -191,6 +191,7 @@ class AuditConfig(BaseModel):
     )
     repo_search_scope: Literal["file", "org"] = "file"
     repo_limit: int | None = None
+    repo_batch_size: int = 100
     alert_metrics: AlertMetricsConfig = Field(default_factory=AlertMetricsConfig)
     archive_repos: ArchiveReposConfig = Field(default_factory=ArchiveReposConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
@@ -206,6 +207,15 @@ class AuditConfig(BaseModel):
     def validate_global_repo_limit(cls, value: int | None) -> int | None:
         if value is not None and value < 0:
             raise ValueError(f"repo_limit must be >= 0, got {value}")
+        return value
+
+    @field_validator("repo_batch_size", mode="after")
+    @classmethod
+    def validate_repo_batch_size(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError(f"repo_batch_size must be > 0, got {value}")
+        if value > 100:
+            raise ValueError(f"repo_batch_size must be <= 100, got {value}")
         return value
 
     @property
