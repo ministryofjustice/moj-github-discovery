@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -77,7 +78,9 @@ class DashboardDataService:
     def _load_list_repos(self) -> pd.DataFrame | None:
         db_path = self._resolve_db_path(self._config.list_repos.database_path)
         if not db_path.exists():
-            print(f"Warning: list_repos database not found at {db_path}")
+            print(
+                f"Warning: list_repos database not found at {db_path}", file=sys.stderr
+            )
             return None
 
         try:
@@ -86,7 +89,9 @@ class DashboardDataService:
             self._list_repos_storage = storage
             return build_dashboard_dataframe(storage)
         except Exception as exc:
-            print(f"Error loading list_repos data from {db_path}: {exc}")
+            print(
+                f"Error loading list_repos data from {db_path}: {exc}", file=sys.stderr
+            )
             return None
 
     def _load_archive_repos(self) -> pd.DataFrame | None:
