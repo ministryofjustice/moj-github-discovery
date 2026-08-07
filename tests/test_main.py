@@ -52,6 +52,13 @@ def test_parse_args_repos():
     assert args.repos == ["owner/repo1", "owner/repo2"]
 
 
+def test_parse_args_repo_file(tmp_path):
+    repo_file = tmp_path / "repos.yaml"
+    repo_file.write_text("repos:\n  - owner/repo1\n")
+    args = _parse_args(["--scripts", "list_repos", "--repo-file", str(repo_file)])
+    assert args.repo_file == repo_file
+
+
 # Validation Tests
 
 
@@ -76,6 +83,27 @@ def test_repos_arg_rejected_for_org_security_posture(tmp_path):
                 "--repos",
                 "owner/repo1",
                 "owner/repo2",
+            ]
+        )
+    assert exc_info.value.code != 0
+
+
+def test_repos_and_repo_file_mutually_exclusive(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("dummy: config")
+    repo_file = tmp_path / "repos.yaml"
+    repo_file.write_text("repos:\n  - owner/repo1\n")
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--config-file",
+                str(config_file),
+                "--scripts",
+                "list_repos",
+                "--repos",
+                "owner/repo1",
+                "--repo-file",
+                str(repo_file),
             ]
         )
     assert exc_info.value.code != 0
@@ -200,6 +228,33 @@ def test_repos_kwarg_passed_to_list_repos(tmp_path):
         )
     call_kwargs = mock_scripts["list_repos"].run.call_args.kwargs
     assert call_kwargs.get("repos") == ["owner/repo1", "owner/repo2"]
+
+
+def test_repo_file_kwarg_passed_to_list_repos(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("dummy: config")
+    repo_file = tmp_path / "repos.yaml"
+    repo_file.write_text("repos:\n  - owner/repo1\n")
+
+    mock_scripts = _make_mock_scripts()
+
+    with (
+        patch("main.SCRIPTS", mock_scripts),
+        patch("main.load_audit_config"),
+        patch("main.base_directory_setup", return_value=("outputs", "internal")),
+    ):
+        main(
+            [
+                "--config-file",
+                str(config_file),
+                "--scripts",
+                "list_repos",
+                "--repo-file",
+                str(repo_file),
+            ]
+        )
+    call_kwargs = mock_scripts["list_repos"].run.call_args.kwargs
+    assert call_kwargs.get("repo_file") == repo_file
 
 
 def test_repos_kwarg_passed_to_archive_repos(tmp_path):

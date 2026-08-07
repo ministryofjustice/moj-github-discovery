@@ -19,7 +19,11 @@ def test_defaults_all_stages_enabled():
     assert audit.permissions_analysis is True
     assert audit.credentials_analysis is True
     assert audit.trigger_risk_analysis is True
+    assert config.default_repo_list == "repo_list.yaml"
     assert config.repo_list_file == "repo_list.yaml"
+    assert config.repo_search_scope == "file"
+    assert config.repo_limit is None
+    assert config.repo_batch_size == 100
 
 
 def test_script_output_subdir_python_fallback_defaults():
@@ -79,9 +83,17 @@ def test_load_raises_when_explicit_path_missing(tmp_path):
 
 def test_load_returns_config_from_file(tmp_path):
     config_file = tmp_path / "audit_config.yaml"
-    config_file.write_text("repo_list_file: custom_repos.yaml")
+    config_file.write_text("default_repo_list: custom_repos.yaml")
     config = load_audit_config(config_file)
-    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.default_repo_list == "custom_repos.yaml"
+
+
+def test_load_supports_legacy_repo_list_file_key(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text("repo_list_file: legacy_repos.yaml")
+    config = load_audit_config(config_file)
+    assert config.default_repo_list == "legacy_repos.yaml"
+    assert config.repo_list_file == "legacy_repos.yaml"
 
 
 def test_load_respects_archive_repos_config_overrides(tmp_path):
@@ -89,7 +101,7 @@ def test_load_respects_archive_repos_config_overrides(tmp_path):
     config_file.write_text(
         yaml.safe_dump(
             {
-                "repo_list_file": "custom_repos.yaml",
+                "default_repo_list": "custom_repos.yaml",
                 "archive_repos": {
                     "output_filename": "custom_archive_output.xlsx",
                     "use_cache": False,
@@ -106,7 +118,7 @@ def test_load_respects_archive_repos_config_overrides(tmp_path):
 
     config = load_audit_config(config_file)
 
-    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.default_repo_list == "custom_repos.yaml"
     assert config.archive_repos.output_filename == "custom_archive_output.xlsx"
     assert config.archive_repos.use_cache is False
     assert config.archive_repos.namespace_crossref.enabled is True
@@ -130,7 +142,6 @@ def test_load_respects_alert_metrics_config(tmp_path):
                 "alert_metrics": {
                     "output_filename": "custom_alerts.csv",
                     "max_alerts": 500,
-                    "repo_limit": 50,
                 }
             }
         )
@@ -140,7 +151,25 @@ def test_load_respects_alert_metrics_config(tmp_path):
 
     assert config.alert_metrics.output_filename == "custom_alerts.csv"
     assert config.alert_metrics.max_alerts == 500
-    assert config.alert_metrics.repo_limit == 50
+
+
+def test_load_respects_global_repo_selection_config(tmp_path):
+    config_file = tmp_path / "audit_config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "default_repo_list": "custom_repos.yaml",
+                "repo_search_scope": "org",
+                "repo_limit": 50,
+            }
+        )
+    )
+
+    config = load_audit_config(config_file)
+
+    assert config.default_repo_list == "custom_repos.yaml"
+    assert config.repo_search_scope == "org"
+    assert config.repo_limit == 50
 
 
 def test_load_respects_org_security_posture_config_overrides(tmp_path):
@@ -148,7 +177,7 @@ def test_load_respects_org_security_posture_config_overrides(tmp_path):
     config_file.write_text(
         yaml.safe_dump(
             {
-                "repo_list_file": "custom_repos.yaml",
+                "default_repo_list": "custom_repos.yaml",
                 "org_security_posture": {
                     "database_path": "custom_org_posture.db",
                     "output_filename": "custom_org_posture.xlsx",
@@ -160,7 +189,7 @@ def test_load_respects_org_security_posture_config_overrides(tmp_path):
 
     config = load_audit_config(config_file)
 
-    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.default_repo_list == "custom_repos.yaml"
     assert config.org_security_posture.database_path == "custom_org_posture.db"
     assert config.org_security_posture.output_filename == "custom_org_posture.xlsx"
     assert config.org_security_posture.use_cache is False
@@ -171,7 +200,7 @@ def test_load_respects_list_repos_config_overrides(tmp_path):
     config_file.write_text(
         yaml.safe_dump(
             {
-                "repo_list_file": "custom_list_repos_repos.yaml",
+                "default_repo_list": "custom_list_repos_repos.yaml",
                 "list_repos": {
                     "output_filename": "custom_list_repos_output.xlsx",
                     "use_cache": False,
@@ -185,7 +214,7 @@ def test_load_respects_list_repos_config_overrides(tmp_path):
 
     config = load_audit_config(config_file)
 
-    assert config.repo_list_file == "custom_list_repos_repos.yaml"
+    assert config.default_repo_list == "custom_list_repos_repos.yaml"
     assert config.list_repos.output_filename == "custom_list_repos_output.xlsx"
     assert config.list_repos.use_cache is False
     assert config.list_repos.standard_endpoints_only is False
@@ -198,7 +227,7 @@ def test_load_respects_workflow_audit_config_overrides(tmp_path):
     config_file.write_text(
         yaml.safe_dump(
             {
-                "repo_list_file": "custom_repos.yaml",
+                "default_repo_list": "custom_repos.yaml",
                 "workflow_audit": {
                     "collect_baseline_data": True,
                     "collect_additional_data": True,
@@ -214,7 +243,7 @@ def test_load_respects_workflow_audit_config_overrides(tmp_path):
 
     config = load_audit_config(config_file)
 
-    assert config.repo_list_file == "custom_repos.yaml"
+    assert config.default_repo_list == "custom_repos.yaml"
     assert config.workflow_audit.gen_posture_reports is False
     assert config.workflow_audit.actions_analysis is False
     assert config.workflow_audit.credentials_analysis is True
@@ -235,7 +264,7 @@ def test_load_fills_missing_fields_with_defaults(tmp_path):
 
     config = load_audit_config(config_file)
 
-    assert config.repo_list_file == "repo_list.yaml"
+    assert config.default_repo_list == "repo_list.yaml"
     assert config.workflow_audit.collect_baseline_data is True
     assert config.workflow_audit.credentials_analysis is False
 
@@ -245,3 +274,13 @@ def test_empty_yaml_returns_defaults(tmp_path):
     config_file.write_text("")
     config = load_audit_config(config_file)
     assert config == AuditConfig()
+
+
+def test_repo_batch_size_must_be_positive():
+    with pytest.raises(ValueError, match="repo_batch_size"):
+        AuditConfig(repo_batch_size=0)
+
+
+def test_repo_batch_size_must_be_at_most_100():
+    with pytest.raises(ValueError, match="repo_batch_size"):
+        AuditConfig(repo_batch_size=101)

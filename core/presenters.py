@@ -26,6 +26,8 @@ def flags_for_list(data: RepoData) -> list[str]:
     flags: list[str] = []
     if repo.archived:
         flags.append("archived")
+    if not repo.pushed_at:
+        flags.append("empty_repo_no_push_activity")
     if repo.fork:
         flags.append("fork")
     if repo.visibility == "public" and branch and not branch.default_branch_protected:
@@ -55,6 +57,8 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
     flags: list[str] = []
     if repo.archived:
         flags.append("archived")
+    if not repo.pushed_at:
+        flags.append("empty_repo_no_push_activity")
     if fork_template and fork_template.is_fork:
         flags.append(
             f"fork_of_{fork_template.fork_source}"
@@ -109,6 +113,47 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
     owner = full_name.split("/", 1)[0] if "/" in full_name else None
     list_flags = flags_for_list(data)
 
+    # Robust fallbacks to keep output stable when some endpoint payloads are missing.
+    visibility = repo.visibility if repo and repo.visibility else "unknown"
+    last_push_activity = repo.pushed_at if repo else None
+    last_pushed_at = (
+        data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None
+    )
+    if not last_pushed_at:
+        last_pushed_at = last_push_activity
+    if not last_push_activity:
+        last_push_activity = "N/A"
+    if not last_pushed_at:
+        last_pushed_at = "N/A"
+
+    is_fork = repo.fork if repo else (fork_template.is_fork if fork_template else None)
+    if is_fork is False:
+        fork_source = "N/A"
+    elif is_fork is True:
+        fork_source = (
+            fork_template.fork_source
+            if fork_template and fork_template.fork_source
+            else "UNKNOWN"
+        )
+    else:
+        fork_source = None
+
+    is_generated_from_template = (
+        fork_template.is_generated_from_template if fork_template else None
+    )
+    if is_generated_from_template is False:
+        template_source = "N/A"
+    elif is_generated_from_template is True:
+        template_source = (
+            fork_template.template_source
+            if fork_template and fork_template.template_source
+            else "UNKNOWN"
+        )
+    else:
+        template_source = None
+
     # Resolve Compliance Method (Branch Protection vs Rulesets) for the default branch
     compliance_method = "none"
     if branch and branch.branch_protection_enabled:
@@ -152,18 +197,14 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         "org": owner,
         "repo": repo.name if repo else full_name,
         "full_name": full_name,
-        "visibility": repo.visibility if repo else None,
+        "visibility": visibility,
         "archived": repo.archived if repo else None,
-        "fork": repo.fork if repo else None,
-        "fork_source": fork_template.fork_source if fork_template else None,
-        "is_generated_from_template": (
-            fork_template.is_generated_from_template if fork_template else None
-        ),
-        "template_source": fork_template.template_source if fork_template else None,
-        "last_pushed_at": data.default_branch_commit.last_pushed_at
-        if data.default_branch_commit
-        else None,
-        "last_push_activity": repo.pushed_at if repo else None,
+        "fork": is_fork,
+        "fork_source": fork_source,
+        "is_generated_from_template": is_generated_from_template,
+        "template_source": template_source,
+        "last_pushed_at": last_pushed_at,
+        "last_push_activity": last_push_activity,
         "default_branch": repo.default_branch if repo else None,
         "language": repo.language if repo else None,
         "open_issues": repo.open_issues_count if repo else None,
@@ -204,9 +245,23 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
     codeowners = data.codeowners
     dashboard_flags = flags_for_dashboard(data)
 
+    visibility = repo.visibility if repo and repo.visibility else "unknown"
+    last_push_activity = repo.pushed_at if repo else ""
+    last_pushed_at = (
+        data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None
+    )
+    if not last_pushed_at:
+        last_pushed_at = last_push_activity
+    if not last_push_activity:
+        last_push_activity = "N/A"
+    if not last_pushed_at:
+        last_pushed_at = "N/A"
+
     return {
         "repo": full_name,
-        "visibility": repo.visibility if repo else None,
+        "visibility": visibility,
         "archived": repo.archived if repo else None,
         "fork": repo.fork if repo else None,
         "language": repo.language if repo else None,
@@ -218,10 +273,8 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
         "branch_protected": branch.default_branch_protected if branch else None,
         "codeowners": codeowners.present if codeowners else None,
         "flags": ", ".join(dashboard_flags),
-        "last_pushed_at": data.default_branch_commit.last_pushed_at
-        if data.default_branch_commit
-        else None,
-        "last_push_activity": repo.pushed_at if repo else "",
+        "last_pushed_at": last_pushed_at,
+        "last_push_activity": last_push_activity,
     }
 
 

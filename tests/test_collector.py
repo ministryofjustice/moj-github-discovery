@@ -296,6 +296,25 @@ class TestRepoCollector:
                 max_workers=0,
             )
 
+    def test_accepts_batch_label_argument(self):
+        storage = MockStorage()
+        client = MockHttpClient()
+        collector = RepoCollector(
+            storage=storage,
+            client=client,
+            endpoints=[_FakeAlertEndpoint],
+            max_workers=1,
+        )
+
+        collector.collect(
+            "org",
+            repos=["org/repo-a"],
+            resume=False,
+            batch_label="batch 1/10",
+        )
+
+        assert storage.read("org/repo-a") is not None
+
 
 # ── OrgEndpointCollector ──────────────────────────────────────────────
 

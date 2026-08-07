@@ -621,7 +621,7 @@ uv run audit-cli --dashboard
 export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 uv run audit-cli --dashboard
-# Filter by "Show only repos with flags"
+nly repos with flags"
 ```
 
 ### Export archive candidate data

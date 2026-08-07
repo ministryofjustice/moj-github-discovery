@@ -9,9 +9,15 @@ repos:
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
 import yaml
+
+from core.collector import RepoListCollector
+from core.config import AuditConfig
 
 
 def _normalize_repo_names(values: list[object], source: str) -> list[str]:
@@ -87,3 +93,70 @@ def load_repo_list_file(path: str | Path) -> list[str]:
                 continue
             values.append(stripped)
     return _normalize_repo_names(values, str(file_path))
+
+
+def _apply_repo_limit(repos: list[str], limit: int | None, source: str) -> list[str]:
+    if limit is None:
+        return repos
+    if limit < 0:
+        raise ValueError("repo_limit must be >= 0")
+    if limit > len(repos):
+        print(
+            f"[warn] repo_limit ({limit}) is greater than repositories resolved from {source} ({len(repos)}). Loading all available repos.",
+            file=sys.stderr,
+        )
+    return repos[:limit]
+
+
+def resolve_repo_selection(
+    config: AuditConfig,
+    auth: Literal["pat", "app", "cli"] | None,
+    *,
+    repos: list[str] | None = None,
+    repo_file: str | Path | None = None,
+) -> list[str]:
+    """Resolve repositories using CLI overrides or global config scope.
+
+    Resolution order:
+    1. ``repos`` explicit list from CLI.
+    2. ``repo_file`` explicit file path from CLI.
+    3. Config-driven ``repo_search_scope`` (``file`` or ``org``).
+    """
+    if repos and repo_file:
+        raise ValueError("--repos and --repo-file are mutually exclusive")
+
+    if repos:
+        selected = _normalize_repo_names(repos, "--repos")
+        return _apply_repo_limit(selected, config.repo_limit, "--repos")
+
+    if repo_file:
+        repo_file_path = Path(repo_file)
+        if not repo_file_path.exists():
+            raise FileNotFoundError(f"Repo file not found: {repo_file_path}")
+        selected = load_repo_list_file(repo_file_path)
+        return _apply_repo_limit(selected, config.repo_limit, str(repo_file_path))
+
+    if config.repo_search_scope == "file":
+        default_file = Path(config.default_repo_list)
+        if not default_file.exists():
+            raise FileNotFoundError(
+                f"Configured default_repo_list does not exist: {default_file}"
+            )
+        selected = load_repo_list_file(default_file)
+        return _apply_repo_limit(selected, config.repo_limit, str(default_file))
+
+    repo_list_collector = RepoListCollector(auth_method=auth)
+    selected = repo_list_collector.collect(
+        config.github_organization,
+        sort="pushed",
+        direction="asc",
+    )
+    return _apply_repo_limit(selected, config.repo_limit, "org API")
+
+
+def iter_repo_batches(repos: list[str], batch_size: int) -> Iterator[list[str]]:
+    """Yield deterministic repository batches of up to ``batch_size`` entries."""
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be > 0, got {batch_size}")
+    for start in range(0, len(repos), batch_size):
+        yield repos[start : start + batch_size]
