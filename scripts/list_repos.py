@@ -1,3 +1,7 @@
+"""
+Assess repository compliance for default branch protection, branch naming, and branch security settings.
+"""
+
 from __future__ import annotations
 
 import sys
@@ -51,9 +55,10 @@ def run(
     print(section_break, file=sys.stderr)
 
     print(f"Database Path: {database_path}", file=sys.stderr)
-    print(f"Using repo file: {repo_file}", file=sys.stderr)
+    print(f"Repo Search Scope: {repo_search_scope}", file=sys.stderr)
     print(f"Repo limit: {repo_limit}", file=sys.stderr)
-    print(f"Repo search scope: {repo_search_scope}", file=sys.stderr)
+    if repo_search_scope == "file":
+        print(f"Using repo file: {repo_file}", file=sys.stderr)
     print(f"use_cache: {use_cache}", file=sys.stderr)
     print(f"Sort by field: {sort_by_field}", file=sys.stderr)
     print(f"Sort ascending: {sort_asc}", file=sys.stderr)
