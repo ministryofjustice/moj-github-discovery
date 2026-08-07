@@ -101,11 +101,11 @@ def run(
         storage=storage, endpoints=selected_endpoints, auth_method=auth
     )
 
-    batches = list(iter_repo_batches(repo_list, repo_batch_size))
-    for idx, batch in enumerate(batches, start=1):
-        batch_label = f"batch {idx}/{len(batches)}"
+    total_batches = (len(repo_list) + repo_batch_size - 1) // repo_batch_size
+    for idx, batch in enumerate(iter_repo_batches(repo_list, repo_batch_size), start=1):
+        batch_label = f"batch {idx}/{total_batches}"
         print(
-            f"Collecting batch {idx}/{len(batches)} ({len(batch)} repos)",
+            f"Collecting batch {idx}/{total_batches} ({len(batch)} repos)",
             file=sys.stderr,
         )
         primary_org = batch[0].split("/", 1)[0]

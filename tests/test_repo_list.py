@@ -171,6 +171,26 @@ def test_resolve_repo_selection_org_scope_uses_collector_and_limit(tmp_path):
     assert result == ["a/b"]
 
 
+def test_resolve_repo_selection_org_scope_without_limit_returns_all(tmp_path):
+    config = AuditConfig(
+        default_repo_list=str(tmp_path / "repos.yaml"),
+        repo_search_scope="org",
+        repo_limit=None,
+    )
+    with patch(
+        "core.repo_list.RepoListCollector.collect",
+        return_value=["a/b", "c/d", "e/f"],
+    ) as mock_collect:
+        result = resolve_repo_selection(config, auth="pat")
+
+    mock_collect.assert_called_once_with(
+        "ministryofjustice",
+        sort="pushed",
+        direction="asc",
+    )
+    assert result == ["a/b", "c/d", "e/f"]
+
+
 def test_iter_repo_batches_splits_into_expected_chunks():
     repos = [f"owner/repo-{i}" for i in range(1, 6)]
     batches = list(iter_repo_batches(repos, 2))
