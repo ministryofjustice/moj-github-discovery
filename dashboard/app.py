@@ -2,10 +2,12 @@ import dash
 from dash import ALL, Input, Output, dcc, html
 
 from core.config import AuditConfig
-from dashboard.utils.data import get_available_sources
+from core.dashboard_service import DashboardDataService
 
 
-def create_app(config: AuditConfig) -> dash.Dash:
+def create_app(
+    config: AuditConfig, dashboard_service: DashboardDataService
+) -> dash.Dash:
     """Create and Configure the Dash App Instance"""
     app = dash.Dash(
         __name__,
@@ -13,12 +15,13 @@ def create_app(config: AuditConfig) -> dash.Dash:
         pages_folder="",
         suppress_callback_exceptions=True,
     )
+    app.server.config["dashboard_service"] = dashboard_service
 
     # Import Layouts After App instantiation to ensure page registration works correctly
     from dashboard.callbacks import list_repos as _list_repos_callbacks  # noqa: F401
     from dashboard.layouts import list_repos  # noqa: F401
 
-    sources = get_available_sources(config)
+    sources = dashboard_service.get_available_sources()
 
     # Empty Nav List - Add Links for Available Sources
     nav_items = []

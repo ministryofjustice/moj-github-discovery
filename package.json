@@ -13,10 +13,11 @@
   },
   "devDependencies": {
     "cspell": "^10.0.1",
+    "js-yaml": "^5.2.3",
+    "linkify-it": "^6.1.0",
     "markdownlint-cli2": "^0.23.2"
   },
   "overrides": {
-      "js-yaml": "^4.2.0",
       "markdown-it": "^14.2.0"
     },
   "cspell": {
