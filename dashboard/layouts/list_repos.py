@@ -7,7 +7,7 @@ import pandas as pd
 from dash import dcc, html
 from flask import current_app
 
-from dashboard.utils.constants import (
+from dashboard.utils.flags import (
     FLAG_FILTER_OPTIONS,
 )
 

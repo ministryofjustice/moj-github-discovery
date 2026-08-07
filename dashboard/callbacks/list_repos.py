@@ -10,7 +10,7 @@ import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
 from flask import current_app
 
-from dashboard.utils.constants import get_flag_color
+from dashboard.utils.flags import get_flag_color
 
 
 def _get_dashboard_service():

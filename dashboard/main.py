@@ -10,13 +10,6 @@ Usage:
 Then open http://localhost:8050 in your browser.
 """
 
-import os
-import sys
-
-# Add project root to path so `core.*` and `dashboard.*` are importable.
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
-
 from core.config import AuditConfig, load_audit_config
 from core.dashboard_service import DashboardDataService
 from dashboard.app import create_app
