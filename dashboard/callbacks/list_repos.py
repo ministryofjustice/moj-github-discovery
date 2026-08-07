@@ -8,12 +8,14 @@ import sys
 
 import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
+from flask import current_app
 
 from dashboard.utils.constants import get_flag_color
-from dashboard.utils.data import (
-    _load_repo_audit_result,
-    get_dashboard_page_size_default,
-)
+
+
+def _get_dashboard_service():
+    return current_app.config["dashboard_service"]
+
 
 # ---------------------------------------------------------------------------
 # Table + pagination
@@ -50,7 +52,7 @@ def update_table(search, flag_filter, page, page_size, data):
 
 
 def _render_table(search, flag_filter, page, page_size, data):
-    default_page_size = get_dashboard_page_size_default()
+    default_page_size = _get_dashboard_service().get_dashboard_page_size_default()
     records = json.loads(data) if isinstance(data, str) else data
     ddf = pd.DataFrame(records)
 
@@ -205,7 +207,7 @@ def update_page(
     data,
 ):
     """Navigate pages or reset to page 1 when filters change."""
-    default_page_size = get_dashboard_page_size_default()
+    default_page_size = _get_dashboard_service().get_dashboard_page_size_default()
     ctx = callback_context
     if not ctx.triggered:
         return current_page or 1
@@ -248,7 +250,7 @@ def update_page(
 )
 def update_page_size(page_size_value):
     """Update the page size store when the dropdown changes."""
-    return page_size_value or get_dashboard_page_size_default()
+    return page_size_value or _get_dashboard_service().get_dashboard_page_size_default()
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +280,7 @@ def update_modal(selected_repo, audit_data):
             audit_data = None
 
     if not audit_data:
-        audit_data = _load_repo_audit_result(selected_repo)
+        audit_data = _get_dashboard_service().load_repo_audit_result(selected_repo)
 
     if audit_data:
         # Import lazily to avoid page registration before Dash app instantiation.
