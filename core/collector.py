@@ -73,6 +73,7 @@ class BaseCollector(ABC):
         org: str,
         repos: list[str] | None = None,
         resume: bool = False,
+        batch_label: str | None = None,
     ) -> None:
         """
         Fetch and persist data for all repositories.
