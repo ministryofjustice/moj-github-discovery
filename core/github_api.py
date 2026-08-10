@@ -233,6 +233,19 @@ def _is_empty_repo(repo_details: RepoDetails | None) -> bool:
     )
 
 
+def _access_error_status(exc: Exception) -> str:
+    """Return a stable status string for endpoint access failures."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code == 401:
+        return "unauthorized"
+    if status_code == 403:
+        return "forbidden"
+    if status_code == 404:
+        return "not_found"
+    return str(exc)
+
+
 def fetch_repo_file_text(
     client: BaseHttpClient,
     owner: str,
@@ -487,7 +500,7 @@ class AlertsEndpoint(BaseEndpoint):
                 result[f"{key}_access"] = "ok"
             except Exception as exc:
                 result[f"{key}_alerts"] = 0
-                result[f"{key}_access"] = str(exc)
+                result[f"{key}_access"] = _access_error_status(exc)
         return AlertData.model_validate(result)
 
 
@@ -622,7 +635,7 @@ class BranchProtectionEndpoint(BaseEndpoint):
                 required_signatures_enabled=required_signatures_enabled,
             )
         except Exception as exc:
-            return BranchProtection(branch_protection_access=str(exc))
+            return BranchProtection(branch_protection_access=_access_error_status(exc))
 
 
 class RepoRulesetsEndpoint(BaseEndpoint):
@@ -738,7 +751,7 @@ class RepoRulesetsEndpoint(BaseEndpoint):
             return result
 
         except Exception as exc:
-            return RepoRulesetsData(rulesets_access=str(exc))
+            return RepoRulesetsData(rulesets_access=_access_error_status(exc))
 
 
 class CommunityProfileEndpoint(BaseEndpoint):
@@ -974,7 +987,7 @@ class GetRepoTreeEndpoint(BaseEndpoint):
                 return RepoTreeData(access="unexpected_response_type")
             return RepoTreeData.model_validate(data)
         except Exception as exc:
-            return RepoTreeData(access=str(exc))
+            return RepoTreeData(access=_access_error_status(exc))
 
 
 class CodeSearchEndpoint(BaseEndpoint):

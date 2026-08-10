@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urljoin
 
@@ -122,14 +124,28 @@ class GitHubHttpClient(BaseHttpClient):
         token: str | None = None,
         max_attempts: int = 5,
     ) -> None:
-        self._token = token or self._resolve_token(auth_method)
+        self._auth_method = auth_method
+        self._token_expires_at: float | None = None
         self._max_attempts = max_attempts
         self._session: requests.Session | None = None
+        self._session_lock = threading.Lock()
+
+        if token is not None:
+            self._token = token
+        else:
+            resolved_method, resolved_token, expires_at = self._resolve_token(
+                auth_method
+            )
+            self._auth_method = resolved_method
+            self._token = resolved_token
+            self._token_expires_at = expires_at
 
     # ── Token resolution ──────────────────────────────────────────────
 
     @staticmethod
-    def _resolve_token(auth_method) -> str:
+    def _resolve_token(
+        auth_method,
+    ) -> tuple[Literal["pat", "app", "cli"] | None, str, float | None]:
         """Return a GitHub token and cache the result.
 
         Resolution order:
@@ -154,15 +170,17 @@ class GitHubHttpClient(BaseHttpClient):
                         f"Auth method {auth_method} selected - but no GITHUB_TOKEN or GH_TOKEN env var found"
                     )
                 print("PAT Authentication Successful", file=sys.stderr)
-                return token
+                return "pat", token, None
             if auth_method == "app":
-                token = GitHubHttpClient._resolve_github_app_installation_token()
+                token, expires_at = (
+                    GitHubHttpClient._resolve_github_app_installation_credentials()
+                )
                 if not token:
                     raise RuntimeError(
                         f"Auth method {auth_method} selected - but GitHub App auth could not be resolved"
                     )
                 print("GitHub App Authentication Successful", file=sys.stderr)
-                return token
+                return "app", token, expires_at
             if auth_method == "cli":
                 token = GitHubHttpClient._resolve_github_cli_token()
                 if not token:
@@ -170,7 +188,7 @@ class GitHubHttpClient(BaseHttpClient):
                         f"Auth method {auth_method} selected - but no GITHUB_CLI token found"
                     )
                 print("GitHub CLI Authentication Successful", file=sys.stderr)
-                return token
+                return "cli", token, None
 
         print(
             "No Auth Method Arg Provided - Reverting to Default Behaviour",
@@ -181,17 +199,19 @@ class GitHubHttpClient(BaseHttpClient):
         token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
         if token:
             print("PAT Authentication Successful", file=sys.stderr)
-            return token
+            return "pat", token, None
 
         # 2. GitHub App Environment Variables
         print(
             "PAT Authentication Unsuccessful - Attempting GitHub App Authentication",
             file=sys.stderr,
         )
-        gh_app_token = GitHubHttpClient._resolve_github_app_installation_token()
+        gh_app_token, expires_at = (
+            GitHubHttpClient._resolve_github_app_installation_credentials()
+        )
         if gh_app_token:
             print("GitHub App Authentication Successful", file=sys.stderr)
-            return gh_app_token
+            return "app", gh_app_token, expires_at
 
         print(
             "GitHub App Authentication Unsuccessful - Attempting GitHub CLI Authentication",
@@ -202,7 +222,7 @@ class GitHubHttpClient(BaseHttpClient):
         gh_cli_token = GitHubHttpClient._resolve_github_cli_token()
         if gh_cli_token:
             print("GitHub CLI Authentication Successful", file=sys.stderr)
-            return gh_cli_token
+            return "cli", gh_cli_token, None
 
         raise RuntimeError(
             "No GitHub token found. "
@@ -272,12 +292,21 @@ class GitHubHttpClient(BaseHttpClient):
         )
 
     @staticmethod
-    def _resolve_github_app_installation_token() -> str:
+    def _parse_expiry_timestamp(expires_at: str | None) -> float | None:
+        if not expires_at:
+            return None
+        try:
+            return datetime.fromisoformat(expires_at).timestamp()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _resolve_github_app_installation_credentials() -> tuple[str, float | None]:
 
         # Env Var Validation: GH_APP_ID / GITHUB_APP_ID
         github_app_id = os.getenv("GITHUB_APP_ID") or os.getenv("GH_APP_ID")
         if not github_app_id:
-            return None
+            return None, None
 
         # Env Var Validation: GH_/GITHUB_APP_PRIVATE_KEY
         github_app_private_key = GitHubHttpClient._read_github_app_private_key()
@@ -332,7 +361,16 @@ class GitHubHttpClient(BaseHttpClient):
                     "GitHub App Access Token Response did not include a token value"
                 )
 
-            return token
+            expires_at = GitHubHttpClient._parse_expiry_timestamp(
+                token_data.get("expires_at")
+            )
+
+            return token, expires_at
+
+    @staticmethod
+    def _resolve_github_app_installation_token() -> str:
+        token, _ = GitHubHttpClient._resolve_github_app_installation_credentials()
+        return token
 
     def _read_github_app_private_key() -> str | None:
         """Return GitHub App private key from environment variable content."""
@@ -384,18 +422,52 @@ class GitHubHttpClient(BaseHttpClient):
 
     # ── Session ───────────────────────────────────────────────────────
 
-    def _get_session(self) -> requests.Session:
-        if self._session is None:
-            sess = requests.Session()
-            sess.headers.update(
-                {
-                    "Authorization": f"token {self._token}",
-                    "Accept": "application/vnd.github.v3+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                }
+    def _should_refresh_app_token(self) -> bool:
+        if self._auth_method != "app":
+            return False
+        if self._token_expires_at is None:
+            return False
+        return time.time() >= self._token_expires_at - 300
+
+    def _refresh_app_token(self, *, force: bool = False) -> None:
+        if self._auth_method != "app":
+            return
+        if not force and not self._should_refresh_app_token():
+            return
+
+        with self._session_lock:
+            if not force and not self._should_refresh_app_token():
+                return
+            refresh_reason = "401 response" if force else "approaching expiry"
+            print(
+                f"[auth] Refreshing GitHub App installation token ({refresh_reason})",
+                file=sys.stderr,
             )
-            self._session = sess
-        return self._session
+            self._token, self._token_expires_at = (
+                self._resolve_github_app_installation_credentials()
+            )
+            if self._session is not None:
+                self._session.close()
+                self._session = None
+
+    def _ensure_valid_token(self) -> None:
+        if self._auth_method == "app":
+            self._refresh_app_token()
+
+    def _get_session(self) -> requests.Session:
+        self._ensure_valid_token()
+        with self._session_lock:
+            if self._session is None:
+                sess = requests.Session()
+                sess.headers.update(
+                    {
+                        "Authorization": f"token {self._token}",
+                        "Accept": "application/vnd.github.v3+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    }
+                )
+                self._session = sess
+            return self._session
 
     # ── Backoff helpers ───────────────────────────────────────────────
 
@@ -462,14 +534,19 @@ class GitHubHttpClient(BaseHttpClient):
 
     def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         """Send a request and retry on rate-limit 403s."""
-        sess = self._get_session()
         for attempt in range(1, self._max_attempts + 1):
+            sess = self._get_session()
             resp = sess.request(method, url, **kwargs)
             try:
                 resp.raise_for_status()
                 return resp
             except requests.HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else None
+                if status == 401 and self._auth_method == "app":
+                    if attempt >= self._max_attempts:
+                        raise
+                    self._refresh_app_token(force=True)
+                    continue
                 if status != 403 or attempt >= self._max_attempts:
                     raise
                 delay = self._rate_limit_delay(resp, attempt)

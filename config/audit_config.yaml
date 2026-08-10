@@ -4,8 +4,8 @@
 # Global attributes used by all/multiple scripts
 github_organization: "ministryofjustice"
 default_repo_list: "repo_list.yaml"
-repo_search_scope: "file" # file or org
-repo_limit: 400 # null for no limit, or set to an integer to limit
+repo_search_scope: "org" # file or org
+repo_limit: 700 # null for no limit, or set to an integer to limit
 repo_batch_size: 100 # max repos collected per batch (1-100)
 
 
@@ -38,11 +38,11 @@ list_repos:
   # Optional override; defaults to list_repos if omitted.
   output_subdir: "list_repos"
   database_path: "internal/repo_audit.db"
-  output_filename: "list_repos.xlsx"
+  output_filename: "252_list_repos_token_refresh_test.xlsx"
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false
-  use_cache: false
+  use_cache: true
 
 # Script config for org_security_posture.py.
 org_security_posture:

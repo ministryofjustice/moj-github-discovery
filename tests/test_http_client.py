@@ -302,6 +302,22 @@ class TestSession:
         s2 = client._get_session()
         assert s1 is s2
 
+    def test_session_refreshes_github_app_token_near_expiry(self, monkeypatch):
+        client = GitHubHttpClient(token="stale-token")
+        client._auth_method = "app"
+        client._token_expires_at = time.time() + 30
+
+        monkeypatch.setattr(
+            GitHubHttpClient,
+            "_resolve_github_app_installation_credentials",
+            staticmethod(lambda: ("fresh-token", time.time() + 3600)),
+        )
+
+        sess = client._get_session()
+
+        assert client._token == "fresh-token"
+        assert sess.headers["Authorization"] == "token fresh-token"
+
 
 # ── Rate limit delay ─────────────────────────────────────────────────
 
@@ -437,6 +453,28 @@ class TestRequestRetry:
                 client.get("/test")
         # Only called once — no retries
         mock_sess.return_value.request.assert_called_once()
+
+    def test_401_on_github_app_refreshes_and_retries(self):
+        client = GitHubHttpClient(token="stale-token", max_attempts=3)
+        client._auth_method = "app"
+        client._token_expires_at = time.time() + 3600
+
+        fail_resp = MagicMock()
+        fail_resp.status_code = 401
+        http_error = requests.HTTPError(response=fail_resp)
+        fail_resp.raise_for_status.side_effect = http_error
+
+        ok_resp = MagicMock()
+        ok_resp.raise_for_status.return_value = None
+        ok_resp.json.return_value = {"ok": True}
+
+        with patch.object(client, "_get_session") as mock_sess:
+            mock_sess.return_value.request.side_effect = [fail_resp, ok_resp]
+            with patch.object(client, "_refresh_app_token") as mock_refresh:
+                result = client.get("/test")
+
+        assert result == {"ok": True}
+        mock_refresh.assert_called_once_with(force=True)
 
 
 # ── Paginated GET ─────────────────────────────────────────────────────

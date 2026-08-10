@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from core.github_api import (
     ORG_ENDPOINTS,
@@ -342,6 +344,20 @@ class TestWorkflowAndAlertHelpers:
         )
         alerts = fetch_repo_alerts(client, "o", "r", "code_scanning")
         assert alerts == [{"id": 1}, {"id": 2}]
+
+    def test_alerts_endpoint_normalizes_unauthorized_access(self):
+        client = MockHttpClient()
+        http_error = requests.HTTPError(
+            response=MagicMock(status_code=401),
+        )
+        client.get_paginated = MagicMock(side_effect=http_error)
+
+        result = AlertsEndpoint(client).fetch("o", "r")
+
+        assert result.dependabot_alerts == 0
+        assert result.dependabot_access == "unauthorized"
+        assert result.code_scanning_access == "unauthorized"
+        assert result.secret_scanning_access == "unauthorized"
 
 
 class TestGetRepoTreeEndpoint:
