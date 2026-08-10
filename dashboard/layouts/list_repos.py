@@ -5,15 +5,16 @@ from __future__ import annotations
 import dash
 import pandas as pd
 from dash import dcc, html
+from flask import current_app
 
-from dashboard.utils.constants import (
+from dashboard.utils.flags import (
     FLAG_FILTER_OPTIONS,
 )
-from dashboard.utils.data import (
-    get,
-    get_dashboard_page_size_default,
-    get_dashboard_page_size_options,
-)
+
+
+def _get_dashboard_service():
+    return current_app.config["dashboard_service"]
+
 
 # ---------------------------------------------------------------------------
 # Section renderers
@@ -124,8 +125,9 @@ def render_summary(data: pd.DataFrame) -> html.Div:
 
 def render_filters() -> html.Div:
     """Render the search and flag filter controls."""
-    page_size_options = get_dashboard_page_size_options()
-    page_size_default = get_dashboard_page_size_default()
+    dashboard_service = _get_dashboard_service()
+    page_size_options = dashboard_service.get_dashboard_page_size_options()
+    page_size_default = dashboard_service.get_dashboard_page_size_default()
     return html.Div(
         [
             html.Div(
@@ -334,8 +336,9 @@ def render_modal() -> html.Div:
 
 
 def layout():
-    data = get("list_repos")
-    page_size_default = get_dashboard_page_size_default()
+    dashboard_service = _get_dashboard_service()
+    data = dashboard_service.get("list_repos")
+    page_size_default = dashboard_service.get_dashboard_page_size_default()
     if data is None:
         return html.Div(
             [

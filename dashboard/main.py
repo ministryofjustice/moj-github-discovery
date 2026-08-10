@@ -10,25 +10,18 @@ Usage:
 Then open http://localhost:8050 in your browser.
 """
 
-import os
-import sys
-
-# Add project root to path so `core.*` and `dashboard.*` are importable.
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
-
 from core.config import AuditConfig, load_audit_config
+from core.dashboard_service import DashboardDataService
 from dashboard.app import create_app
-from dashboard.utils.data import initialise_data
 
 
 def run(config: AuditConfig) -> None:
     """Run the Dash dashboard."""
-    # Load data from the database into the global _data dictionary
-    initialise_data(config)
+    dashboard_service = DashboardDataService(config)
+    dashboard_service.initialise_data()
 
     # Create the Dash app
-    app = create_app(config)
+    app = create_app(config, dashboard_service)
 
     # Start the Dash server
     print(f"\nStarting dashboard at http://localhost:{config.dashboard.port}")
