@@ -1,5 +1,27 @@
 # Setup
 
+## Optional: Dev Container to get a working environment in seconds
+
+**Open in VS Code:**
+
+[![Open in Dev Container](https://raw.githubusercontent.com/ministryofjustice/.devcontainer/refs/heads/main/contrib/badge.svg)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/ministryofjustice/moj-github-discovery)
+
+**Prefer to open in terminal, or use a different editor?**
+
+**First time only**, install the Dev Containers CLI:
+
+```shell
+npm install -g @devcontainers/cli
+```
+
+**Every time**, from inside the cloned repo:
+
+```shell
+devcontainer up --workspace-folder . && devcontainer exec --workspace-folder . bash
+```
+
+**Note:** the dev container does not handle authentication or credentials, use manual setup below.
+
 ## Prerequisites
 
 ### Brew
@@ -87,7 +109,9 @@ Install the key dependencies via `brew`:
 
 ```shell
 brew install pre-commit npm docker-desktop
-```
+```uv run pytest -q
+
+**Note:** `pre-commit` is also installed via `uv sync --group dev` above. The `brew install pre-commit` step is optional if you've already run that.
 
 And the `npm` dependencies:
 

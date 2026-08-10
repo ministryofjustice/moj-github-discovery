@@ -21,6 +21,14 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 For guidance on extending the core module and contributing changes, see
 [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 
+### Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds
+
+**Open in VS Code:**
+
+[![Open in Dev Container](https://raw.githubusercontent.com/ministryofjustice/.devcontainer/refs/heads/main/contrib/badge.svg)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/ministryofjustice/moj-github-discovery)
+
+Prefer the terminal or a different editor? See [Setup Docs](./docs/setup.md#optional-dev-container) for the CLI instructions.
+
 ## Core Architecture
 
 The project is structured so CLI scripts stay thin while the `core/` package owns

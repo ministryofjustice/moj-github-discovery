@@ -1,0 +1,18 @@
+{
+  "name": "moj-github-discovery",
+  "image": "ghcr.io/ministryofjustice/devcontainer-base:latest",
+  "features": {
+    "ghcr.io/ministryofjustice/devcontainer-feature/astral:1": {},
+    "ghcr.io/devcontainers/features/node:2": { "version": "22" }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}
