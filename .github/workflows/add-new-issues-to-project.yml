@@ -1,0 +1,23 @@
+---
+name: 🗂 Add New Issues to Project
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions: {}
+
+jobs:
+  call-reusable-workflow:
+    permissions:
+      contents: read
+    uses: ministryofjustice/ministry-of-justice-engineering-platform/.github/workflows/reusable-add-issue-to-project.yml@main
+    with:
+      project-title: "👩‍💻 Developer Experience Team"
+      project-fields-json: >-
+        {"Status":"👇 To do","👏 Team":"🔧 Engineering Platform","🤩 Refined?":"👎 Unrefined"}
+    secrets:
+      app-client-id: ${{ secrets.ISSUE_ORCHESTRATOR_GH_APP_CLIENT_ID }}
+      app-private-key: ${{ secrets.ISSUE_ORCHESTRATOR_GH_APP_PRIVATE_KEY }}
+      slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
