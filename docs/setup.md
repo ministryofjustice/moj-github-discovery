@@ -1,6 +1,6 @@
 # Setup
 
-## Optional: Dev Container to get a working environment in seconds
+## Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds. This **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
 
 **Open in VS Code:**
 

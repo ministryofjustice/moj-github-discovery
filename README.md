@@ -21,7 +21,7 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 For guidance on extending the core module and contributing changes, see
 [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 
-### Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds
+### Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds. This **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
 
 **Open in VS Code:**
 
