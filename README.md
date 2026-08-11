@@ -86,6 +86,7 @@ collection, storage, and report shaping.
 - `--all` - Trigger all the scripts in sequence
   - **note:** this will take a significant amount of time due to rate limiting, consider running on an extremely small subset of repos if testing
 - `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - does not apply to `org_security_posture`
+- `--repo-file` - Specify a specific YAML repo list file, mutually exclusive to `--repos`
 
 ### Notes
 
@@ -132,7 +133,8 @@ uv run audit-cli --scripts alert_metrics --repos ministryofjustice/<repo name>
 - `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
 - `default_repo_list` - Path to the default repo list YAML file to be referenced by the scripts - `repo_list.yaml` at the root of the repo.
   - Can be overridden via the `--repo-file` argument.
-- `repo_search_scope` - Scope for repo list resolution, `file` will search for `--repo-file` arg value if provided, falling back to `default_repo_list` if not found.
+- `repo_search_scope` - Scope for repo list resolution
+  - `file` uses `--repo-file` when provided (must exist), otherwise `default_repo_list`; `org` fetches repos via the org API.
 - `repo_limit`: Integer for specific limit of repositories to search for, or `null` for full list regardless of scope
   - Currently only used by `list_repos`, script-specific limits are found with corresponding configs.
 
@@ -625,7 +627,7 @@ uv run audit-cli --dashboard
 export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 uv run audit-cli --dashboard
-# Filter by specific flag e.g. `public_unprotected_default_branch`"
+# Filter by specific flag e.g. `public_unprotected_default_branch`
 ```
 
 ### Export archive candidate data

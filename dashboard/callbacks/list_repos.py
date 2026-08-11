@@ -106,7 +106,9 @@ def _render_table(search, flag_filter, page, page_size, data):
                         style={"padding": "10px", "textAlign": "center"},
                     ),
                     html.Td(
-                        "✓" if row["branch_protected"] else "✗",
+                        "✓"
+                        if pd.notna(row["branch_protected"]) and row["branch_protected"]
+                        else "✗",
                         style={
                             "padding": "10px",
                             "textAlign": "center",
@@ -115,7 +117,9 @@ def _render_table(search, flag_filter, page, page_size, data):
                         },
                     ),
                     html.Td(
-                        "✓" if row["codeowners"] else "✗",
+                        "✓"
+                        if pd.notna(row["codeowners"]) and row["codeowners"]
+                        else "✗",
                         style={
                             "padding": "10px",
                             "textAlign": "center",

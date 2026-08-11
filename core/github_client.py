@@ -303,12 +303,15 @@ class GitHubHttpClient(BaseHttpClient):
         if not expires_at:
             return None
         try:
-            return datetime.fromisoformat(expires_at).timestamp()
+            normalized = expires_at.replace("Z", "+00:00")
+            return datetime.fromisoformat(normalized).timestamp()
         except ValueError:
             return None
 
     @staticmethod
-    def _resolve_github_app_installation_credentials() -> tuple[str, float | None]:
+    def _resolve_github_app_installation_credentials() -> tuple[
+        str | None, float | None
+    ]:
 
         # Env Var Validation: GH_APP_ID / GITHUB_APP_ID
         github_app_id = os.getenv("GITHUB_APP_ID") or os.getenv("GH_APP_ID")
@@ -453,6 +456,8 @@ class GitHubHttpClient(BaseHttpClient):
             self._token, self._token_expires_at = (
                 self._resolve_github_app_installation_credentials()
             )
+            if not self._token:
+                raise RuntimeError("Failed to refresh GitHub App installation token")
             if self._session is not None:
                 self._session.close()
                 self._session = None
