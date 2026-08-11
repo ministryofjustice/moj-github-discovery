@@ -18,16 +18,10 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 
 [Security Alert Check Docs](./docs/security_alert_checking.md)
 
+This repo includes a dev container to get a working environment in seconds, see [`.devcontainer/README.md`](./.devcontainer/README.md).
+
 For guidance on extending the core module and contributing changes, see
 [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
-
-### Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds. This **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-
-**Open in VS Code:**
-
-[![Open in Dev Container](https://raw.githubusercontent.com/ministryofjustice/.devcontainer/refs/heads/main/contrib/badge.svg)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/ministryofjustice/moj-github-discovery)
-
-Prefer the terminal or a different editor? See [Setup Docs](./docs/setup.md#optional-dev-container) for the CLI instructions.
 
 ## Core Architecture
 

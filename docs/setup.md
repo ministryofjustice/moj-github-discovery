@@ -1,26 +1,6 @@
 # Setup
 
-## Optional: this repo includes a **Dev Container** preconfigured with the required configuration and tooling, to get a working environment in seconds. This **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-
-**Open in VS Code:**
-
-[![Open in Dev Container](https://raw.githubusercontent.com/ministryofjustice/.devcontainer/refs/heads/main/contrib/badge.svg)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/ministryofjustice/moj-github-discovery)
-
-**Prefer to open in terminal, or use a different editor?**
-
-**First time only**, install the Dev Containers CLI:
-
-```shell
-npm install -g @devcontainers/cli
-```
-
-**Every time**, from inside the cloned repo:
-
-```shell
-devcontainer up --workspace-folder . && devcontainer exec --workspace-folder . bash
-```
-
-**Note:** the dev container does not handle authentication or credentials, use manual setup below.
+**Optional:** this repo includes a dev container, see [`.devcontainer/README.md`](../.devcontainer/README.md) for setup instructions.
 
 ## Prerequisites
 
