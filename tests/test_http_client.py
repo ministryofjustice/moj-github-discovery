@@ -454,6 +454,45 @@ class TestRequestRetry:
         # Only called once — no retries
         mock_sess.return_value.request.assert_called_once()
 
+    def test_permission_denied_403_not_retried(self):
+        """A 403 with no rate-limit headers is a permission error and must not be retried."""
+        client = GitHubHttpClient(token="t", max_attempts=3)
+
+        fail_resp = MagicMock()
+        fail_resp.status_code = 403
+        fail_resp.headers = {}  # no Retry-After, no X-RateLimit-Remaining
+        http_error = requests.HTTPError(response=fail_resp)
+        fail_resp.raise_for_status.side_effect = http_error
+
+        with patch.object(client, "_get_session") as mock_sess:
+            mock_sess.return_value.request.return_value = fail_resp
+            with pytest.raises(requests.HTTPError):
+                client.get("/test")
+        # Raised immediately — no backoff retries for permission errors
+        mock_sess.return_value.request.assert_called_once()
+
+    def test_rate_limit_403_with_retry_after_is_retried(self):
+        """A 403 with Retry-After is a genuine rate limit and must be retried."""
+        client = GitHubHttpClient(token="t", max_attempts=3)
+
+        fail_resp = MagicMock()
+        fail_resp.status_code = 403
+        fail_resp.headers = {"Retry-After": "1"}
+        http_error = requests.HTTPError(response=fail_resp)
+        fail_resp.raise_for_status.side_effect = http_error
+
+        ok_resp = MagicMock()
+        ok_resp.raise_for_status.return_value = None
+        ok_resp.json.return_value = {"ok": True}
+
+        with patch.object(client, "_get_session") as mock_sess:
+            mock_sess.return_value.request.side_effect = [fail_resp, ok_resp]
+            with patch.object(client, "_sleep_with_progress"):
+                result = client.get("/test")
+
+        assert result == {"ok": True}
+        assert mock_sess.return_value.request.call_count == 2
+
     def test_401_on_github_app_refreshes_and_retries(self):
         client = GitHubHttpClient(token="stale-token", max_attempts=3)
         client._auth_method = "app"

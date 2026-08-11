@@ -81,9 +81,8 @@ def _render_table(search, flag_filter, page, page_size, data):
                 html.Th("Visibility", style=th_center),
                 html.Th("Language", style=th_left),
                 html.Th("Stars", style=th_center),
-                html.Th("Open Issues", style=th_center),
-                html.Th("Dependabot", style=th_center),
                 html.Th("Branch Protected", style=th_center),
+                html.Th("CODEOWNERS", style=th_center),
                 html.Th("Flags", style={**th_left, "maxWidth": "300px"}),
             ],
             style={"borderBottom": "2px solid #ddd"},
@@ -107,33 +106,20 @@ def _render_table(search, flag_filter, page, page_size, data):
                         style={"padding": "10px", "textAlign": "center"},
                     ),
                     html.Td(
-                        str(row["open_issues"]),
-                        style={"padding": "10px", "textAlign": "center"},
-                    ),
-                    html.Td(
-                        (
-                            str(row["dependabot_alerts"])
-                            if pd.notna(row["dependabot_alerts"])
-                            else "—"
-                        ),
-                        style={
-                            "padding": "10px",
-                            "textAlign": "center",
-                            "color": (
-                                "red"
-                                if pd.notna(row["dependabot_alerts"])
-                                and row["dependabot_alerts"] > 0
-                                else "green"
-                            ),
-                        },
-                    ),
-                    html.Td(
                         "✓" if row["branch_protected"] else "✗",
                         style={
                             "padding": "10px",
                             "textAlign": "center",
                             "color": "green" if row["branch_protected"] else "red",
                             "fontWeight": "bold",
+                        },
+                    ),
+                    html.Td(
+                        "✓" if row["codeowners"] else "✗",
+                        style={
+                            "padding": "10px",
+                            "textAlign": "center",
+                            "color": "green" if row["codeowners"] else "red",
                         },
                     ),
                     html.Td(

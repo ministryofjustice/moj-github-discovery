@@ -5,7 +5,7 @@
 github_organization: "ministryofjustice"
 default_repo_list: "repo_list.yaml"
 repo_search_scope: "org" # file or org
-repo_limit: 700 # null for no limit, or set to an integer to limit
+repo_limit: null # null for no limit, or set to an integer to limit
 repo_batch_size: 100 # max repos collected per batch (1-100)
 
 
@@ -20,7 +20,7 @@ alert_metrics:
 archive_repos:
   # Optional override; defaults to archive_repos if omitted.
   output_subdir: "archive_repos"
-  database_path: "internal/repo_audit.db"
+  database_path: "internal/repo_audit_archived.db"
   output_filename: "archive_repos.csv"
   page_num: null # null for all pages, or set to an integer to limit
   repo_limit: null # null for no limit, or set to an integer to limit
@@ -37,8 +37,8 @@ archive_repos:
 list_repos:
   # Optional override; defaults to list_repos if omitted.
   output_subdir: "list_repos"
-  database_path: "internal/repo_audit.db"
-  output_filename: "252_list_repos_token_refresh_test.xlsx"
+  database_path: "internal/repo_audit_list_repos.db"
+  output_filename: "list_repos.xlsx"
   standard_endpoints_only: true
   sort_by_field: "last_pushed_at"
   sort_ascending: false

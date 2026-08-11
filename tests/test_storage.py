@@ -159,7 +159,7 @@ class TestSqliteRepoStorageJsonRoundtrip:
             alerts=AlertData(
                 dependabot_alerts=3,
                 code_scanning_alerts=1,
-                secret_scanning_access="ok",
+                secret_scanning_alerts_enabled=True,
             ),
             flags=["stale", "no_codeowners"],
             collected_at="2024-06-15T12:00:00Z",

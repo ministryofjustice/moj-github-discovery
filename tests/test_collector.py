@@ -17,7 +17,14 @@ from core.github_api import (
     BranchProtectionEndpoint,
     RepoDetailsEndpoint,
 )
-from core.models import AlertData, CodeownersData, OrgMembersData, RepoData
+from core.models import (
+    AlertData,
+    BranchProtection,
+    CodeownersData,
+    OrgMembersData,
+    RepoData,
+    RepoDetails,
+)
 from tests.conftest import MockHttpClient, MockStorage
 
 # ── Tiny test endpoints ───────────────────────────────────────────────
@@ -314,6 +321,36 @@ class TestRepoCollector:
         )
 
         assert storage.read("org/repo-a") is not None
+
+    def test_multi_field_endpoint_writes_all_repodata_fields(self):
+        """An endpoint returning RepoData directly should populate all its fields."""
+
+        class _FakeComplianceEndpoint(BaseEndpoint):
+            @property
+            def name(self) -> str:
+                return "repo_details"
+
+            def fetch(self, owner: str, repo: str) -> RepoData:
+                return RepoData(
+                    repo_details=RepoDetails(full_name=f"{owner}/{repo}", name=repo),
+                    branch_protection=BranchProtection(default_branch_protected=True),
+                )
+
+        storage = MockStorage()
+        collector = RepoCollector(
+            storage=storage,
+            client=MockHttpClient(),
+            endpoints=[_FakeComplianceEndpoint],
+            max_workers=1,
+        )
+        collector.collect("org", repos=["org/repo"])
+
+        result = storage.read("org/repo")
+        assert result is not None
+        assert result.repo_details is not None
+        assert result.repo_details.full_name == "org/repo"
+        assert result.branch_protection is not None
+        assert result.branch_protection.default_branch_protected is True
 
 
 # ── OrgEndpointCollector ──────────────────────────────────────────────

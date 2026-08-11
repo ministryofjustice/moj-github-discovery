@@ -242,7 +242,10 @@ class RepoCollector(BaseCollector):
             try:
                 fetch_kwargs = self._build_fetch_kwargs(endpoint, existing)
                 result_model = endpoint.fetch(owner, repo, **fetch_kwargs)
-                self._storage_upsert(full_name, RepoData(**{key: result_model}))
+                if isinstance(result_model, RepoData):
+                    self._storage_upsert(full_name, result_model)
+                else:
+                    self._storage_upsert(full_name, RepoData(**{key: result_model}))
                 # Refresh local copy so the next endpoint sees the updated state
                 # TODO: This is a bit clunky — ideally the storage layer would handle merging
                 existing = self._storage_read(full_name) or existing

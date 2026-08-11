@@ -25,14 +25,11 @@ class TestBuildRepoSummaryTable:
             "repos_private",
             "repos_internal",
             "repos_archived",
-            "repos_with_dependabot_alerts",
-            "repos_with_secret_alerts",
-            "repos_with_code_scanning_alerts",
             "repos_unprotected_default_branch",
             "repos_using_classic_branch_protection",
             "repos_with_active_rulesets",
         ]
-        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        assert summary["value"].tolist() == [0, 0, 0, 0, 0, 0, 0, 0]
 
     def test_counts_non_empty_dataframe(self):
         df = pd.DataFrame(
@@ -40,9 +37,6 @@ class TestBuildRepoSummaryTable:
                 {
                     "visibility": "public",
                     "archived": False,
-                    "dependabot_alerts": 1,
-                    "secret_scanning_alerts": 0,
-                    "code_scanning_alerts": 0,
                     "default_branch_protected": True,
                     "branch_protection_enabled": True,
                     "has_active_rulesets": False,
@@ -50,9 +44,6 @@ class TestBuildRepoSummaryTable:
                 {
                     "visibility": "private",
                     "archived": True,
-                    "dependabot_alerts": 0,
-                    "secret_scanning_alerts": 2,
-                    "code_scanning_alerts": 3,
                     "default_branch_protected": False,
                     "branch_protection_enabled": False,
                     "has_active_rulesets": False,
@@ -68,9 +59,6 @@ class TestBuildRepoSummaryTable:
         assert metrics["repos_private"] == 1
         assert metrics["repos_internal"] == 0
         assert metrics["repos_archived"] == 1
-        assert metrics["repos_with_dependabot_alerts"] == 1
-        assert metrics["repos_with_secret_alerts"] == 1
-        assert metrics["repos_with_code_scanning_alerts"] == 1
         assert metrics["repos_unprotected_default_branch"] == 1
         assert metrics["repos_using_classic_branch_protection"] == 1
         assert metrics["repos_with_active_rulesets"] == 0
@@ -133,6 +121,21 @@ class TestPresenterFallbacks:
         )
         assert row["visibility"] == "unknown"
 
+    def test_list_row_uses_parent_repo_full_name_from_repo_details(self):
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(
+                    full_name="org/repo",
+                    name="repo",
+                    fork=True,
+                    parent_repo_full_name="upstream/parent",
+                ),
+            ),
+        )
+        assert row["fork"] is True
+        assert row["fork_source"] == "upstream/parent"
+
     def test_list_row_uses_unknown_for_missing_fork_source_when_is_fork_true(self):
         row = repo_data_to_list_row(
             "org/repo",
@@ -178,6 +181,41 @@ class TestPresenterFallbacks:
         assert row["last_push_activity"] == "N/A"
         assert row["last_pushed_at"] == "N/A"
         assert "empty_repo_no_push_activity" in row["flags"]
+
+    def test_branch_protection_not_enforced_flag_when_no_enforcement_rules(self):
+        from core.models import BranchProtection
+
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
+                branch_protection=BranchProtection(
+                    branch_protection_enabled=True,
+                    default_branch_protected=True,
+                    enforce_admins_enabled=False,
+                    required_approving_review_count=0,
+                    required_signatures_enabled=False,
+                    require_code_owner_reviews=False,
+                ),
+            ),
+        )
+        assert "branch_protection_not_enforced" in row["flags"]
+
+    def test_branch_protection_not_enforced_absent_when_enforcement_active(self):
+        from core.models import BranchProtection
+
+        row = repo_data_to_list_row(
+            "org/repo",
+            RepoData(
+                repo_details=RepoDetails(full_name="org/repo", name="repo"),
+                branch_protection=BranchProtection(
+                    branch_protection_enabled=True,
+                    default_branch_protected=True,
+                    required_approving_review_count=1,
+                ),
+            ),
+        )
+        assert "branch_protection_not_enforced" not in row["flags"]
 
     def test_dashboard_row_empty_repo_uses_na_for_push_timestamps_and_flag(self):
         row = repo_data_to_dashboard_row(

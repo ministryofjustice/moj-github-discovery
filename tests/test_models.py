@@ -136,13 +136,13 @@ class TestAlertData:
     def test_defaults(self):
         a = AlertData()
         assert a.dependabot_alerts == 0
-        assert a.dependabot_access == "ok"
+        assert a.dependabot_alerts_enabled is True
         assert a.secret_scanning_alerts == 0
 
     def test_custom_values(self):
-        a = AlertData(dependabot_alerts=5, code_scanning_access="403 Forbidden")
+        a = AlertData(dependabot_alerts=5, code_scanning_alerts_enabled=False)
         assert a.dependabot_alerts == 5
-        assert a.code_scanning_access == "403 Forbidden"
+        assert a.code_scanning_alerts_enabled is False
 
 
 # ── BranchProtection ─────────────────────────────────────────────────

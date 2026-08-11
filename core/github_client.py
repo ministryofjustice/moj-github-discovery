@@ -98,6 +98,13 @@ class BaseHttpClient(ABC):
     ) -> dict[str, Any]:
         """POST a graphQL query and return the data"""
 
+    def count_paginated(self, path: str) -> int:
+        """Return the total item count for a paginated endpoint.
+
+        Default implementation fetches all pages. Override for efficiency.
+        """
+        return len(self.get_paginated(path))
+
 
 # ── Concrete implementation ───────────────────────────────────────────
 
@@ -549,11 +556,17 @@ class GitHubHttpClient(BaseHttpClient):
                     continue
                 if status != 403 or attempt >= self._max_attempts:
                     raise
+                # Retry only genuine rate-limit 403s; plain permission-denied 403s will never succeed
+                if not (
+                    resp.headers.get("Retry-After")
+                    or resp.headers.get("X-RateLimit-Remaining") == "0"
+                ):
+                    raise
                 delay = self._rate_limit_delay(resp, attempt)
                 reason = self._rate_limit_reason(resp)
                 self._sleep_with_progress(
                     delay,
-                    prefix=f"[rate-limit] {reason} (attempt {attempt}/{self._max_attempts})",
+                    prefix=f"[rate-limit] {reason} {url} (attempt {attempt}/{self._max_attempts})",
                 )
 
         raise RuntimeError("Unexpected retry exhaustion")  # defensive
@@ -580,6 +593,33 @@ class GitHubHttpClient(BaseHttpClient):
     def get(self, path: str) -> Any:
         url = path if path.startswith("http") else urljoin(self.BASE_URL, path)
         return self._request("GET", url).json()
+
+    def count_paginated(self, path: str) -> int:
+        """Return item count via per_page=1 + Link header last-page trick."""
+        from urllib.parse import parse_qs, urlparse
+
+        sep = "&" if "?" in path else "?"
+        url = path if path.startswith("http") else urljoin(self.BASE_URL, path)
+        resp = self._request("GET", f"{url}{sep}per_page=1")
+        data = resp.json()
+
+        first_page = data if isinstance(data, list) else (data.get("items") or [])
+        if not first_page:
+            return 0
+
+        link = resp.headers.get("Link")
+        if not link:
+            return len(first_page)
+
+        for part in link.split(","):
+            url_part, *rels = part.strip().split(";")
+            if any(r.strip() == 'rel="last"' for r in rels):
+                parsed = urlparse(url_part.strip().strip("<>"))
+                page = parse_qs(parsed.query).get("page", [None])[0]
+                if page:
+                    return int(page)
+
+        return len(first_page)
 
     def get_paginated(
         self, path: str, per_page: int = 100, items_key: str = "items"

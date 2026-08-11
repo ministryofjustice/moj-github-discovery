@@ -397,16 +397,12 @@ def format_audit_detail(audit_data: dict, repo_name: str = "Unknown") -> html.Di
         )
 
     repo = audit_data.get("repo") or {}
-    alerts = audit_data.get("alerts") or {}
-    community = audit_data.get("community") or {}
     workflows = audit_data.get("workflows") or {}
     workflow_analysis = audit_data.get("workflow_analysis") or {}
     branch_protection = audit_data.get("branch_protection") or {}
     repo_rulesets = audit_data.get("repo_rulesets") or {}
     codeowners = audit_data.get("codeowners") or {}
     flags = audit_data.get("flags", [])
-
-    community_files = community.get("files") or {}
 
     sections = [
         html.H3(
@@ -445,96 +441,6 @@ def format_audit_detail(audit_data: dict, repo_name: str = "Unknown") -> html.Di
                         html.P(
                             f"License: {(repo.get('license') or {}).get('name', 'None')}",
                             style={"margin": "5px 0"},
-                        ),
-                    ],
-                    style={"fontSize": "13px", "color": "#666"},
-                ),
-            ]
-        )
-    )
-
-    # Security Alerts
-    sections.append(
-        html.Div(
-            [
-                html.H4(
-                    "Security Alerts",
-                    style={
-                        "marginTop": "15px",
-                        "marginBottom": "10px",
-                        "color": "#333",
-                    },
-                ),
-                html.Div(
-                    [
-                        html.P(
-                            f"Dependabot: {alerts.get('dependabot_alerts', 'N/A')}",
-                            style={"margin": "5px 0"},
-                        ),
-                        html.P(
-                            f"Secret Scanning: {alerts.get('secret_scanning_alerts', 'N/A')}",
-                            style={"margin": "5px 0"},
-                        ),
-                        html.P(
-                            f"Code Scanning: {alerts.get('code_scanning_alerts', 'N/A')}",
-                            style={"margin": "5px 0"},
-                        ),
-                    ],
-                    style={"fontSize": "13px", "color": "#666"},
-                ),
-            ]
-        )
-    )
-
-    # Community Files
-    sections.append(
-        html.Div(
-            [
-                html.H4(
-                    "Community Files",
-                    style={
-                        "marginTop": "15px",
-                        "marginBottom": "10px",
-                        "color": "#333",
-                    },
-                ),
-                html.Div(
-                    [
-                        html.P(
-                            f"Security Policy: {'✓' if community_files.get('security_policy') else '✗'}",
-                            style={
-                                "margin": "5px 0",
-                                "color": "green"
-                                if community_files.get("security_policy")
-                                else "red",
-                            },
-                        ),
-                        html.P(
-                            f"Code of Conduct: {'✓' if community_files.get('code_of_conduct') else '✗'}",
-                            style={
-                                "margin": "5px 0",
-                                "color": "green"
-                                if community_files.get("code_of_conduct")
-                                else "red",
-                            },
-                        ),
-                        html.P(
-                            f"Contributing: {'✓' if community_files.get('contributing') else '✗'}",
-                            style={
-                                "margin": "5px 0",
-                                "color": "green"
-                                if community_files.get("contributing")
-                                else "red",
-                            },
-                        ),
-                        html.P(
-                            f"CODEOWNERS: {'✓' if codeowners.get('present') else '✗'}",
-                            style={
-                                "margin": "5px 0",
-                                "color": "green"
-                                if codeowners.get("present")
-                                else "red",
-                            },
                         ),
                     ],
                     style={"fontSize": "13px", "color": "#666"},
@@ -629,6 +535,15 @@ def format_audit_detail(audit_data: dict, repo_name: str = "Unknown") -> html.Di
                             style={
                                 "margin": "5px 0",
                                 "color": "green" if require_signatures else "red",
+                            },
+                        ),
+                        html.P(
+                            f"CODEOWNERS: {'✓' if codeowners.get('present') else '✗'}",
+                            style={
+                                "margin": "5px 0",
+                                "color": "green"
+                                if codeowners.get("present")
+                                else "red",
                             },
                         ),
                     ],
