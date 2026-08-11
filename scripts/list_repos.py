@@ -38,7 +38,11 @@ def run(
     # Define Variables from Config and CLI Args
     database_path = resolver.database_path(list_repos_config.database_path)
     output_filename = list_repos_config.output_filename
-    repo_file = config.default_repo_list
+    repo_file = (
+        config.default_repo_list
+        if kwargs.get("repo_file") is None
+        else kwargs.get("repo_file")
+    )
     repo_limit = config.repo_limit
     repo_batch_size = config.repo_batch_size
     repo_search_scope = config.repo_search_scope

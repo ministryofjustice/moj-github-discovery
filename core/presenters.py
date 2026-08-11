@@ -31,6 +31,16 @@ def flags_for_list(data: RepoData) -> list[str]:
         flags.append("fork")
     if repo.visibility == "public" and branch and not branch.default_branch_protected:
         flags.append("public_unprotected_default_branch")
+    if branch and branch.branch_protection_enabled:
+        # Protection enabled with no active enforcement rules = nominal / trivially bypassable
+        has_enforcement = (
+            branch.enforce_admins_enabled
+            or branch.required_approving_review_count > 0
+            or branch.required_signatures_enabled
+            or branch.require_code_owner_reviews
+        )
+        if not has_enforcement:
+            flags.append("branch_protection_not_enforced")
 
     return flags
 
@@ -215,8 +225,6 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         "last_push_activity": last_push_activity,
         "default_branch": repo.default_branch if repo else None,
         "language": repo.language if repo else None,
-        "open_issues": repo.open_issues_count if repo else None,
-        "stargazers": repo.stargazers_count if repo else None,
         "disabled": repo.disabled if repo else None,
         "is_template": repo.is_template if repo else None,
         "size": repo.size if repo else None,
@@ -275,9 +283,6 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
         "language": repo.language if repo else None,
         "stars": repo.stargazers_count if repo else 0,
         "open_issues": repo.open_issues_count if repo else 0,
-        "dependabot_alerts": alerts.dependabot_alerts if alerts else None,
-        "secret_alerts": alerts.secret_scanning_alerts if alerts else None,
-        "code_scanning_alerts": alerts.code_scanning_alerts if alerts else None,
         "branch_protected": branch.default_branch_protected if branch else None,
         "codeowners": codeowners.present if codeowners else None,
         "flags": ", ".join(dashboard_flags),

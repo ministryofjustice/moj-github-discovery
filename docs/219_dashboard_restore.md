@@ -37,11 +37,11 @@ uv sync
 uv run audit-cli --scripts list_repos
 ```
 
-This will output the database file to `internal/repo_audit.db` by default if not altered in `config/audit.config`.
+This will output the database file to `internal/repo_audit.db` by default if not altered in `config/audit_config.yaml`.
 `dashboard.py` can now be executed to load this database:
 
 ```shell
-uv run python scripts/dashboard.py --db internal/repo_audit.db
+uv run audit-cli --dashboard
 ```
 
 The flask web app can then be loaded (locally) via `http://localhost:8050`, users can then review the data presented per repository to identify compliance issues requiring resolution.
@@ -51,7 +51,7 @@ The flask web app can then be loaded (locally) via `http://localhost:8050`, user
 - Can only read `list_repos.py`-related data
 - Displays the current total repositories count for the database
 - Has search / filter by repo name
-- Allows filtering only by repos with flags (but not flag-specific)
+- Allows filtering only by flags
 - Current display for dashboard follows the below structure:
 
 | Repository | Status         | Language | Stars | Open Issues | Dependabot | Branch Protected | Flags                  |
@@ -119,25 +119,25 @@ Compliance issues are identified by **flags**, current examples are, as seen in 
 
 - [x] Update default arguments to reference new `internal/` directory rather than repository root.
 - [x] Update summary statistics at the top of the dashboard to show flagged/not flagged.
-- [ ] PRIVATE = `True/False` -> Visibility: Public/Private/Internal
+- [x] PRIVATE = `True/False` -> Visibility: Public/Private/Internal
 - [x] Make a decision on whether to keep `dashboard_cli.py`
 - [x] Not all repositories bring up panels - `AttributeError: 'NoneType' object has no attribute 'get'` in `update_detail_panel` - possible issue with empty data
 - [x] Panels to be extended with info:
   - [x] Default branch protection
     - [x] Compliance method
     - [x] GitHub-Community-related standards
-- [ ] Consider refining the flags to the biggest pain points:
-  - [ ] Unprotected default branch **regardless of visibility**
-  - [ ] Branch protection compliance
-    - [ ] Per-github-community standard flags
+- [x] Consider refining the flags to the biggest pain points:
+  - [x] Unprotected default branch **regardless of visibility**
+  - [x] Branch protection compliance
+    - [x] Per-github-community standard flags
 - [x] Filter by specific flags (drop-down multi-selection?)
 - [x] How to close a panel - if a new panel's opened it should be front and center for the users
 - [x] Data loading performance is not optimal, and a 4500+ size DB times out during loading, how can performance for this be improved? Requires investigation (SQLite may not be the most appropriate, Postgres is under consideration, potential data model needs thinking about)
-- [ ] Additional filtering statistics e.g. "how many repos don't have default branch protection?"
+- [x] Additional filtering statistics e.g. "how many repos don't have default branch protection?"
 
 ### Long-Term
 
-- [ ] Consider how the dashboard(s) could run in a containerised manner and be set up for cloud-platform hosting.
+- [x] Consider how the dashboard(s) could run in a containerised manner and be set up for cloud-platform hosting.
 - [ ] (Optional/Dependent) Does a "public" warning flag need noting if private-by-default becomes apparent.
 - [ ] Dashboard unit/integration tests will likely be required
 - [ ] Currently only `list_repos`-related data is wired up, the rest of the scripts will need wiring in.

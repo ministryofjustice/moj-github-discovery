@@ -566,7 +566,7 @@ class GitHubHttpClient(BaseHttpClient):
                 reason = self._rate_limit_reason(resp)
                 self._sleep_with_progress(
                     delay,
-                    prefix=f"[rate-limit] {reason} {url} (attempt {attempt}/{self._max_attempts})",
+                    prefix=f"[rate-limit] {reason} (attempt {attempt}/{self._max_attempts})",
                 )
 
         raise RuntimeError("Unexpected retry exhaustion")  # defensive

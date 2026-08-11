@@ -148,6 +148,8 @@ def main(argv=None) -> None:
         sys.exit(1)
 
     # Script-Specific Argument Validation
+
+    # --repos and --repo-file are mutually exclusive
     if args.repos and args.repo_file:
         print(
             "--repos and --repo-file cannot be used together. Choose one or neither.",
@@ -155,6 +157,7 @@ def main(argv=None) -> None:
         )
         sys.exit(1)
 
+    # org_security_posture does not support --repos or --repo-file as of 11/08/2026
     if args.repos and "org_security_posture" in (args.scripts or []) and not args.all:
         print(
             "The --repos argument does not apply to org_security_posture. "
@@ -185,6 +188,8 @@ def main(argv=None) -> None:
     )
 
     script_results = {}
+
+    # Setup Base Directories for Script Outputs
 
     base_output_dir, base_internal_dir = base_directory_setup(config)
 

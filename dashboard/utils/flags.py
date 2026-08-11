@@ -1,21 +1,21 @@
 """Shared constants and small utilities for the dashboard."""
 
 FLAG_FILTER_OPTIONS = [
-    {"label": " archived", "value": "archived"},
-    {"label": " empty_repo_no_push_activity", "value": "empty_repo_no_push_activity"},
-    {"label": " fork", "value": "fork"},
-    {"label": " no_license", "value": "no_license"},
+    {"label": " Archived", "value": "archived"},
+    {"label": " Empty Repo: No Push Activity", "value": "empty_repo_no_push_activity"},
+    {"label": " Forked Repository", "value": "fork"},
+    {"label": " No License", "value": "no_license"},
     {
-        "label": " public_unprotected_default_branch",
+        "label": " Public Unprotected Default Branch",
         "value": "public_unprotected_default_branch",
     },
     {
-        "label": " branch_protection_not_enforced",
+        "label": " Branch Protection Not Enforced",
         "value": "branch_protection_not_enforced",
     },
-    {"label": " no_actions_workflows", "value": "no_actions_workflows"},
-    {"label": " no_detected_tests", "value": "no_detected_tests"},
-    {"label": " no_detected_linting", "value": "no_detected_linting"},
+    {"label": " No Actions Workflows", "value": "no_actions_workflows"},
+    {"label": " No Detected Tests", "value": "no_detected_tests"},
+    {"label": " No Detected Linting", "value": "no_detected_linting"},
 ]
 
 
