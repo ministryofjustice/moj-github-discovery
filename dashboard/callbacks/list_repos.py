@@ -10,7 +10,7 @@ import pandas as pd
 from dash import ALL, Input, Output, State, callback, callback_context, html
 from flask import current_app
 
-from dashboard.utils.flags import get_flag_color
+from dashboard.utils.utils import get_flag_color, safe_component_id
 
 
 def _get_dashboard_service():
@@ -141,7 +141,7 @@ def _render_table(search, flag_filter, page, page_size, data):
                         },
                     ),
                 ],
-                id={"type": "repo-row", "index": row["repo"]},
+                id={"type": "repo-row", "index": safe_component_id(row["repo"])},
                 style={
                     "borderBottom": "1px solid #eee",
                     "backgroundColor": "#fafafa",
@@ -308,9 +308,10 @@ def close_modal(n_clicks):
     Output("selected-repo-store", "data"),
     Input({"type": "repo-row", "index": ALL}, "n_clicks"),
     State("selected-repo-store", "data"),
+    State("data-store", "data"),
     prevent_initial_call=True,
 )
-def on_row_click(n_clicks, current_selected):
+def on_row_click(n_clicks, current_selected, data):
     """Determine which repo row was clicked and update the selected repo store."""
     if not n_clicks or not any(n_clicks):
         return current_selected
@@ -322,6 +323,13 @@ def on_row_click(n_clicks, current_selected):
     triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if triggered_id:
         trigger_dict = json.loads(triggered_id)
-        return trigger_dict.get("index")
+        safe_index = trigger_dict.get("index")
+        # Reverse-map safe component ID to original full_name for storage lookup
+        if safe_index and data:
+            records = json.loads(data) if isinstance(data, str) else data
+            for record in records:
+                if safe_component_id(record.get("repo", "")) == safe_index:
+                    return record["repo"]
+        return safe_index
 
     return current_selected

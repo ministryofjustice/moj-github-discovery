@@ -24,3 +24,8 @@ def get_flag_color(flag_str: str) -> dict:
     if not flag_str:
         return {"backgroundColor": "#28a745", "color": "white"}
     return {"backgroundColor": "#dc3545", "color": "white"}
+
+
+def safe_component_id(component_id: str) -> str:
+    """Return a safe component ID by replacing dots with underscores and slashes with hyphens."""
+    return component_id.replace(".", "_").replace("/", "-")

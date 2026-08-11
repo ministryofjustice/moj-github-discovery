@@ -83,11 +83,7 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
         else None
     ) or repo.template_repo_full_name
     if is_template_gen:
-        flags.append(
-            f"generated_from_template_{tmpl_src}"
-            if tmpl_src
-            else "generated_from_template"
-        )
+        flags.append("generated_from_template")
 
     license_info = getattr(repo, "license", None)
     if license_info is None:
