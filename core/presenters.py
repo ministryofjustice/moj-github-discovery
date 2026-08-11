@@ -77,11 +77,6 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
         if fork_template
         else bool(repo.template_repo_full_name)
     )
-    tmpl_src = (
-        fork_template.template_source
-        if fork_template and fork_template.template_source not in (None, "N/A")
-        else None
-    ) or repo.template_repo_full_name
     if is_template_gen:
         flags.append("generated_from_template")
 
