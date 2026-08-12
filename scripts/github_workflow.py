@@ -400,7 +400,10 @@ def write_posture_reports(
 
 
 def actions_analysis(
-    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient,
+    detail_rows: list[dict[str, Any]],
+    output_dir: Path,
+    storage: SqliteRepoStorage,
 ) -> None:
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
@@ -437,6 +440,14 @@ def actions_analysis(
             time.sleep(0.1)
 
     print(f"Total action references found: {len(all_actions)}")
+
+    # Usage Detail to SQLite
+    usage_detail_schema = {col: "TEXT" for col in all_actions[0]}
+    storage.create_table("github_actions_usage_detail", usage_detail_schema)
+    storage.write_rows(
+        "github_actions_usage_detail",
+        all_actions,
+    )
 
     usage_detail_count = CsvCompiler.write_rows(
         str(action_usage_detail_path),
@@ -497,7 +508,14 @@ def actions_analysis(
         .sort_values(by="times_used", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
-    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
+
+    usage_summary_df_schema = {col: "TEXT" for col in usage_summary_df.columns}
+    storage.create_table("github_actions_usage_summary", usage_summary_df_schema)
+    storage.write_rows(
+        "github_actions_usage_summary",
+        usage_summary_df.to_dict("records"),
+    )
+
     usage_summary_df.to_csv(
         str(action_usage_summary_path),
         index=False,
@@ -513,7 +531,15 @@ def actions_analysis(
         .sort_values(by="actions_referenced", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
-    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
+
+    # Owner Summary to SQLite
+    owner_summary_df_schema = {col: "TEXT" for col in owner_summary_df.columns}
+    storage.create_table("github_actions_owner_summary", owner_summary_df_schema)
+    storage.write_rows(
+        "github_actions_owner_summary",
+        owner_summary_df.to_dict("records"),
+    )
+
     owner_summary_df.to_csv(
         str(action_owner_summary_path),
         index=False,
@@ -574,7 +600,13 @@ def actions_analysis(
             by="unpinned", ascending=False, kind="stable"
         ).reset_index(drop=True)
 
-    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
+    # Per-repo pinning compliance to SQLite
+    pinning_df_schema = {col: "TEXT" for col in pinning_df.columns}
+    storage.create_table("github_actions_pinning_per_repo", pinning_df_schema)
+    storage.write_rows(
+        "github_actions_pinning_per_repo",
+        pinning_df.to_dict("records"),
+    )
     pinning_df.to_csv(
         str(action_pinning_path),
         index=False,
@@ -874,7 +906,7 @@ def run(
 
     # Stage 6 - actions_analysis
     if workflow_config.actions_analysis:
-        actions_analysis(client, detail_rows, output_dir)
+        actions_analysis(client, detail_rows, output_dir, storage)
     else:
         _skip("Stage 6", "actions_analysis")
 
