@@ -168,7 +168,7 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --a
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
 - `sort_ascending: <true/false>` - Sort order for `sort_by_field`, defaults to `false` / descending
 
-**Examples:**
+**Examples - General Usage:**
 
 ```bash
 # Audit all repos from file
@@ -180,6 +180,20 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --r
 # Run script referencing a specific repo list file
 uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --repo-file path/to/file.yaml
 ```
+
+**Example - Full Estate Run:**
+
+0. Ensure the desired authentication method is configured correctly e.g. GitHub App - see [docs/setup.md](docs/setup.md) for details
+1. Update the top-level config parameters in the desired config file (e.g. `config/audit_config.yaml`) accordingly
+
+    ```yaml
+    repo_search_scope: "org" # file or org
+    repo_limit: null # null for no limit, or set to an integer to limit
+    repo_batch_size: 100 # max repos collected per batch (1-100)
+    ```
+
+2. Trigger `list_repos`: `uv run audit-cli --scripts list_repos --auth app`
+3. Once script is complete, view the findings in the dashboard: `uv run audit-cli --dashboard`
 
 ### 2. `archive_repos.py` - Find Archive Candidates
 
