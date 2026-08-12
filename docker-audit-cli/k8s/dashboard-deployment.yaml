@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: developer-experience-audit-dashboard
-  namespace: developer-experience-audit-dashboard-prod
+  namespace: developer-experience-audit-dashboard-dev
 spec:
   replicas: 2
   selector:
@@ -21,6 +21,7 @@ spec:
       containers:
       - name: developer-experience-audit-dashboard
         image: IMAGE_PLACEHOLDER
+        args: ["--dashboard"]
         imagePullPolicy: IfNotPresent
         securityContext:
           allowPrivilegeEscalation: false
@@ -46,7 +47,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: developer-experience-audit-dashboard
-  namespace: developer-experience-audit-dashboard-prod
+  namespace: developer-experience-audit-dashboard-dev
 spec:
   selector:
     app: developer-experience-audit-dashboard
@@ -60,14 +61,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: developer-experience-audit-dashboard
-  namespace: developer-experience-audit-dashboard-prod
+  namespace: developer-experience-audit-dashboard-dev
   annotations:
     external-dns.alpha.kubernetes.io/aws-weight: "100"
-    external-dns.alpha.kubernetes.io/set-identifier: "developer-experience-audit-dashboard-developer-experience-audit-dashboard-prod-green"
+    external-dns.alpha.kubernetes.io/set-identifier: "developer-experience-audit-dashboard-developer-experience-audit-dashboard-dev-green"
 spec:
-  ingressClassName: default
+  ingressClassName: default-non-prod
   rules:
-  - host: developer-experience-audit-dashboard.service.justice.gov.uk
+  - host: dev.developer-experience-audit-dashboard.service.justice.gov.uk
     http:
       paths:
       - path: /
@@ -79,5 +80,5 @@ spec:
               number: 80
   tls:
   - hosts:
-    - developer-experience-audit-dashboard.service.justice.gov.uk
-    secretName: developer-experience-audit-dashboard-prod-cert
+    - dev.developer-experience-audit-dashboard.service.justice.gov.uk
+    secretName: developer-experience-audit-dashboard-dev-cert

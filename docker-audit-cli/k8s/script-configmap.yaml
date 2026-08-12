@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-cli-config
+  namespace: developer-experience
+data:
+  audit_config.yaml: |
+    repo_search_scope: "org"
+    repo_limit: null # null for no limit, or set to an integer to limit
+    dashboard:
+      port: 8050
+      debug: false
+      page_size_default: 20
+      page_size_options: [10, 20, 50]
+    list_repos:
+      output_subdir: "list_repos"
+      database_path: "internal/repo_audit.db"
+      output_filename: "list_repos.xlsx"
+      standard_endpoints_only: true
+      sort_by_field: "last_pushed_at"
+      sort_ascending: false
+      use_cache: true

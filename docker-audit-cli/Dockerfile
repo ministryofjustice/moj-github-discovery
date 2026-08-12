@@ -1,4 +1,4 @@
-FROM python:3.14-slim@sha256:a01e48f10f90ac3ee65ef6937b9d7c831a3570c81b98d39a547ff09fb359de7f AS base
+FROM python:3.14-slim@sha256:a01e48f10f90ac3ee65ef6937b9d7c831a3570c81b98d39a547ff09fb359de7f
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -28,8 +28,6 @@ COPY main.py ./
 # Full dependency installation, including the project itself.
 RUN uv sync --frozen --no-dev
 
-FROM base AS cli
-
 ENV HOME=/home/audit-runner \
     XDG_CACHE_HOME=/home/audit-runner/.cache \
     PATH="/opt/venv/bin:$PATH"
@@ -47,31 +45,8 @@ USER audit-runner
 
 VOLUME ["/app/outputs", "/app/internal"]
 
-# Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
-ENTRYPOINT ["audit-cli"]
-
-FROM base AS dashboard
-
-ENV HOME=/home/dashboard-runner \
-    XDG_CACHE_HOME=/home/dashboard-runner/.cache \
-    PATH="/opt/venv/bin:$PATH"
-
-# Create non-root user for security (org-wide, scheduled deployments).
-RUN groupadd -r dashboard-runner && useradd -r -m -d /home/dashboard-runner -g dashboard-runner dashboard-runner
-
-# Create volume directories and set ownership.
-RUN mkdir -p internal && \
-    mkdir -p "$XDG_CACHE_HOME" && \
-    chown -R dashboard-runner:dashboard-runner /app /home/dashboard-runner /opt/venv /opt/uv-python
-
-# Switch to non-root user.
-USER dashboard-runner
-
-# Expose internal volume for referencing audit data
-VOLUME ["/app/internal"]
-
-# Expose port for dashboard web server
+# Expose port 8050 for dashboard usage via `audit-cli --dashboard` (default Dash port).
 EXPOSE 8050
 
 # Unified CLI entrypoint; runtime args are appended by docker run / Make targets.
-ENTRYPOINT ["audit-cli", "--dashboard"]
+ENTRYPOINT ["audit-cli"]

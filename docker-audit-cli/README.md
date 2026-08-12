@@ -15,19 +15,16 @@ This Docker and Kubernetes setup is intentionally a placeholder/POC.
 Use this folder as a starting point for future platform work, not as a final
 runtime architecture.
 
-Both container images are now built from a single multi-stage Dockerfile:
-
-- `docker-audit-cli/Dockerfile` with target `cli`
-- `docker-audit-cli/Dockerfile` with target `dashboard`
+Both the CLI scripts and the dashboard run from a single unified Docker image
+built via `docker-audit-cli/Dockerfile`.
 
 ## Initial Workflows in This POC
 
 The initial workflows included here are manual/local workflows:
 
-- Build CLI image using the `cli` target.
+- Build the image using `make audit-cli-build`.
 - Run CLI scripts via `make audit-cli-run`.
-- Build dashboard image using the `dashboard` target.
-- Run dashboard locally via `make audit-dashboard-run`.
+- Run the dashboard via `make audit-dashboard-run`.
 
 The repo root `Makefile` provides these convenience targets:
 
@@ -111,26 +108,35 @@ make audit-dashboard
 
 Similar to `make audit-cli`, this will
 
-- build the dashboard container image, default name is `developer-experience-audit-dashboard`
-- run the built image on `localhost:8050` with `internal/` mounted as a volume
+- build the Docker image (`developer-experience-audit-cli`) if not already built
+- run the container on `localhost:8050` with `internal/` mounted as a read volume
+- the dashboard reads collected data from `internal/` and requires at least one script to have been run first
 
-## Build Targets
+## Build and Run
 
-From the repo root, explicit build commands are:
+From the repo root, the explicit build command is:
 
 ```bash
-# CLI image
-docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target cli -t developer-experience-audit-cli .
+# Unified image (CLI and dashboard)
+docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile -t developer-experience-audit-cli .
+```
 
-# Dashboard image
-docker build --platform linux/amd64 -f docker-audit-cli/Dockerfile --target dashboard -t developer-experience-audit-dashboard .
+To run the dashboard directly:
+
+```bash
+docker run --rm \
+  --platform linux/amd64 \
+  --env-file docker-audit-cli/.env \
+  -p 8050:8050 \
+  -v "$(PWD)/internal:/app/internal" \
+  developer-experience-audit-cli --dashboard
 ```
 
 If you are using the root `Makefile`, these are wrapped by:
 
 ```bash
 make audit-cli-build
-make audit-dashboard-build
+make audit-dashboard-run
 ```
 
 The dashboard can then be accessed via `http://localhost:8050`, allowing viewing of `internal/`'s data.
@@ -141,14 +147,13 @@ The dashboard can then be accessed via `http://localhost:8050`, allowing viewing
 
 Initial placeholder workflow files are included at:
 
-- `docker-audit-cli/workflows/deploy-dev.yml`
-- `docker-audit-cli/workflows/deploy-prod.yml`
+- `docker-audit-cli/workflows/publish-package.yml`
+- `docker-audit-cli/workflows/publish-container.yml`
 
 These are draft workflows intended to describe a future deployment shape:
 
-- Build/push dashboard image to ECR.
-- Apply dashboard manifests to Kubernetes.
-- Wait for rollout on the dashboard Deployment.
+- Build/push audit-cli Python package to GitHub Packages.
+- Build/push audit-cli Docker image to GitHub Container Registry
 
 Important limitations:
 

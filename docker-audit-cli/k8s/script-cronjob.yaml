@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: developer-experience-audit-cronjob
+  namespace: developer-experience
+  labels:
+    app: audit-cli
+    script: list-repos
+spec:
+  schedule: "0 6 * * 1" # Run at 6:00 AM every Monday
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: audit-cli
+            image: IMAGE_PLACEHOLDER
+            args: ["run", "--scripts", "list_repos"]
+            env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-token-secret
+                  key: token
+            - name: GH_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: app_id
+            - name: GH_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: private_key
+            - name: GH_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secret
+                  key: installation_id
+            volumeMounts:
+            - name: audit-cli-config
+              mountPath: /app/config/audit_config.yaml
+              readOnly: true
+          restartPolicy: OnFailure
+        volumes:
+        - name: audit-cli-config
+          configMap:
+            name: audit-cli-config
