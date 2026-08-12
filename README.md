@@ -18,6 +18,8 @@ Follow the dedicated setup guidance under `docs/setup.md` to get all pre-requisi
 
 [Security Alert Check Docs](./docs/security_alert_checking.md)
 
+This repo includes a dev container to get a working environment in seconds, see [`.devcontainer/README.md`](./.devcontainer/README.md).
+
 For guidance on extending the core module and contributing changes, see
 [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 

@@ -1,5 +1,7 @@
 # Setup
 
+**Optional:** this repo includes a dev container, see [`.devcontainer/README.md`](../.devcontainer/README.md) for setup instructions.
+
 ## Prerequisites
 
 ### Brew
@@ -87,7 +89,9 @@ Install the key dependencies via `brew`:
 
 ```shell
 brew install pre-commit npm docker-desktop
-```
+```uv run pytest -q
+
+**Note:** `pre-commit` is also installed via `uv sync --group dev` above. The `brew install pre-commit` step is optional if you've already run that.
 
 And the `npm` dependencies:
 

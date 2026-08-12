@@ -53,3 +53,10 @@ updates:
     commit-message:
       prefix: ":dependabot: Dockerfile"
       include: "scope"
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: ":dependabot: Devcontainer"
+      include: "scope"
