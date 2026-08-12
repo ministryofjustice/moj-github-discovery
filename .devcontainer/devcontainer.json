@@ -1,6 +1,6 @@
 {
   "name": "moj-github-discovery",
-  "image": "ghcr.io/ministryofjustice/devcontainer-base:latest",
+  "image": "ghcr.io/ministryofjustice/devcontainer-base:4.2.0",
   "features": {
     "ghcr.io/ministryofjustice/devcontainer-feature/astral:1": {},
     "ghcr.io/devcontainers/features/node:2": { "version": "22" }
