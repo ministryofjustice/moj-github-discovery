@@ -108,6 +108,24 @@ class BaseStorage(ABC):
     def delete(self, full_name: str) -> None:
         """Remove the record for ``full_name`` (no-op if absent)."""
 
+    @abstractmethod
+    def create_table(self, table_name: str, schema: dict[str, str]) -> None:
+        """
+        Create a new table with arbitrary name and schema. Override in subclasses that need it
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement create_table()"
+        )
+
+    @abstractmethod
+    def write_rows(self, table_name: str, rows: list[dict]) -> None:
+        """
+        Write a list of dicts to an existing table. Keys of the dicts must match the table's columns.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement write_rows()"
+        )
+
 
 # ── Concrete implementation ───────────────────────────────────────────
 
@@ -183,6 +201,29 @@ class SqliteRepoStorage(BaseStorage):
                 (full_name,),
             )
 
+    def create_table(self, table_name: str, schema: dict[str, str]) -> None:
+        """Create a new table with arbitrary name and schema."""
+        columns = ", ".join(f"{col} {dtype}" for col, dtype in schema.items())
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});"
+        with self._connect() as conn:
+            conn.execute(create_table_sql)
+
+    def write_rows(self, table_name: str, rows: list[dict]) -> None:
+        """Write a list of dicts to an existing table. Keys of the dicts must match the table's columns."""
+        if not rows:
+            return  # Nothing to write
+
+        columns = rows[0].keys()
+        placeholders = ", ".join("?" for _ in columns)
+        insert_sql = (
+            f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        )
+
+        with self._connect() as conn:
+            conn.executemany(
+                insert_sql, [tuple(row[col] for col in columns) for row in rows]
+            )
+
 
 class SqliteOrgStorage:
     """SQLite storage for organisation-level posture cache data."""
@@ -224,6 +265,29 @@ class SqliteOrgStorage:
                     updated_at = excluded.updated_at
                 """,
                 (org, json.dumps(cache, default=str), updated_at),
+            )
+
+    def create_table(self, table_name: str, schema: dict[str, str]) -> None:
+        """Create a new table with arbitrary name and schema."""
+        columns = ", ".join(f"{col} {dtype}" for col, dtype in schema.items())
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});"
+        with self._connect() as conn:
+            conn.execute(create_table_sql)
+
+    def write_rows(self, table_name: str, rows: list[dict]) -> None:
+        """Write a list of dicts to an existing table. Keys of the dicts must match the table's columns."""
+        if not rows:
+            return  # Nothing to write
+
+        columns = rows[0].keys()
+        placeholders = ", ".join("?" for _ in columns)
+        insert_sql = (
+            f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        )
+
+        with self._connect() as conn:
+            conn.executemany(
+                insert_sql, [tuple(row[col] for col in columns) for row in rows]
             )
 
 

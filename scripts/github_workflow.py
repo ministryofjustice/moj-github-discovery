@@ -497,6 +497,7 @@ def actions_analysis(
         .sort_values(by="times_used", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
+    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
     usage_summary_df.to_csv(
         str(action_usage_summary_path),
         index=False,
@@ -512,6 +513,7 @@ def actions_analysis(
         .sort_values(by="actions_referenced", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
+    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
     owner_summary_df.to_csv(
         str(action_owner_summary_path),
         index=False,
@@ -572,6 +574,7 @@ def actions_analysis(
             by="unpinned", ascending=False, kind="stable"
         ).reset_index(drop=True)
 
+    # TODO: Add SQLite table creation and row writing here, to support downstream analysis without needing to re-parse the CSVs.
     pinning_df.to_csv(
         str(action_pinning_path),
         index=False,

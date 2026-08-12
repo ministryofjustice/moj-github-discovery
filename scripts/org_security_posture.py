@@ -24,6 +24,7 @@ from core.github_api import (
     dependency_supply_chain_summary,
 )
 from core.github_client import GitHubHttpClient
+from core.models import OrgWebhooksData
 from core.output_paths import OutputPathResolver
 from core.presenters import build_org_security_summary
 from core.repo_list import load_repo_list_file
@@ -32,6 +33,9 @@ from core.validation import direct_invocation_guard
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
+
+WEBHOOKS_TABLE = "org_webhooks"
+GITHUB_APPS_TABLE = "org_github_apps"
 
 
 def _load_cache(
@@ -63,6 +67,77 @@ def _save_cache(
     print(f"  Saved cache: {database_path}", file=sys.stderr)
 
 
+def _persist_webhook_integrations(
+    org: str,
+    audited_at: str,
+    webhooks_data: OrgWebhooksData,
+    storage: SqliteOrgStorage,
+) -> None:
+    """Persist org webhook and GitHub app posture rows to SQLite."""
+    storage.create_table(
+        WEBHOOKS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "webhooks_count": "INTEGER NOT NULL",
+        },
+    )
+    storage.write_rows(
+        WEBHOOKS_TABLE,
+        [
+            {
+                "org": org,
+                "audited_at": audited_at,
+                "webhooks_count": webhooks_data.webhooks_count,
+            }
+        ],
+    )
+
+    storage.create_table(
+        GITHUB_APPS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "app_slug": "TEXT NOT NULL",
+            "installation_id": "INTEGER",
+            "repository_selection": "TEXT",
+            "permissions": "TEXT",
+        },
+    )
+
+    app_rows: list[dict[str, Any]] = []
+    if webhooks_data.installed_apps_detail:
+        app_rows = [
+            {
+                "org": org,
+                "audited_at": audited_at,
+                "app_slug": app.app_slug,
+                "installation_id": app.installation_id,
+                "repository_selection": app.repository_selection,
+                "permissions": ", ".join(
+                    f"{scope}:{level}"
+                    for scope, level in sorted(app.permissions.items())
+                ),
+            }
+            for app in webhooks_data.installed_apps_detail
+        ]
+    elif webhooks_data.installed_apps:
+        # Fallback for minimal endpoint responses that only include app slugs.
+        app_rows = [
+            {
+                "org": org,
+                "audited_at": audited_at,
+                "app_slug": app_slug,
+                "installation_id": None,
+                "repository_selection": None,
+                "permissions": "",
+            }
+            for app_slug in webhooks_data.installed_apps
+        ]
+
+    storage.write_rows(GITHUB_APPS_TABLE, app_rows)
+
+
 def run_full_audit(
     org: str,
     auth_method: Literal["pat", "app", "cli"] | None = None,
@@ -76,9 +151,10 @@ def run_full_audit(
     cache = _load_cache(org, cache_storage, database_path) if use_cache else {}
     client = GitHubHttpClient(auth_method)
 
+    audited_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     report: dict[str, Any] = {
         "org": org,
-        "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "audited_at": audited_at,
     }
 
     print(f"\nCollecting data for org: {org}", file=sys.stderr)
@@ -183,6 +259,13 @@ def run_full_audit(
     }
 
     print("\n Collecting Webhooks and GitHub Apps Data...", file=sys.stderr)
+    _persist_webhook_integrations(
+        org=org,
+        audited_at=audited_at,
+        webhooks_data=org_data["org_webhooks"],
+        storage=cache_storage,
+    )
+
     report["5_webhooks_integrations"] = {
         "details": {
             "webhooks": {
