@@ -48,8 +48,8 @@ list_repos:
 org_security_posture:
   # Optional override; defaults to org_security_posture if omitted.
   output_subdir: "org_security_posture"
-  database_path: "internal/org_security_posture_288.db"
-  output_filename: "org_security_posture_288.xlsx"
+  database_path: "internal/org_security_posture.db"
+  output_filename: "org_security_posture.xlsx"
   use_cache: true
 
 # Script config for github_workflow.py.
