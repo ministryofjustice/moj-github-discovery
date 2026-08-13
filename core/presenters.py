@@ -17,7 +17,6 @@ from core.storage import BaseStorage
 def flags_for_list(data: RepoData) -> list[str]:
     """Return list-relevant flags for a repository row."""
     repo = data.repo_details
-    alerts = data.alerts
     branch = data.branch_protection
 
     if repo is None:
@@ -26,16 +25,22 @@ def flags_for_list(data: RepoData) -> list[str]:
     flags: list[str] = []
     if repo.archived:
         flags.append("archived")
+    if not repo.pushed_at:
+        flags.append("empty_repo_no_push_activity")
     if repo.fork:
         flags.append("fork")
     if repo.visibility == "public" and branch and not branch.default_branch_protected:
         flags.append("public_unprotected_default_branch")
-    if alerts and alerts.dependabot_alerts > 0:
-        flags.append("dependabot_alerts_present")
-    if alerts and alerts.secret_scanning_alerts > 0:
-        flags.append("secret_scanning_alerts_present")
-    if alerts and alerts.code_scanning_alerts > 0:
-        flags.append("code_scanning_alerts_present")
+    if branch and branch.branch_protection_enabled:
+        # Protection enabled with no active enforcement rules = nominal / trivially bypassable
+        has_enforcement = (
+            branch.enforce_admins_enabled
+            or branch.required_approving_review_count > 0
+            or branch.required_signatures_enabled
+            or branch.require_code_owner_reviews
+        )
+        if not has_enforcement:
+            flags.append("branch_protection_not_enforced")
 
     return flags
 
@@ -45,7 +50,6 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
     repo = data.repo_details
     alerts = data.alerts
     branch = data.branch_protection
-    community = data.community
     workflows = data.workflows
     fork_template = data.fork_template
 
@@ -55,18 +59,27 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
     flags: list[str] = []
     if repo.archived:
         flags.append("archived")
-    if fork_template and fork_template.is_fork:
-        flags.append(
-            f"fork_of_{fork_template.fork_source}"
-            if fork_template.fork_source
-            else "fork"
-        )
-    if fork_template and fork_template.is_generated_from_template:
-        flags.append(
-            f"generated_from_template_{fork_template.template_source}"
-            if fork_template.template_source
-            else "generated_from_template"
-        )
+    if not repo.pushed_at:
+        flags.append("empty_repo_no_push_activity")
+
+    # Prefer fork_template when present (archive_repos run), fall back to repo_details
+    is_fork = fork_template.is_fork if fork_template else repo.fork
+    fork_src = (
+        fork_template.fork_source
+        if fork_template and fork_template.fork_source not in (None, "N/A")
+        else None
+    ) or repo.parent_repo_full_name
+    if is_fork:
+        flags.append(f"fork_of_{fork_src}" if fork_src else "fork")
+
+    is_template_gen = (
+        fork_template.is_generated_from_template
+        if fork_template
+        else bool(repo.template_repo_full_name)
+    )
+    if is_template_gen:
+        flags.append("generated_from_template")
+
     license_info = getattr(repo, "license", None)
     if license_info is None:
         flags.append("no_license")
@@ -78,12 +91,6 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
         flags.append("secret_alerts_present")
     if alerts and alerts.code_scanning_alerts > 0:
         flags.append("code_scanning_alerts_present")
-
-    community_files = (community.files if community else None) or {}
-    if not community_files.get("security_policy"):
-        flags.append("no_security_policy")
-    if not community_files.get("code_of_conduct"):
-        flags.append("no_code_of_conduct")
 
     workflow_analysis = workflows.analysis if workflows and workflows.analysis else None
     if not workflows or workflows.count == 0:
@@ -100,7 +107,6 @@ def flags_for_dashboard(data: RepoData) -> list[str]:
 def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
     """Map RepoData into the list_repos output row schema."""
     repo = data.repo_details
-    alerts = data.alerts
     branch = data.branch_protection
     codeowners = data.codeowners
     fork_template = data.fork_template
@@ -108,6 +114,54 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
 
     owner = full_name.split("/", 1)[0] if "/" in full_name else None
     list_flags = flags_for_list(data)
+
+    # Robust fallbacks to keep output stable when some endpoint payloads are missing.
+    visibility = repo.visibility if repo and repo.visibility else "unknown"
+    last_push_activity = repo.pushed_at if repo else None
+    last_pushed_at = (
+        data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None
+    )
+    if not last_pushed_at:
+        last_pushed_at = last_push_activity
+    if not last_push_activity:
+        last_push_activity = "N/A"
+    if not last_pushed_at:
+        last_pushed_at = "N/A"
+
+    is_fork = repo.fork if repo else (fork_template.is_fork if fork_template else None)
+    if is_fork is False:
+        fork_source = "N/A"
+    elif is_fork is True:
+        fork_source = (
+            (repo.parent_repo_full_name if repo else None)
+            or (
+                fork_template.fork_source
+                if fork_template and fork_template.fork_source not in (None, "N/A")
+                else None
+            )
+            or "UNKNOWN"
+        )
+    else:
+        fork_source = None
+
+    is_generated_from_template = bool(
+        (repo.template_repo_full_name if repo else None)
+        or (fork_template.is_generated_from_template if fork_template else False)
+    )
+    if not is_generated_from_template:
+        template_source = "N/A"
+    else:
+        template_source = (
+            (repo.template_repo_full_name if repo else None)
+            or (
+                fork_template.template_source
+                if fork_template and fork_template.template_source not in (None, "N/A")
+                else None
+            )
+            or "UNKNOWN"
+        )
 
     # Resolve Compliance Method (Branch Protection vs Rulesets) for the default branch
     compliance_method = "none"
@@ -152,28 +206,22 @@ def repo_data_to_list_row(full_name: str, data: RepoData) -> dict[str, Any]:
         "org": owner,
         "repo": repo.name if repo else full_name,
         "full_name": full_name,
-        "visibility": repo.visibility if repo else None,
+        "visibility": visibility,
         "archived": repo.archived if repo else None,
-        "fork": repo.fork if repo else None,
-        "fork_source": fork_template.fork_source if fork_template else None,
-        "is_generated_from_template": (
-            fork_template.is_generated_from_template if fork_template else None
-        ),
-        "template_source": fork_template.template_source if fork_template else None,
-        "last_pushed_at": data.default_branch_commit.last_pushed_at
-        if data.default_branch_commit
-        else None,
-        "last_push_activity": repo.pushed_at if repo else None,
+        "fork": is_fork,
+        "fork_source": fork_source,
+        "is_generated_from_template": is_generated_from_template,
+        "template_source": template_source,
+        "last_pushed_at": last_pushed_at,
+        "last_push_activity": last_push_activity,
         "default_branch": repo.default_branch if repo else None,
         "language": repo.language if repo else None,
-        "open_issues": repo.open_issues_count if repo else None,
-        "stargazers": repo.stargazers_count if repo else None,
-        "dependabot_access": alerts.dependabot_access if alerts else None,
-        "dependabot_alerts": alerts.dependabot_alerts if alerts else None,
-        "code_scanning_access": alerts.code_scanning_access if alerts else None,
-        "code_scanning_alerts": alerts.code_scanning_alerts if alerts else None,
-        "secret_scanning_access": alerts.secret_scanning_access if alerts else None,
-        "secret_scanning_alerts": alerts.secret_scanning_alerts if alerts else None,
+        "disabled": repo.disabled if repo else None,
+        "is_template": repo.is_template if repo else None,
+        "size": repo.size if repo else None,
+        "created_at": repo.created_at if repo else None,
+        "updated_at": repo.updated_at if repo else None,
+        "license": repo.license if repo else None,
         "default_branch_protected": (
             branch.default_branch_protected if branch else None
         ),
@@ -204,24 +252,33 @@ def repo_data_to_dashboard_row(full_name: str, data: RepoData) -> dict[str, Any]
     codeowners = data.codeowners
     dashboard_flags = flags_for_dashboard(data)
 
+    visibility = repo.visibility if repo and repo.visibility else "unknown"
+    last_push_activity = repo.pushed_at if repo else ""
+    last_pushed_at = (
+        data.default_branch_commit.last_pushed_at
+        if data.default_branch_commit
+        else None
+    )
+    if not last_pushed_at:
+        last_pushed_at = last_push_activity
+    if not last_push_activity:
+        last_push_activity = "N/A"
+    if not last_pushed_at:
+        last_pushed_at = "N/A"
+
     return {
         "repo": full_name,
-        "visibility": repo.visibility if repo else None,
+        "visibility": visibility,
         "archived": repo.archived if repo else None,
         "fork": repo.fork if repo else None,
         "language": repo.language if repo else None,
         "stars": repo.stargazers_count if repo else 0,
         "open_issues": repo.open_issues_count if repo else 0,
-        "dependabot_alerts": alerts.dependabot_alerts if alerts else None,
-        "secret_alerts": alerts.secret_scanning_alerts if alerts else None,
-        "code_scanning_alerts": alerts.code_scanning_alerts if alerts else None,
         "branch_protected": branch.default_branch_protected if branch else None,
         "codeowners": codeowners.present if codeowners else None,
         "flags": ", ".join(dashboard_flags),
-        "last_pushed_at": data.default_branch_commit.last_pushed_at
-        if data.default_branch_commit
-        else None,
-        "last_push_activity": repo.pushed_at if repo else "",
+        "last_pushed_at": last_pushed_at,
+        "last_push_activity": last_push_activity,
     }
 
 
@@ -241,7 +298,6 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
     branch_protection = (
         data.branch_protection.model_dump() if data.branch_protection else {}
     )
-    community = data.community.model_dump() if data.community else {}
     codeowners = data.codeowners.model_dump() if data.codeowners else {}
     workflows = data.workflows
     fork_template = data.fork_template.model_dump() if data.fork_template else {}
@@ -262,7 +318,6 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
         "alerts": alerts,
         "branch_protection": branch_protection,
         "repo_rulesets": repo_rulesets,
-        "community": community,
         "codeowners": codeowners,
         "workflows": workflow_payload,
         "workflow_analysis": workflow_analysis,
@@ -274,7 +329,7 @@ def repo_data_to_audit_result(data: RepoData) -> dict[str, Any]:
 def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     """Build the summary metrics table used in list_repos outputs."""
     if df.empty:
-        values = [0] * 11
+        values = [0] * 8
     else:
         values = [
             len(df),
@@ -282,9 +337,6 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
             int((df["visibility"].fillna("") == "private").sum()),
             int((df["visibility"].fillna("") == "internal").sum()),
             int(df["archived"].fillna(False).sum()),
-            int((df["dependabot_alerts"].fillna(0) > 0).sum()),
-            int((df["secret_scanning_alerts"].fillna(0) > 0).sum()),
-            int((df["code_scanning_alerts"].fillna(0) > 0).sum()),
             int((~df["default_branch_protected"].fillna(False)).sum()),
             int(df["branch_protection_enabled"].fillna(False).sum()),
             int(df["has_active_rulesets"].fillna(False).sum()),
@@ -298,9 +350,6 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
                 "repos_private",
                 "repos_internal",
                 "repos_archived",
-                "repos_with_dependabot_alerts",
-                "repos_with_secret_alerts",
-                "repos_with_code_scanning_alerts",
                 "repos_unprotected_default_branch",
                 "repos_using_classic_branch_protection",
                 "repos_with_active_rulesets",

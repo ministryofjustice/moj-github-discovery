@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import sys
+import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Literal
@@ -62,6 +63,7 @@ from core.models import (
     ReferenceItem,
     RepoActionsPermissionsData,
     RepoArchivedAt,
+    RepoData,
     RepoDetails,
     RepoRulesetsData,
     RepoTreeData,
@@ -218,6 +220,32 @@ def dependency_supply_chain_summary(
         ),
         "details": details,
     }
+
+
+def _is_empty_repo(repo_details: RepoDetails | None) -> bool:
+    """Heuristic for repos created but never initialized with a commit."""
+    if repo_details is None:
+        return False
+    # Require creation metadata as confirmation to avoid false positives when
+    # tests or callers provide minimal RepoDetails stubs with default values.
+    return (
+        (repo_details.size == 0)
+        and (not repo_details.pushed_at)
+        and bool(repo_details.created_at)
+    )
+
+
+def _access_error_status(exc: Exception) -> str:
+    """Return a stable status string for endpoint access failures."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code == 401:
+        return "unauthorized"
+    if status_code == 403:
+        return "forbidden"
+    if status_code == 404:
+        return "not_found"
+    return str(exc)
 
 
 def fetch_repo_file_text(
@@ -420,6 +448,12 @@ class RepoDetailsEndpoint(BaseEndpoint):
     def fetch(self, owner: str, repo: str) -> RepoDetails:
         data = self.client.get(f"/repos/{owner}/{repo}")
         data["org"] = owner
+        parent = data.get("parent") or data.get("source")
+        if data.get("fork") and isinstance(parent, dict):
+            data["parent_repo_full_name"] = parent.get("full_name")
+        template = data.get("template_repository")
+        if isinstance(template, dict):
+            data["template_repo_full_name"] = template.get("full_name")
         return RepoDetails.model_validate(data)
 
 
@@ -455,6 +489,11 @@ class AlertsEndpoint(BaseEndpoint):
     Migrated from ``utils.count_alerts``.
     """
 
+    # Shared across all instances and worker threads; GitHub GHAS endpoints have
+    # strict secondary rate limits that trigger on concurrent/burst requests.
+    _GHAS_LOCK: threading.Semaphore = threading.Semaphore(1)
+    _POST_CALL_DELAY: float = 2.0
+
     @property
     def name(self) -> str:
         return "alerts"
@@ -467,14 +506,16 @@ class AlertsEndpoint(BaseEndpoint):
             ("secret-scanning/alerts", "secret_scanning"),
         ]:
             try:
-                items = self.client.get_paginated(
-                    f"/repos/{owner}/{repo}/{alert_type}?state=open"
-                )
-                result[f"{key}_alerts"] = len(items)
-                result[f"{key}_access"] = "ok"
-            except Exception as exc:
+                with AlertsEndpoint._GHAS_LOCK:
+                    count = self.client.count_paginated(
+                        f"/repos/{owner}/{repo}/{alert_type}?state=open"
+                    )
+                    time.sleep(self._POST_CALL_DELAY)
+                result[f"{key}_alerts"] = count
+                result[f"{key}_alerts_enabled"] = True
+            except Exception:
                 result[f"{key}_alerts"] = 0
-                result[f"{key}_access"] = str(exc)
+                result[f"{key}_alerts_enabled"] = False
         return AlertData.model_validate(result)
 
 
@@ -494,6 +535,12 @@ class BranchProtectionEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> BranchProtection:
+        if _is_empty_repo(repo_details):
+            return BranchProtection(
+                default_branch_protected=False,
+                branch_protection_enabled=False,
+                branch_protection_access="empty_repo_no_default_branch",
+            )
         try:
             default_branch = repo_details.default_branch if repo_details else "main"
             branch = self.client.get(f"/repos/{owner}/{repo}/branches/{default_branch}")
@@ -603,7 +650,7 @@ class BranchProtectionEndpoint(BaseEndpoint):
                 required_signatures_enabled=required_signatures_enabled,
             )
         except Exception as exc:
-            return BranchProtection(branch_protection_access=str(exc))
+            return BranchProtection(branch_protection_access=_access_error_status(exc))
 
 
 class RepoRulesetsEndpoint(BaseEndpoint):
@@ -676,16 +723,16 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                         continue
 
                     # Extract protection settings from rules
+                    ruleset_has_rules = False
                     for rule in rules:
                         if not isinstance(rule, dict):
                             continue
 
                         has_active_rulesets = True
+                        ruleset_has_rules = True
 
                         rule_type = rule.get("type")
-                        if rule_type == "enforce_admins":
-                            enforce_admins = True
-                        elif rule_type == "required_signatures":
+                        if rule_type == "required_signatures":
                             required_signatures = True
                         elif rule_type == "pull_request":
                             params = rule.get("parameters", {})
@@ -700,6 +747,12 @@ class RepoRulesetsEndpoint(BaseEndpoint):
                                 required_approving_review_count,
                                 int(params.get("required_approving_review_count", 0)),
                             )
+
+                    # Empty bypass actors = no one can bypass = enforce admins equivalent
+                    if ruleset_has_rules and not (
+                        full_ruleset.get("bypass_actors") or []
+                    ):
+                        enforce_admins = True
                 except Exception as e:
                     print(
                         f"Warning: failed to fetch full details for ruleset {ruleset_id} in {owner}/{repo}: {e}",
@@ -719,7 +772,238 @@ class RepoRulesetsEndpoint(BaseEndpoint):
             return result
 
         except Exception as exc:
-            return RepoRulesetsData(rulesets_access=str(exc))
+            return RepoRulesetsData(rulesets_access=_access_error_status(exc))
+
+
+class RepoComplianceEndpoint(BaseEndpoint):
+    """Repo metadata, branch protection, and rulesets from one GraphQL call.
+
+    Replaces RepoDetailsEndpoint + BranchProtectionEndpoint + RepoRulesetsEndpoint
+    in STANDARD_REPO_AUDIT_ENDPOINTS, reducing ~8 REST calls to 1 GraphQL call.
+    Returns RepoData directly so the collector writes all three fields in one upsert.
+    Requires administration:read permission on the GitHub App installation.
+    """
+
+    _QUERY = """
+    query RepoCompliance($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        nameWithOwner
+        name
+        visibility
+        isArchived
+        isDisabled
+        isFork
+        isTemplate
+        description
+        primaryLanguage { name }
+        pushedAt
+        createdAt
+        updatedAt
+        diskUsage
+        issues(states: OPEN) { totalCount }
+        stargazerCount
+        watchers { totalCount }
+        forkCount
+        licenseInfo { name spdxId }
+        parent { nameWithOwner }
+        templateRepository { nameWithOwner }
+        defaultBranchRef {
+          name
+          branchProtectionRule {
+            isAdminEnforced
+            requiresCommitSignatures
+            requiresApprovingReviews
+            requiredApprovingReviewCount
+            requiresCodeOwnerReviews
+            dismissesStaleReviews
+            requiresStatusChecks
+          }
+        }
+        rulesets(first: 20) {
+          nodes {
+            enforcement
+            target
+            conditions {
+              refName { include exclude }
+            }
+            bypassActors { totalCount }
+            rules(first: 50) {
+              nodes {
+                type
+                parameters {
+                  ... on PullRequestParameters {
+                    requiredApprovingReviewCount
+                    requireCodeOwnerReview
+                    dismissStaleReviewsOnPush
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    @property
+    def name(self) -> str:
+        return "repo_details"
+
+    def fetch(self, owner: str, repo: str) -> RepoData:
+        data = self.client.graphql(self._QUERY, {"owner": owner, "repo": repo})
+        r = data.get("repository") or {}
+
+        default_branch_ref = r.get("defaultBranchRef") or {}
+        default_branch = default_branch_ref.get("name") or "main"
+
+        # ── RepoDetails ──────────────────────────────────────────────
+        license_info = r.get("licenseInfo")
+        parent = r.get("parent")
+        template = r.get("templateRepository")
+
+        repo_details = RepoDetails(
+            full_name=r.get("nameWithOwner") or f"{owner}/{repo}",
+            name=r.get("name") or repo,
+            org=owner,
+            visibility=(r.get("visibility") or "").lower() or None,
+            archived=bool(r.get("isArchived", False)),
+            disabled=bool(r.get("isDisabled", False)),
+            fork=bool(r.get("isFork", False)),
+            is_template=bool(r.get("isTemplate", False)),
+            description=r.get("description"),
+            language=(r.get("primaryLanguage") or {}).get("name"),
+            default_branch=default_branch,
+            size=r.get("diskUsage") or 0,
+            pushed_at=r.get("pushedAt"),
+            created_at=r.get("createdAt"),
+            updated_at=r.get("updatedAt"),
+            open_issues_count=(r.get("issues") or {}).get("totalCount") or 0,
+            stargazers_count=r.get("stargazerCount") or 0,
+            watchers_count=(r.get("watchers") or {}).get("totalCount") or 0,
+            forks_count=r.get("forkCount") or 0,
+            license={
+                "name": license_info.get("name"),
+                "spdx_id": license_info.get("spdxId"),
+            }
+            if license_info
+            else None,
+            parent_repo_full_name=(
+                parent.get("nameWithOwner") if parent and r.get("isFork") else None
+            ),
+            template_repo_full_name=(
+                template.get("nameWithOwner") if template else None
+            ),
+        )
+
+        # ── BranchProtection ─────────────────────────────────────────
+        if not default_branch_ref:
+            branch_protection = BranchProtection(
+                default_branch_protected=False,
+                branch_protection_access="no_default_branch",
+            )
+        else:
+            bp_rule = default_branch_ref.get("branchProtectionRule")
+            if bp_rule is None:
+                branch_protection = BranchProtection(default_branch_protected=False)
+            else:
+                settings: list[str] = []
+                if bp_rule.get("requiresStatusChecks"):
+                    settings.append("required_status_checks")
+                if bp_rule.get("requiresApprovingReviews"):
+                    settings.append("required_pr_reviews")
+                if bp_rule.get("isAdminEnforced"):
+                    settings.append("enforce_admins")
+                branch_protection = BranchProtection(
+                    branch_protection_enabled=True,
+                    default_branch_protected=True,
+                    protection_settings=settings,
+                    enforce_admins_enabled=bool(bp_rule.get("isAdminEnforced", False)),
+                    required_signatures_enabled=bool(
+                        bp_rule.get("requiresCommitSignatures", False)
+                    ),
+                    dismiss_stale_reviews=bool(
+                        bp_rule.get("dismissesStaleReviews", False)
+                    ),
+                    require_code_owner_reviews=bool(
+                        bp_rule.get("requiresCodeOwnerReviews", False)
+                    ),
+                    required_approving_review_count=int(
+                        bp_rule.get("requiredApprovingReviewCount") or 0
+                    ),
+                )
+
+        # ── RepoRulesets ──────────────────────────────────────────────
+        rulesets_nodes = (r.get("rulesets") or {}).get("nodes") or []
+
+        has_active_rulesets = False
+        enforce_admins = False
+        dismiss_stale = False
+        require_code_owner = False
+        req_review_count = 0
+        req_signatures = False
+
+        for ruleset in rulesets_nodes:
+            if not isinstance(ruleset, dict):
+                continue
+            if ruleset.get("enforcement") != "ACTIVE":
+                continue
+            if ruleset.get("target") != "BRANCH":
+                continue
+
+            conditions = ruleset.get("conditions") or {}
+            ref_name = conditions.get("refName") or {}
+            includes = ref_name.get("include") or []
+            if includes:
+                targets_default = (
+                    default_branch in includes
+                    or f"~{default_branch}" in includes
+                    or "~DEFAULT_BRANCH" in includes
+                )
+                if not targets_default:
+                    continue
+
+            rules_nodes = (ruleset.get("rules") or {}).get("nodes") or []
+            if not rules_nodes:
+                continue
+
+            has_active_rulesets = True
+            # empty bypass actors list = no one can bypass = enforce admins equivalent
+            bypass_count = (ruleset.get("bypassActors") or {}).get("totalCount", 1)
+            enforce_admins = enforce_admins or (bypass_count == 0)
+
+            for rule in rules_nodes:
+                if not isinstance(rule, dict):
+                    continue
+                rule_type = rule.get("type", "")
+                params = rule.get("parameters") or {}
+                if rule_type == "REQUIRED_SIGNATURES":
+                    req_signatures = True
+                elif rule_type == "PULL_REQUEST":
+                    dismiss_stale = dismiss_stale or bool(
+                        params.get("dismissStaleReviewsOnPush", False)
+                    )
+                    require_code_owner = require_code_owner or bool(
+                        params.get("requireCodeOwnerReview", False)
+                    )
+                    req_review_count = max(
+                        req_review_count,
+                        int(params.get("requiredApprovingReviewCount") or 0),
+                    )
+
+        repo_rulesets = RepoRulesetsData(
+            has_active_rulesets=has_active_rulesets,
+            enforce_admins=enforce_admins,
+            dismiss_stale_reviews=dismiss_stale,
+            require_code_owner_reviews=require_code_owner,
+            required_approving_review_count=req_review_count,
+            required_signatures=req_signatures,
+        )
+
+        return RepoData(
+            repo_details=repo_details,
+            branch_protection=branch_protection,
+            repo_rulesets=repo_rulesets,
+        )
 
 
 class CommunityProfileEndpoint(BaseEndpoint):
@@ -750,10 +1034,21 @@ class CodeownersEndpoint(BaseEndpoint):
     def name(self) -> str:
         return "codeowners"
 
-    def fetch(self, owner: str, repo: str) -> CodeownersData:
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> CodeownersData:
+        if _is_empty_repo(repo_details):
+            return CodeownersData(present=False)
+
         try:
-            repo_data = self.client.get(f"/repos/{owner}/{repo}")
-            default_branch = repo_data.get("default_branch", "main")
+            default_branch = (
+                repo_details.default_branch
+                if repo_details and repo_details.default_branch
+                else "main"
+            )
             tree = self.client.get(
                 f"/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1"
             )
@@ -816,7 +1111,15 @@ class WorkflowsEndpoint(BaseEndpoint):
         {"lint", "ruff", "flake8", "eslint", "pylint", "rubocop"}
     )
 
-    def fetch(self, owner: str, repo: str) -> WorkflowData:
+    def fetch(
+        self,
+        owner: str,
+        repo: str,
+        repo_details: RepoDetails | None = None,
+    ) -> WorkflowData:
+        if _is_empty_repo(repo_details):
+            return WorkflowData()
+
         try:
             resp = self.client.get(f"/repos/{owner}/{repo}/actions/workflows")
             workflows = resp.get("workflows", []) if isinstance(resp, dict) else []
@@ -924,6 +1227,9 @@ class GetRepoTreeEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> RepoTreeData:
+        if _is_empty_repo(repo_details):
+            return RepoTreeData(access="empty_repo_no_default_branch")
+
         try:
             default_branch = repo_details.default_branch if repo_details else "main"
             data = self.client.get(
@@ -933,7 +1239,7 @@ class GetRepoTreeEndpoint(BaseEndpoint):
                 return RepoTreeData(access="unexpected_response_type")
             return RepoTreeData.model_validate(data)
         except Exception as exc:
-            return RepoTreeData(access=str(exc))
+            return RepoTreeData(access=_access_error_status(exc))
 
 
 class CodeSearchEndpoint(BaseEndpoint):
@@ -989,6 +1295,9 @@ class DefaultBranchCommitEndpoint(BaseEndpoint):
         repo: str,
         repo_details: RepoDetails | None = None,
     ) -> DefaultBranchCommitData:
+        if _is_empty_repo(repo_details):
+            return DefaultBranchCommitData()
+
         try:
             from urllib.parse import quote
 
@@ -1304,25 +1613,18 @@ REPO_ENDPOINTS: list[type[BaseEndpoint]] = [
     AlertsEndpoint,
     BranchProtectionEndpoint,
     RepoRulesetsEndpoint,
-    CommunityProfileEndpoint,
     CodeownersEndpoint,
-    ForkTemplateEndpoint,
     WorkflowsEndpoint,
     DependencyGraphEndpoint,
     CodeSearchEndpoint,
-    DefaultBranchCommitEndpoint,
 ]
 
 STANDARD_REPO_AUDIT_ENDPOINTS: list[type[BaseEndpoint]] = [
     RepoDetailsEndpoint,
     BranchProtectionEndpoint,
     RepoRulesetsEndpoint,
-    AlertsEndpoint,
-    CommunityProfileEndpoint,
     CodeownersEndpoint,
-    ForkTemplateEndpoint,
     WorkflowsEndpoint,
-    DefaultBranchCommitEndpoint,
 ]
 
 ORG_ENDPOINTS: list[type[BaseOrgEndpoint]] = [

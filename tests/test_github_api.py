@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from core.github_api import (
     ORG_ENDPOINTS,
@@ -25,6 +27,7 @@ from core.github_api import (
     OrgWebhooksEndpoint,
     RepoActionsPermissionsEndpoint,
     RepoArchivedAtEndpoint,
+    RepoComplianceEndpoint,
     RepoDetailsEndpoint,
     RepoRulesetsEndpoint,
     WorkflowsEndpoint,
@@ -52,6 +55,7 @@ from core.models import (
     OrgWebhooksData,
     ReferenceData,
     RepoActionsPermissionsData,
+    RepoData,
     RepoDetails,
     RepoRulesetsData,
     RepoTreeData,
@@ -343,6 +347,81 @@ class TestWorkflowAndAlertHelpers:
         alerts = fetch_repo_alerts(client, "o", "r", "code_scanning")
         assert alerts == [{"id": 1}, {"id": 2}]
 
+    def test_alerts_endpoint_uses_count_paginated(self):
+        client = MockHttpClient(
+            {
+                "/repos/o/r/dependabot/alerts?state=open": [{"id": 1}, {"id": 2}],
+                "/repos/o/r/code-scanning/alerts?state=open": [],
+                "/repos/o/r/secret-scanning/alerts?state=open": [{"id": 3}],
+            }
+        )
+        with patch.object(AlertsEndpoint, "_POST_CALL_DELAY", 0):
+            result = AlertsEndpoint(client).fetch("o", "r")
+        assert result.dependabot_alerts == 2
+        assert result.dependabot_alerts_enabled is True
+        assert result.code_scanning_alerts == 0
+        assert result.secret_scanning_alerts == 1
+
+    def test_alerts_endpoint_normalizes_unauthorized_access(self):
+        client = MockHttpClient()
+        http_error = requests.HTTPError(
+            response=MagicMock(status_code=401),
+        )
+        client.get_paginated = MagicMock(side_effect=http_error)
+
+        with patch.object(AlertsEndpoint, "_POST_CALL_DELAY", 0):
+            result = AlertsEndpoint(client).fetch("o", "r")
+
+        assert result.dependabot_alerts == 0
+        assert result.dependabot_alerts_enabled is False
+        assert result.code_scanning_alerts_enabled is False
+        assert result.secret_scanning_alerts_enabled is False
+
+
+class TestRepoDetailsEndpointForkTemplate:
+    def test_populates_parent_repo_full_name_for_forks(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/forked-repo": {
+                    "full_name": "org/forked-repo",
+                    "name": "forked-repo",
+                    "fork": True,
+                    "parent": {"full_name": "upstream/original"},
+                },
+            }
+        )
+        result = RepoDetailsEndpoint(client).fetch("org", "forked-repo")
+        assert result.fork is True
+        assert result.parent_repo_full_name == "upstream/original"
+
+    def test_populates_template_repo_full_name(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/generated-repo": {
+                    "full_name": "org/generated-repo",
+                    "name": "generated-repo",
+                    "fork": False,
+                    "template_repository": {"full_name": "org/my-template"},
+                },
+            }
+        )
+        result = RepoDetailsEndpoint(client).fetch("org", "generated-repo")
+        assert result.template_repo_full_name == "org/my-template"
+
+    def test_parent_repo_full_name_none_for_non_forks(self):
+        client = MockHttpClient(
+            {
+                "/repos/org/regular-repo": {
+                    "full_name": "org/regular-repo",
+                    "name": "regular-repo",
+                    "fork": False,
+                },
+            }
+        )
+        result = RepoDetailsEndpoint(client).fetch("org", "regular-repo")
+        assert result.parent_repo_full_name is None
+        assert result.template_repo_full_name is None
+
 
 class TestGetRepoTreeEndpoint:
     def test_fetch_uses_repo_default_branch_and_returns_tree(self):
@@ -395,7 +474,7 @@ class TestGetRepoTreeEndpoint:
 
 class TestEndpointRegistries:
     def test_repo_endpoints_count(self):
-        assert len(REPO_ENDPOINTS) == 11
+        assert len(REPO_ENDPOINTS) == 8
 
     def test_org_endpoints_count(self):
         assert len(ORG_ENDPOINTS) == 4
@@ -474,6 +553,228 @@ class TestRepoDetailsEndpoint:
         assert result.archived_at == "2024-01-15T10:30:00Z"
 
 
+# ── RepoComplianceEndpoint ──────────────────────────────────────────
+
+
+def _compliance_graphql_fixture(
+    *,
+    owner: str = "org",
+    repo: str = "repo",
+    visibility: str = "PRIVATE",
+    is_fork: bool = False,
+    parent_name: str | None = None,
+    template_name: str | None = None,
+    bp_rule: dict | None = None,
+    rulesets: list | None = None,
+) -> dict:
+    return {
+        "repository": {
+            "nameWithOwner": f"{owner}/{repo}",
+            "name": repo,
+            "visibility": visibility,
+            "isArchived": False,
+            "isDisabled": False,
+            "isFork": is_fork,
+            "isTemplate": False,
+            "description": None,
+            "primaryLanguage": {"name": "Python"},
+            "pushedAt": "2026-08-01T10:00:00Z",
+            "createdAt": "2020-01-01T00:00:00Z",
+            "updatedAt": "2026-08-01T10:00:00Z",
+            "diskUsage": 512,
+            "issues": {"totalCount": 3},
+            "stargazerCount": 5,
+            "watchers": {"totalCount": 2},
+            "forkCount": 0,
+            "licenseInfo": {"name": "MIT License", "spdxId": "MIT"},
+            "parent": {"nameWithOwner": parent_name} if parent_name else None,
+            "templateRepository": {"nameWithOwner": template_name}
+            if template_name
+            else None,
+            "defaultBranchRef": {
+                "name": "main",
+                "branchProtectionRule": bp_rule,
+            },
+            "rulesets": {"nodes": rulesets or []},
+        }
+    }
+
+
+class TestRepoComplianceEndpoint:
+    def test_populates_repo_details(self):
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "repo"): _compliance_graphql_fixture(visibility="INTERNAL"),
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert isinstance(result, RepoData)
+        assert result.repo_details.full_name == "org/repo"
+        assert result.repo_details.visibility == "internal"
+        assert result.repo_details.default_branch == "main"
+        assert result.repo_details.language == "Python"
+        assert result.repo_details.open_issues_count == 3
+        assert result.repo_details.org == "org"
+
+    def test_fork_populates_parent_repo_full_name(self):
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "forked"): _compliance_graphql_fixture(
+                    repo="forked", is_fork=True, parent_name="upstream/original"
+                ),
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "forked")
+
+        assert result.repo_details.fork is True
+        assert result.repo_details.parent_repo_full_name == "upstream/original"
+
+    def test_classic_branch_protection_populated(self):
+        bp = {
+            "isAdminEnforced": True,
+            "requiresCommitSignatures": True,
+            "requiresApprovingReviews": True,
+            "requiredApprovingReviewCount": 2,
+            "requiresCodeOwnerReviews": False,
+            "dismissesStaleReviews": True,
+            "requiresStatusChecks": True,
+        }
+        client = MockHttpClient(
+            graphql_fixtures={("org", "repo"): _compliance_graphql_fixture(bp_rule=bp)}
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert result.branch_protection.branch_protection_enabled is True
+        assert result.branch_protection.default_branch_protected is True
+        assert result.branch_protection.enforce_admins_enabled is True
+        assert result.branch_protection.required_signatures_enabled is True
+        assert result.branch_protection.required_approving_review_count == 2
+        assert result.branch_protection.dismiss_stale_reviews is True
+        assert "required_pr_reviews" in result.branch_protection.protection_settings
+
+    def test_no_branch_protection_returns_false(self):
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "repo"): _compliance_graphql_fixture(bp_rule=None)
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert result.branch_protection.branch_protection_enabled is False
+        assert result.branch_protection.default_branch_protected is False
+
+    def test_ruleset_enforce_admins_when_no_bypass_actors(self):
+        rulesets = [
+            {
+                "enforcement": "ACTIVE",
+                "target": "BRANCH",
+                "conditions": {
+                    "refName": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+                },
+                "bypassActors": {"totalCount": 0},
+                "rules": {
+                    "nodes": [
+                        {
+                            "type": "PULL_REQUEST",
+                            "parameters": {
+                                "requiredApprovingReviewCount": 1,
+                                "requireCodeOwnerReview": True,
+                                "dismissStaleReviewsOnPush": False,
+                            },
+                        }
+                    ]
+                },
+            }
+        ]
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "repo"): _compliance_graphql_fixture(rulesets=rulesets)
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert result.repo_rulesets.has_active_rulesets is True
+        assert result.repo_rulesets.enforce_admins is True
+        assert result.repo_rulesets.require_code_owner_reviews is True
+        assert result.repo_rulesets.required_approving_review_count == 1
+
+    def test_ruleset_enforce_admins_false_when_bypass_actors_present(self):
+        rulesets = [
+            {
+                "enforcement": "ACTIVE",
+                "target": "BRANCH",
+                "conditions": {
+                    "refName": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+                },
+                "bypassActors": {"totalCount": 2},
+                "rules": {"nodes": [{"type": "REQUIRED_SIGNATURES", "parameters": {}}]},
+            }
+        ]
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "repo"): _compliance_graphql_fixture(rulesets=rulesets)
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert result.repo_rulesets.has_active_rulesets is True
+        assert result.repo_rulesets.enforce_admins is False
+        assert result.repo_rulesets.required_signatures is True
+
+    def test_inactive_and_tag_rulesets_are_skipped(self):
+        rulesets = [
+            {
+                "enforcement": "DISABLED",
+                "target": "BRANCH",
+                "conditions": {
+                    "refName": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+                },
+                "bypassActors": {"totalCount": 0},
+                "rules": {
+                    "nodes": [
+                        {
+                            "type": "PULL_REQUEST",
+                            "parameters": {
+                                "requiredApprovingReviewCount": 1,
+                                "requireCodeOwnerReview": False,
+                                "dismissStaleReviewsOnPush": False,
+                            },
+                        }
+                    ]
+                },
+            },
+            {
+                "enforcement": "ACTIVE",
+                "target": "TAG",
+                "conditions": {
+                    "refName": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+                },
+                "bypassActors": {"totalCount": 0},
+                "rules": {
+                    "nodes": [
+                        {
+                            "type": "PULL_REQUEST",
+                            "parameters": {
+                                "requiredApprovingReviewCount": 1,
+                                "requireCodeOwnerReview": False,
+                                "dismissStaleReviewsOnPush": False,
+                            },
+                        }
+                    ]
+                },
+            },
+        ]
+        client = MockHttpClient(
+            graphql_fixtures={
+                ("org", "repo"): _compliance_graphql_fixture(rulesets=rulesets)
+            }
+        )
+        result = RepoComplianceEndpoint(client).fetch("org", "repo")
+
+        assert result.repo_rulesets.has_active_rulesets is False
+
+
 # ── AlertsEndpoint ────────────────────────────────────────────────────
 
 
@@ -486,7 +787,8 @@ class TestAlertsEndpoint:
                 "/repos/o/r/secret-scanning/alerts?state=open": [],
             }
         )
-        result = AlertsEndpoint(client).fetch("o", "r")
+        with patch.object(AlertsEndpoint, "_POST_CALL_DELAY", 0):
+            result = AlertsEndpoint(client).fetch("o", "r")
         assert isinstance(result, AlertData)
         assert result.dependabot_alerts == 2
         assert result.code_scanning_alerts == 1
@@ -500,9 +802,12 @@ class TestAlertsEndpoint:
                 # dependabot missing → will raise
             }
         )
-        result = AlertsEndpoint(client).fetch("o", "r")
+        with patch.object(AlertsEndpoint, "_POST_CALL_DELAY", 0):
+            result = AlertsEndpoint(client).fetch("o", "r")
         assert result.dependabot_alerts == 0
-        assert "no fixture" in result.dependabot_access
+        assert result.dependabot_alerts_enabled is False
+        assert result.code_scanning_alerts_enabled is True
+        assert result.secret_scanning_alerts_enabled is True
 
 
 # ── BranchProtectionEndpoint ─────────────────────────────────────────
@@ -548,6 +853,24 @@ class TestBranchProtectionEndpoint:
         assert result.require_code_owner_reviews is True
         assert result.required_approving_review_count == 2
         assert result.required_signatures_enabled is True
+
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = BranchProtectionEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.default_branch_protected is False
+        assert result.branch_protection_enabled is False
+        assert result.branch_protection_access == "empty_repo_no_default_branch"
+        assert client.calls == []
 
     def test_protected_branch_nested_review_settings_without_subendpoints(self):
         details = RepoDetails(full_name="o/r", name="r", default_branch="main")
@@ -759,6 +1082,22 @@ class TestCodeownersEndpoint:
         result = CodeownersEndpoint(client).fetch("o", "r")
         assert result.present is False
 
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = CodeownersEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.present is False
+        assert client.calls == []
+
 
 # ── ForkTemplateEndpoint ──────────────────────────────────────────────
 
@@ -843,6 +1182,22 @@ class TestWorkflowsEndpoint:
         assert result.count == 0
         assert result.analysis is None
 
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = WorkflowsEndpoint(client).fetch(
+            "o",
+            "r",
+            repo_details=RepoDetails(
+                full_name="o/r",
+                name="r",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.count == 0
+        assert client.calls == []
+
 
 # ── DependencyGraphEndpoint ───────────────────────────────────────────
 
@@ -924,6 +1279,22 @@ class TestDefaultBranchCommitEndpoint:
         client = MockHttpClient()
         result = DefaultBranchCommitEndpoint(client).fetch("org", "repo")
         assert result.last_pushed_at is None
+
+    def test_empty_repo_short_circuits_without_api_calls(self):
+        client = MockHttpClient()
+        result = DefaultBranchCommitEndpoint(client).fetch(
+            "org",
+            "repo",
+            repo_details=RepoDetails(
+                full_name="org/repo",
+                name="repo",
+                size=0,
+                pushed_at=None,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+        )
+        assert result.last_pushed_at is None
+        assert client.calls == []
 
 
 # ── OrgMembersEndpoint ────────────────────────────────────────────────

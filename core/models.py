@@ -97,7 +97,10 @@ class RepoDetails(BaseModel):
     forks_count: int = 0
     security_and_analysis: dict[str, Any] | None = None
     license: dict[str, Any] | None = None
-    """Repository license information from the GitHub API (e.g., SPDX key, name)."""
+    parent_repo_full_name: str | None = None
+    """Full name of the parent repo when fork=True, derived from API parent/source."""
+    template_repo_full_name: str | None = None
+    """Full name of the template repo when generated from a template."""
 
 
 class RepoArchivedAt(BaseModel):
@@ -116,11 +119,11 @@ class AlertData(BaseModel):
     """Open security alert counts for a single repository."""
 
     dependabot_alerts: int = 0
-    dependabot_access: str = "ok"
+    dependabot_alerts_enabled: bool = True
     code_scanning_alerts: int = 0
-    code_scanning_access: str = "ok"
+    code_scanning_alerts_enabled: bool = True
     secret_scanning_alerts: int = 0
-    secret_scanning_access: str = "ok"
+    secret_scanning_alerts_enabled: bool = True
 
 
 class BranchProtection(BaseModel):

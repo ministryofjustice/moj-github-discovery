@@ -73,6 +73,7 @@ class BaseCollector(ABC):
         org: str,
         repos: list[str] | None = None,
         resume: bool = False,
+        batch_label: str | None = None,
     ) -> None:
         """
         Fetch and persist data for all repositories.
@@ -150,13 +151,16 @@ class RepoCollector(BaseCollector):
         org: str,
         repos: list[str] | None = None,
         resume: bool = False,
+        batch_label: str | None = None,
     ) -> None:
         self.storage.init()
+
+        batch_prefix = f"[{batch_label}] " if batch_label else ""
 
         repo_list = repos if repos is not None else list_org_repos(org, self.client)
         total = len(repo_list)
         print(
-            f"Collecting {total} repo(s) for '{org}' "
+            f"{batch_prefix}Collecting {total} repo(s) for '{org}' "
             f"({'resume mode' if resume else 'full run'}, workers={self.max_workers})",
             file=sys.stderr,
         )
@@ -164,7 +168,7 @@ class RepoCollector(BaseCollector):
         if self.max_workers == 1 or total <= 1:
             for idx, full_name in enumerate(repo_list, start=1):
                 print(
-                    f"[{idx}/{total}] {full_name}",
+                    f"{batch_prefix}[{idx}/{total}] {full_name}",
                     file=sys.stderr,
                 )
                 self._collect_full_name(full_name, resume=resume)
@@ -174,7 +178,7 @@ class RepoCollector(BaseCollector):
             futures = {}
             for idx, full_name in enumerate(repo_list, start=1):
                 print(
-                    f"[{idx}/{total}] queue {full_name}",
+                    f"{batch_prefix}[{idx}/{total}] queue {full_name}",
                     file=sys.stderr,
                 )
                 futures[executor.submit(self._collect_full_name, full_name, resume)] = (
@@ -185,10 +189,14 @@ class RepoCollector(BaseCollector):
                 full_name = futures[future]
                 try:
                     future.result()
-                    print(f"[{idx}/{total}]  [done] {full_name}", file=sys.stderr)
+                    print(
+                        f"{batch_prefix}[{idx}/{total}]  [done] {full_name}",
+                        file=sys.stderr,
+                    )
                 except Exception as exc:
                     print(
-                        f"[{idx}/{total}]  [error] {full_name}: {exc}", file=sys.stderr
+                        f"{batch_prefix}[{idx}/{total}]  [error] {full_name}: {exc}",
+                        file=sys.stderr,
                     )
 
     # ── Internal helpers ──────────────────────────────────────────────
@@ -234,7 +242,10 @@ class RepoCollector(BaseCollector):
             try:
                 fetch_kwargs = self._build_fetch_kwargs(endpoint, existing)
                 result_model = endpoint.fetch(owner, repo, **fetch_kwargs)
-                self._storage_upsert(full_name, RepoData(**{key: result_model}))
+                if isinstance(result_model, RepoData):
+                    self._storage_upsert(full_name, result_model)
+                else:
+                    self._storage_upsert(full_name, RepoData(**{key: result_model}))
                 # Refresh local copy so the next endpoint sees the updated state
                 # TODO: This is a bit clunky — ideally the storage layer would handle merging
                 existing = self._storage_read(full_name) or existing

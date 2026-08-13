@@ -86,6 +86,7 @@ collection, storage, and report shaping.
 - `--all` - Trigger all the scripts in sequence
   - **note:** this will take a significant amount of time due to rate limiting, consider running on an extremely small subset of repos if testing
 - `--repos` - Specify one or more repos to scan e.g. `owner/repo owner/repo1` - does not apply to `org_security_posture`
+- `--repo-file` - Specify a specific YAML repo list file, mutually exclusive to `--repos`
 
 ### Notes
 
@@ -130,7 +131,12 @@ uv run audit-cli --scripts alert_metrics --repos ministryofjustice/<repo name>
 ## Global Config Attributes
 
 - `github_organization` - The GitHub organisation for the scripts to run against - default `ministryofjustice`
-- `repo_list_file` - Path to the repo list YAML file to be referenced by the scripts - defaults to `repo_list.yaml` at project root.
+- `default_repo_list` - Path to the default repo list YAML file to be referenced by the scripts - `repo_list.yaml` at the root of the repo.
+  - Can be overridden via the `--repo-file` argument.
+- `repo_search_scope` - Scope for repo list resolution
+  - `file` uses `--repo-file` when provided (must exist), otherwise `default_repo_list`; `org` fetches repos via the org API.
+- `repo_limit`: Integer for specific limit of repositories to search for, or `null` for full list regardless of scope
+  - Currently only used by `list_repos`, script-specific limits are found with corresponding configs.
 
 ## Output Directory Configuration
 
@@ -157,13 +163,12 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --a
 
 - `database_path: <path>` - SQLite path for core storage (default: `internal/repo_audit.db`).
 - `output_filename: <filename>.xlsx` - Export results to Excel file `<filename>.xlsx`. Requires `openpyxl`.
-- `repo_limit: <N>` - Crop the loaded `repo_list_file` list to the first N entries before collection - ideal for adhoc quick checks.
 - `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
 - `standard_endpoints_only: true/false` - Use the reduced endpoint set for faster runs. By default, `list_repos.py` collects all repo endpoints.
 - `sort_by_field: <column>` - Sort by repo field. Defaults to last updated (`pushed_at`).
 - `sort_ascending: <true/false>` - Sort order for `sort_by_field`, defaults to `false` / descending
 
-**Examples:**
+**Examples - General Usage:**
 
 ```bash
 # Audit all repos from file
@@ -172,7 +177,23 @@ uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --a
 # Run script against a single repository
 uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --repos ministryofjustice/example-repo
 
+# Run script referencing a specific repo list file
+uv run audit-cli --scripts list_repos --config-file config/audit_config.yaml --repo-file path/to/file.yaml
 ```
+
+**Example - Full Estate Run:**
+
+0. Ensure the desired authentication method is configured correctly e.g. GitHub App - see [docs/setup.md](docs/setup.md) for details
+1. Update the top-level config parameters in the desired config file (e.g. `config/audit_config.yaml`) accordingly
+
+    ```yaml
+    repo_search_scope: "org" # file or org
+    repo_limit: null # null for no limit, or set to an integer to limit
+    repo_batch_size: 100 # max repos collected per batch (1-100)
+    ```
+
+2. Trigger `list_repos`: `uv run audit-cli --scripts list_repos --auth app`
+3. Once script is complete, view the findings in the dashboard: `uv run audit-cli --dashboard`
 
 ### 2. `archive_repos.py` - Find Archive Candidates
 
@@ -474,14 +495,11 @@ Core storage uses a single SQLite table that stores one merged JSON payload per 
 Each repo is assigned risk flags:
 
 - `archived` - Repository is archived (no longer maintained)
+- `empty_repo_no_push_activity` - The repository is empty and has not had any push activity
 - `fork` - Repository is a fork
 - `no_license` - No license file present
 - `public_unprotected_default_branch` - Public repo with unprotected default branch
-- `dependabot_alerts_present` - Dependabot has found vulnerable dependencies
-- `secret_alerts_present` - Secret scanning alerts exist
-- `code_scanning_alerts_present` - Code scanning alerts exist
-- `no_security_policy` - Missing SECURITY.md
-- `no_code_of_conduct` - Missing CODE_OF_CONDUCT
+- `branch_protection_not_enforced` - A branch protection method is in place e.g. rulesets, but is not being actively enforced
 - `no_actions_workflows` - No CI/CD workflows configured
 - `no_detected_tests` - CI/CD exists but no test detection
 - `no_detected_linting` - CI/CD exists but no lint detection
@@ -623,7 +641,7 @@ uv run audit-cli --dashboard
 export GITHUB_TOKEN=ghp_xxxx
 uv run audit-cli --scripts list_repos
 uv run audit-cli --dashboard
-# Filter by "Show only repos with flags"
+# Filter by specific flag e.g. `public_unprotected_default_branch`
 ```
 
 ### Export archive candidate data
