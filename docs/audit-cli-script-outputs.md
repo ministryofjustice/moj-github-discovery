@@ -110,6 +110,8 @@ A concise reference of the fields, headings, and audit flags produced per script
 
 ## github_workflow.py
 
+For persistence details (SQLite tables, stage toggles, scope controls, and dashboard ideas), see [github_workflow_persistence.md](./github_workflow_persistence.md).
+
 ### Posture Report
 
 | Specific Terms / Headings                          | Description                                                                          |
@@ -165,9 +167,22 @@ A concise reference of the fields, headings, and audit flags produced per script
 
 ### Trigger Risk Analysis
 
-| Specific Terms / Headings | Description                                                        |
-| ------------------------- | ------------------------------------------------------------------ |
-| TBD                       | Placeholder until stable trigger-risk output fields are finalised. |
+- `repo` - Repository name containing the analysed workflow(s).
+- `workflow_path` - Path to the workflow file within the repository.
+- `triggers_found` - Comma-separated workflow triggers discovered in the workflow definition.
+- `risky_triggers` - Comma-separated subset of triggers considered higher risk.
+- `risk_level` - Derived risk level classification (`high`, `medium`, `low`, `none`).
+- `has_pull_request_target` - (Boolean) Whether `pull_request_target` trigger is present.
+- `has_issue_comment` - (Boolean) Whether `issue_comment` trigger is present.
+- `has_repository_dispatch` - (Boolean) Whether `repository_dispatch` trigger is present.
+- `has_workflow_dispatch` - (Boolean) Whether `workflow_dispatch` trigger is present.
+- `posture` - Derived posture label (includes `could_not_load` for unreadable workflow file).
+- `total_workflows` - Integer count of workflows assessed in the scope.
+- `high_risk` - Integer count of workflows classified as `high` risk.
+- `medium_risk` - Integer count of workflows classified as `medium` risk.
+- `low_risk` - Integer count of workflows classified as `low` risk.
+- `no_risk` - Integer count of workflows classified as `none` risk.
+- `could_not_load` - Integer count of workflows that could not be parsed or loaded.
 
 ## alert_metrics.py
 

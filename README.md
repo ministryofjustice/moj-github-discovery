@@ -388,7 +388,7 @@ uv run audit-cli --scripts github_workflow [options]
 - All outputs by default are sent to `outputs/github_workflow_posture`
 
 - **Posture Reports:**
-  - Text summary report (`_audit_summary.txt` suffix) summarising base analysis and posture of workflows
+  - Text summary report (`_summary.txt` suffix) summarising base analysis and posture of workflows
   - CSV summary of workflow data for repos analysed  (`_repo_summary.csv` suffix)
   - CSV providing details of workflows per repository analysed (`_workflow_details.csv`)
 - **Actions Analysis:**
@@ -416,7 +416,7 @@ uv run audit-cli --scripts github_workflow --config-file config/audit_config.yam
 uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --repo-file repo_list.yaml --auth app
 
 # Scan only particular repositories (CLI override)
-uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml \ 
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml \
   --repos ministryofjustice/example-repo ministryofjustice/example-repo-2 --auth app
 
 # Scan full org scope (set repo_search_scope: org in config, optionally keep repo_limit for safety)
