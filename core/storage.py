@@ -203,8 +203,14 @@ class SqliteRepoStorage(BaseStorage):
 
     def create_table(self, table_name: str, schema: dict[str, str]) -> None:
         """Create a new table with arbitrary name and schema."""
-        columns = ", ".join(f"{col} {dtype}" for col, dtype in schema.items())
-        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});"
+        if not schema:
+            raise ValueError("schema must contain at least one column")
+
+        def q(identifier: str) -> str:
+            return '"' + identifier.replace('"', '""') + '"'
+
+        columns = ", ".join(f"{q(col)} {dtype}" for col, dtype in schema.items())
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {q(table_name)} ({columns});"
         with self._connect() as conn:
             conn.execute(create_table_sql)
 
@@ -213,10 +219,14 @@ class SqliteRepoStorage(BaseStorage):
         if not rows:
             return  # Nothing to write
 
-        columns = rows[0].keys()
+        def q(identifier: str) -> str:
+            return '"' + identifier.replace('"', '""') + '"'
+
+        columns = list(rows[0].keys())
         placeholders = ", ".join("?" for _ in columns)
         insert_sql = (
-            f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+            f"INSERT OR REPLACE INTO {q(table_name)} ({', '.join(q(c) for c in columns)}) "
+            f"VALUES ({placeholders})"
         )
 
         with self._connect() as conn:
@@ -269,8 +279,14 @@ class SqliteOrgStorage:
 
     def create_table(self, table_name: str, schema: dict[str, str]) -> None:
         """Create a new table with arbitrary name and schema."""
-        columns = ", ".join(f"{col} {dtype}" for col, dtype in schema.items())
-        create_table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns});"
+        if not schema:
+            raise ValueError("schema must contain at least one column")
+
+        def q(identifier: str) -> str:
+            return '"' + identifier.replace('"', '""') + '"'
+
+        columns = ", ".join(f"{q(col)} {dtype}" for col, dtype in schema.items())
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS {q(table_name)} ({columns});"
         with self._connect() as conn:
             conn.execute(create_table_sql)
 
@@ -279,10 +295,14 @@ class SqliteOrgStorage:
         if not rows:
             return  # Nothing to write
 
-        columns = rows[0].keys()
+        def q(identifier: str) -> str:
+            return '"' + identifier.replace('"', '""') + '"'
+
+        columns = list(rows[0].keys())
         placeholders = ", ".join("?" for _ in columns)
         insert_sql = (
-            f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+            f"INSERT OR REPLACE INTO {q(table_name)} ({', '.join(q(c) for c in columns)}) "
+            f"VALUES ({placeholders})"
         )
 
         with self._connect() as conn:

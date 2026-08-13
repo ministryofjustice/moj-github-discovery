@@ -442,12 +442,21 @@ def actions_analysis(
     print(f"Total action references found: {len(all_actions)}")
 
     # Usage Detail to SQLite
-    usage_detail_schema = {col: "TEXT" for col in all_actions[0]}
+    usage_detail_schema = {
+        "repo": "TEXT",
+        "workflow_path": "TEXT",
+        "action_name": "TEXT",
+        "version": "TEXT",
+        "owner": "TEXT",
+        "is_pinned": "INTEGER",
+        "pin_type": "TEXT",
+    }
     storage.create_table("github_actions_usage_detail", usage_detail_schema)
-    storage.write_rows(
-        "github_actions_usage_detail",
-        all_actions,
-    )
+    if all_actions:
+        storage.write_rows(
+            "github_actions_usage_detail",
+            all_actions,
+        )
 
     usage_detail_count = CsvCompiler.write_rows(
         str(action_usage_detail_path),
