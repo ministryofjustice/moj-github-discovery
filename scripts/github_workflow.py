@@ -32,15 +32,17 @@ from core.github_api import (
     check_trigger_risk,
     check_workflow_permissions,
     fetch_repo_file_text,
-    list_org_repos,
 )
 from core.github_client import GitHubHttpClient
 from core.models import RepoActionsPermissionsData, RepoData
 from core.output_paths import OutputPathResolver
-from core.repo_list import load_repo_list_file
+from core.repo_list import resolve_repo_selection
 from core.storage import SqliteRepoStorage
 from core.transforms import parse_actions_from_content
 from core.validation import direct_invocation_guard
+
+section_break = "\n" + ("=" * 80) + "\n"
+sub_section_break = "\n" + ("-" * 80) + "\n"
 
 # --- Workflow file parsing ------------------------------------------------
 
@@ -233,57 +235,6 @@ def write_summary(
 
 
 # --- Stage functions ------------------------------------------------------
-
-
-def resolve_repo_list(
-    repos: list[str] | None,
-    limit: int | None,
-    org: str,
-    client: GitHubHttpClient,
-    config: AuditConfig,
-) -> list[str]:
-    """Stage 1: Resolve the repository list to scan (mandatory).
-
-    Resolution order:
-      1. ``--repos`` CLI arg (explicit list)
-      2. ``repo_list_file`` from the loaded audit config, if that path exists
-      3. ``repo_list.yaml`` in the current working directory, if present
-      4. Fall back to listing the org via the GitHub API
-    """
-    if repos:
-        repo_list = repos[:limit] if limit is not None else repos
-    elif config.repo_list_file and Path(config.repo_list_file).exists():
-        print(
-            f"Using repo list from config: {config.repo_list_file}",
-            file=sys.stderr,
-        )
-        repo_list = load_repo_list_file(config.repo_list_file)
-        if limit is not None:
-            repo_list = repo_list[:limit]
-    elif Path("repo_list.yaml").exists():
-        print(
-            "Using repo_list.yaml from current directory",
-            file=sys.stderr,
-        )
-        repo_list = load_repo_list_file("repo_list.yaml")
-        if limit is not None:
-            repo_list = repo_list[:limit]
-    else:
-        print("Listing org repositories...", file=sys.stderr)
-        try:
-            repo_list = list_org_repos(org, client)
-            if limit is not None:
-                repo_list = repo_list[:limit]
-        except Exception as exc:
-            raise SystemExit(
-                f"Unable to list repos for org '{org}': {exc}. "
-                "Use --repos or --repo-file with repos you can access."
-            )
-
-    if not repo_list:
-        raise SystemExit("No repositories found to scan.")
-    print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
-    return repo_list
 
 
 def collect_baseline(
@@ -880,16 +831,54 @@ def run(
     db_path = resolver.database_path(workflow_config.database_path)
 
     org = config.github_organization
-    limit = workflow_config.repo_limit
+    repo_limit = config.repo_limit
+    repo_file = (
+        config.default_repo_list
+        if kwargs.get("repo_file") is None
+        else kwargs.get("repo_file")
+    )
+    repo_search_scope = config.repo_search_scope
     out_prefix = workflow_config.output_prefix
     resume = workflow_config.use_cache
     repos = kwargs.get("repos", None)
 
+    # GitHub Workflow Config Debug
+    print(section_break, file=sys.stderr)
+    print("github_workflow to be executed with the following config:", file=sys.stderr)
+
+    print(section_break, file=sys.stderr)
+
+    print(f"Database Path: {db_path}", file=sys.stderr)
+    print(f"Repo Search Scope: {repo_search_scope}", file=sys.stderr)
+    print(f"Repo Limit: {config.repo_limit}", file=sys.stderr)
+    if repo_search_scope == "file":
+        print(f"Repo File: {repo_file}", file=sys.stderr)
+    print(f"Use_Cache: {resume}", file=sys.stderr)
+    print(f"Output Dir: {output_dir}", file=sys.stderr)
+    print(f"Output Prefix: {out_prefix}", file=sys.stderr)
+    print(section_break, file=sys.stderr)
+
     client = GitHubHttpClient(auth_method=auth)
-    storage = SqliteRepoStorage(str(db_path))
 
     # Stage 1 - resolve_repo_list. (mandatory)
-    repo_list = resolve_repo_list(repos, limit, org, client, config)
+    try:
+        repo_list = resolve_repo_selection(
+            config,
+            auth,
+            repos=kwargs.get("repos", None),
+            repo_file=kwargs.get("repo_file", None),
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error resolving repo selection: {e}", file=sys.stderr)
+        sys.exit(2)
+    if not repo_list:
+        print(
+            "No repositories found in repo file (after applying any limit).",
+            file=sys.stderr,
+        )
+        return
+
+    storage = SqliteRepoStorage(str(db_path))
 
     # Stage 2 - collect_baseline
     if workflow_config.collect_baseline_data:
@@ -913,6 +902,7 @@ def run(
     else:
         _skip("Stage 5", "gen_posture_reports")
 
+    # TODO: Consolidate the following stages into a single "analysis" stage with sub-toggles, since they all depend on detail_rows and are all analysis of workflow files.
     # Stage 6 - actions_analysis
     if workflow_config.actions_analysis:
         actions_analysis(client, detail_rows, output_dir, storage)

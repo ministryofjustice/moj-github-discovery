@@ -149,14 +149,11 @@ class OrgSecurityPostureConfig(ScriptOutputConfig):
 class WorkflowAuditConfig(ScriptOutputConfig):
     """Per-stage toggles for ``github_workflow.py``."""
 
-    script_name: ClassVar[str] = "github_workflow_posture"
+    script_name: ClassVar[str] = "github_workflow"
 
     database_path: str = "internal/github_workflow_posture.db"  # SQLite cache file for workflow audit data
     output_prefix: str = (
         "github_workflow_audit"  # prefix for output files (suffixes added per stage)
-    )
-    repo_limit: int | None = (
-        400  # max number of repos to audit (for testing) - set to None for no limit
     )
     use_cache: bool = (
         True  # whether to use database cache to skip endpoints already collected
