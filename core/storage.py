@@ -206,6 +206,12 @@ class SqliteRepoStorage(BaseStorage):
         if not schema:
             raise ValueError("schema must contain at least one column")
 
+        allowed_types = {"TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"}
+        for col, dtype in schema.items():
+            base_type = dtype.strip().split()[0].upper()
+            if base_type not in allowed_types:
+                raise ValueError(f"Unsupported SQLite type for column '{col}': {dtype}")
+
         def q(identifier: str) -> str:
             return '"' + identifier.replace('"', '""') + '"'
 
@@ -281,6 +287,12 @@ class SqliteOrgStorage:
         """Create a new table with arbitrary name and schema."""
         if not schema:
             raise ValueError("schema must contain at least one column")
+
+        allowed_types = {"TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"}
+        for col, dtype in schema.items():
+            base_type = dtype.strip().split()[0].upper()
+            if base_type not in allowed_types:
+                raise ValueError(f"Unsupported SQLite type for column '{col}': {dtype}")
 
         def q(identifier: str) -> str:
             return '"' + identifier.replace('"', '""') + '"'
