@@ -8,7 +8,7 @@ IGNORED_POSTURES = {"oidc", "no_cloud_auth_detected", "none", ""}
 
 CSV_FILE = os.environ.get(
     "CREDENTIAL_POSTURE_CSV",
-    "output/github_workflow_posture/credentials_analysis/github_workflow_credential_posture.csv",
+    "output/github_workflow/credentials_analysis/github_workflow_credential_posture.csv",
 )
 
 

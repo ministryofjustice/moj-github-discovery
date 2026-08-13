@@ -370,7 +370,7 @@ uv run audit-cli --scripts github_workflow [options]
 
 **Config Parameters:**
 
-- `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow_posture.db`).
+- `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow.db`).
 - `output_prefix: <filename>` - Output filename prefix, only applies to `gen_posture_reports`.
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
@@ -385,7 +385,7 @@ uv run audit-cli --scripts github_workflow [options]
 
 **Output:**
 
-- All outputs by default are sent to `outputs/github_workflow_posture`
+- All outputs by default are sent to `outputs/github_workflow`
 
 - **Posture Reports:**
   - Text summary report (`_summary.txt` suffix) summarising base analysis and posture of workflows

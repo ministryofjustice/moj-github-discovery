@@ -18,7 +18,7 @@ This reduces repeated GitHub API and workflow-content fetches in multi-stage run
 Configured in `config/audit_config.yaml` under:
 
 - `workflow_audit.database_path`
-- Default: `internal/github_workflow_posture.db`
+- Default: `internal/github_workflow.db`
 
 ## Persisted Tables
 
