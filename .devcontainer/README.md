@@ -14,7 +14,10 @@ It uses the shared Ministry of Justice [devcontainer base image](https://github.
 
 ### Prerequisites
 
-- Docker
+- Docker, or Podman
+  - For Podman users: the CLI method `devcontainer up --docker-path podman` works directly with no extra setup.
+  - To use the badge button below with Podman, set `dev.containers.dockerPath` to `podman` in VS Code settings first.
+
 - Visual Studio Code
   - [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 
@@ -47,7 +50,7 @@ To launch a GitHub Codespace, use the "Code" button on the repo, then the "Codes
 
 ## What's inside
 
-- Base image: [`ghcr.io/ministryofjustice/devcontainer-base:latest`](https://github.com/ministryofjustice/.devcontainer)
+- Base image: [`ghcr.io/ministryofjustice/devcontainer-base:4.2.0`](https://github.com/ministryofjustice/.devcontainer)
 - The shared Ministry of Justice base image, maintained by the Dev Container Community of Practice.
 - Runs as a non-root `vscode` user by design.
 - **Features:**
