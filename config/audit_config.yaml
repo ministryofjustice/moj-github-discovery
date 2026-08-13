@@ -55,11 +55,11 @@ org_security_posture:
 # Script config for github_workflow.py.
 # Stages 2 and 3 collect the base data the later stages depend on,
 # so disabling them only makes sense when a previous run has already
-# populated the SQLite cache (default: github_workflow.db).
-github_workflow:
-  # Optional override; defaults to github_workflow if omitted.
-  output_subdir: "github_workflow"
-  database_path: "internal/github_workflow.db"
+# populated the SQLite cache (default: github_workflow_posture.db).
+workflow_audit:
+  # Optional override; defaults to github_workflow_posture if omitted.
+  output_subdir: "github_workflow_posture"
+  database_path: "internal/github_workflow_posture.db"
   output_prefix: "github_workflow_audit"
   use_cache: true
   # Stages
