@@ -360,6 +360,8 @@ It collects data on:
 
 to identify repositories using Actions, archived repos with workflows, and candidates for disabling Actions.
 
+For persistence details (SQLite tables, stage toggles, and dashboard integration ideas), see [docs/github_workflow_persistence.md](./docs/github_workflow_persistence.md).
+
 **Usage:**
 
 ```bash
@@ -407,12 +409,38 @@ uv run audit-cli --scripts github_workflow [options]
 **Examples:**
 
 ```bash
-# Scan Using Config File and Repo List
+# Scan using config + default repo file scope
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
 
+# Scan using an explicit repo list file (file scope)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --repo-file repo_list.yaml --auth app
 
-# Scan Only Particular Set of Repos
+# Scan only particular repositories (CLI override)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml \ 
+  --repos ministryofjustice/example-repo ministryofjustice/example-repo-2 --auth app
+
+# Scan full org scope (set repo_search_scope: org in config, optionally keep repo_limit for safety)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
+
+# Stage-specific run: actions analysis only (set toggles in config first)
+# collect_baseline_data: true
+# collect_additional_data: true
+# gen_posture_reports: false
+# actions_analysis: true
+# permissions_analysis: false
+# credentials_analysis: false
+# trigger_risk_analysis: false
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
 
 ```
+
+**Scope + Stage Notes:**
+
+- `repo_search_scope: file` uses `default_repo_list` (or `--repo-file` when provided)
+- `repo_search_scope: org` resolves repositories from the org API
+- `repo_limit` applies after scope resolution (`null` for no cap)
+- `--repos` is a direct override for targeted runs
+- Stage toggles live under `workflow_audit` and can be combined for collection-only, analysis-only, or report-only runs
 
 ### 7. `alert_metrics.py` - Assess GitHub Security Alerts
 
