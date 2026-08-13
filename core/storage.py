@@ -126,6 +126,13 @@ class BaseStorage(ABC):
             f"{self.__class__.__name__} does not implement write_rows()"
         )
 
+    @abstractmethod
+    def clear_table(self, table_name: str) -> None:
+        """Delete all rows from an existing table."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement clear_table()"
+        )
+
 
 # ── Concrete implementation ───────────────────────────────────────────
 
@@ -248,6 +255,15 @@ class SqliteRepoStorage(BaseStorage):
             conn.executemany(
                 insert_sql, [tuple(row[col] for col in columns) for row in rows]
             )
+
+    def clear_table(self, table_name: str) -> None:
+        """Delete all rows from an existing table."""
+
+        def q(identifier: str) -> str:
+            return '"' + identifier.replace('"', '""') + '"'
+
+        with self._connect() as conn:
+            conn.execute(f"DELETE FROM {q(table_name)}")
 
 
 class SqliteOrgStorage:

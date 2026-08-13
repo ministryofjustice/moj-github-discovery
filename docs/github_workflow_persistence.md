@@ -18,7 +18,7 @@ This reduces repeated GitHub API and workflow-content fetches in multi-stage run
 Configured in `config/audit_config.yaml` under:
 
 - `workflow_audit.database_path`
-- Default: `internal/github_workflow.db`
+- Default: `internal/github_workflow_posture.db`
 
 ## Persisted Tables
 
@@ -90,11 +90,17 @@ All toggles are in `workflow_audit`.
   - Writes trigger CSV outputs and `triggers` plus `triggers_per_repo` tables.
 - `use_cache`
   - Resume mode for collection stages (skip already-cached endpoint data where possible).
+  - Does not disable analysis stages and does not append historical snapshots.
 
 Notes:
 
 - Stage 4 (row building) always runs. It reads from SQLite and prepares row sets used by later stages.
 - Workflow file fetch/analysis runs once when any of these toggles is enabled: `actions_analysis`, `permissions_analysis`, `credentials_analysis`, `trigger_risk_analysis`.
+- Stage analysis tables are are rebuilt per run (table cleared, then current rows written), so they represent the latest snapshot for the executed scope:
+  - `permissions`
+  - `triggers`
+  - `credentials`
+  - actions summary/detail tables
 
 ## Scope Controls (file vs org)
 

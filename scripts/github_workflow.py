@@ -181,8 +181,9 @@ def _persist_rows(
     schema: dict[str, str],
     rows: list[dict[str, Any]],
 ) -> None:
-    """Create table if needed and write rows when data is available."""
+    """Replace table contents with current stage rows for snapshot-style outputs."""
     storage.create_table(table_name, schema)
+    storage.clear_table(table_name)
     if rows:
         storage.write_rows(table_name, rows)
 
