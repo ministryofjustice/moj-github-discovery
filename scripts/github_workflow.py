@@ -370,21 +370,9 @@ def actions_analysis(
                 "compliance_pct",
             ]
         )
-        empty_usage.to_csv(
-            str(action_usage_summary_path),
-            index=False,
-            lineterminator="\r\n",
-        )
-        empty_owner.to_csv(
-            str(action_owner_summary_path),
-            index=False,
-            lineterminator="\r\n",
-        )
-        empty_pinning.to_csv(
-            str(action_pinning_path),
-            index=False,
-            lineterminator="\r\n",
-        )
+        CsvCompiler.write_dataframe(action_usage_summary_path, empty_usage)
+        CsvCompiler.write_dataframe(action_owner_summary_path, empty_owner)
+        CsvCompiler.write_dataframe(action_pinning_path, empty_pinning)
         print(f"Wrote {action_usage_summary_path} (0 rows)")
         print(f"Wrote {action_owner_summary_path} (0 rows)")
         print(f"Wrote {action_pinning_path} (0 rows)")
@@ -419,11 +407,7 @@ def actions_analysis(
         usage_summary_df.to_dict("records"),
     )
 
-    usage_summary_df.to_csv(
-        str(action_usage_summary_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_usage_summary_path, usage_summary_df)
     print(f"Wrote {action_usage_summary_path} ({len(usage_summary_df)} rows)")
 
     # Owner summary: count references per owner, sort descending.
@@ -444,11 +428,7 @@ def actions_analysis(
         owner_summary_df.to_dict("records"),
     )
 
-    owner_summary_df.to_csv(
-        str(action_owner_summary_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_owner_summary_path, owner_summary_df)
     print(f"Wrote {action_owner_summary_path} ({len(owner_summary_df)} rows)")
 
     print(f"Unique actions: {len(usage_summary_df)}")
@@ -512,11 +492,7 @@ def actions_analysis(
         pinning_df_schema,
         pinning_df.to_dict("records"),
     )
-    pinning_df.to_csv(
-        str(action_pinning_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_pinning_path, pinning_df)
     print(f"Wrote {action_pinning_path} ({len(pinning_df)} rows)")
     print(
         f"Repos with unpinned actions: "
