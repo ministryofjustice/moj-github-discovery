@@ -151,9 +151,7 @@ class WorkflowAuditConfig(ScriptOutputConfig):
 
     script_name: ClassVar[str] = "github_workflow"
 
-    database_path: str = (
-        "internal/github_workflow.db"  # SQLite cache file for workflow audit data
-    )
+    database_path: str = "internal/github_workflow_posture.db"  # SQLite cache file for workflow audit data
     output_prefix: str = (
         "github_workflow_audit"  # prefix for output files (suffixes added per stage)
     )
