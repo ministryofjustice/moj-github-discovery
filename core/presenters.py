@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from core.models import RepoData
+from core.models import RepoActionsPermissionsData, RepoData
 from core.storage import BaseStorage
 
 
@@ -436,3 +436,79 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     )
     summary["org_rulesets_count"] = val_or_no_access(rulesets, "count")
     return summary
+
+
+def workflow_repo_data_to_summary_row(full_name: str, data: RepoData) -> dict[str, Any]:
+    """Map RepoData into github_workflow posture summary row schema."""
+    repo = data.repo_details
+    workflows = data.workflows
+    actions_permissions = data.repo_actions_permissions or RepoActionsPermissionsData()
+    owner, _, repo_name = full_name.partition("/")
+
+    archived = repo.archived if repo else False
+    default_branch = (repo.default_branch if repo else "") or "main"
+    visibility = (repo.visibility if repo else "") or "unknown"
+
+    workflow_count = workflows.count if workflows else 0
+    has_workflows = workflow_count > 0
+    workflow_names = ",".join(
+        sorted(wf.get("name", "") for wf in (workflows.workflows if workflows else []))
+    )
+
+    actions_enabled = actions_permissions.enabled
+    allowed_actions = actions_permissions.allowed_actions or ""
+
+    if archived and has_workflows:
+        posture = "archived_with_workflows"
+    elif archived:
+        posture = "archived_no_workflows"
+    elif has_workflows:
+        posture = "active_with_workflows"
+    else:
+        posture = "active_no_workflows"
+
+    disable_candidate = (archived and has_workflows) or (
+        not has_workflows and actions_enabled is True
+    )
+
+    return {
+        "repo": full_name,
+        "owner": owner,
+        "repo_name": repo_name,
+        "visibility": visibility,
+        "archived": archived,
+        "default_branch": default_branch,
+        "actions_enabled": actions_enabled,
+        "allowed_actions": allowed_actions,
+        "has_workflows": has_workflows,
+        "workflow_count": workflow_count,
+        "workflow_names": workflow_names,
+        "latest_workflow_run": (
+            data.latest_workflow_run.created_at if data.latest_workflow_run else ""
+        )
+        or "",
+        "posture": posture,
+        "disable_candidate": disable_candidate,
+    }
+
+
+def workflow_repo_data_to_detail_rows(
+    full_name: str,
+    data: RepoData,
+) -> list[dict[str, Any]]:
+    """Map RepoData into github_workflow per-workflow detail row schema."""
+    owner, _, repo_name = full_name.partition("/")
+    workflows = data.workflows
+    rows: list[dict[str, Any]] = []
+    for wf in workflows.workflows if workflows else []:
+        rows.append(
+            {
+                "repo": full_name,
+                "owner": owner,
+                "repo_name": repo_name,
+                "workflow_name": wf.get("name", ""),
+                "path": wf.get("path", ""),
+                "state": wf.get("state", ""),
+            }
+        )
+    return rows

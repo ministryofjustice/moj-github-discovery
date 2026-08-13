@@ -4,7 +4,7 @@
 # Global attributes used by all/multiple scripts
 github_organization: "ministryofjustice"
 default_repo_list: "repo_list.yaml"
-repo_search_scope: "org" # file or org
+repo_search_scope: "file" # file or org
 repo_limit: 400 # null for no limit, or set to an integer to limit
 repo_batch_size: 100 # max repos collected per batch (1-100)
 
