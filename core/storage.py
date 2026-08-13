@@ -207,10 +207,19 @@ class SqliteRepoStorage(BaseStorage):
             raise ValueError("schema must contain at least one column")
 
         allowed_types = {"TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"}
+        allowed_suffix_tokens = {"NOT", "NULL", "PRIMARY", "KEY", "UNIQUE"}
         for col, dtype in schema.items():
-            base_type = dtype.strip().split()[0].upper()
+            tokens = dtype.strip().split()
+            if not tokens:
+                raise ValueError(f"Empty SQLite type for column '{col}'")
+            base_type = tokens[0].upper()
             if base_type not in allowed_types:
                 raise ValueError(f"Unsupported SQLite type for column '{col}': {dtype}")
+            for tok in tokens[1:]:
+                if not tok.isidentifier() or tok.upper() not in allowed_suffix_tokens:
+                    raise ValueError(
+                        f"Unsupported SQLite type modifier for column '{col}': {dtype}"
+                    )
 
         def q(identifier: str) -> str:
             return '"' + identifier.replace('"', '""') + '"'
@@ -289,10 +298,19 @@ class SqliteOrgStorage:
             raise ValueError("schema must contain at least one column")
 
         allowed_types = {"TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"}
+        allowed_suffix_tokens = {"NOT", "NULL", "PRIMARY", "KEY", "UNIQUE"}
         for col, dtype in schema.items():
-            base_type = dtype.strip().split()[0].upper()
+            tokens = dtype.strip().split()
+            if not tokens:
+                raise ValueError(f"Empty SQLite type for column '{col}'")
+            base_type = tokens[0].upper()
             if base_type not in allowed_types:
                 raise ValueError(f"Unsupported SQLite type for column '{col}': {dtype}")
+            for tok in tokens[1:]:
+                if not tok.isidentifier() or tok.upper() not in allowed_suffix_tokens:
+                    raise ValueError(
+                        f"Unsupported SQLite type modifier for column '{col}': {dtype}"
+                    )
 
         def q(identifier: str) -> str:
             return '"' + identifier.replace('"', '""') + '"'
