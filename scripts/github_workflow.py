@@ -517,9 +517,9 @@ def permissions_analysis(
     permissions_schema = {
         "repo": "TEXT",
         "workflow_path": "TEXT",
-        "has_explicit_permissions": "BOOLEAN",
+        "has_explicit_permissions": "INTEGER",
         "permissions_value": "TEXT",
-        "has_write_permissions": "BOOLEAN",
+        "has_write_permissions": "INTEGER",
         "finding": "TEXT",
     }
     _persist_rows(storage, "permissions", permissions_schema, all_permissions)
