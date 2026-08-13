@@ -20,6 +20,7 @@ from core.presenters import (
     repo_data_to_list_row,
     workflow_repo_data_to_detail_rows,
     workflow_repo_data_to_summary_row,
+    write_workflow_summary,
 )
 from tests.conftest import MockStorage
 
@@ -306,3 +307,34 @@ class TestWorkflowPresenterRows:
                 "state": "active",
             }
         ]
+
+
+def test_write_workflow_summary_writes_expected_report(tmp_path):
+    report_path = tmp_path / "summary.txt"
+    repo_rows = [
+        {
+            "repo": "org/repo",
+            "archived": False,
+            "has_workflows": True,
+            "workflow_count": 2,
+            "actions_enabled": True,
+            "disable_candidate": False,
+        }
+    ]
+    detail_rows = [
+        {
+            "repo": "org/repo",
+            "path": ".github/workflows/ci.yml",
+        },
+        {
+            "repo": "org/repo",
+            "path": ".github/workflows/release.yml",
+        },
+    ]
+
+    write_workflow_summary(str(report_path), repo_rows, detail_rows)
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "GITHUB ACTIONS WORKFLOW POSTURE - DISCOVERY REPORT" in text
+    assert "Total repositories scanned:" in text
+    assert "Total workflow files found:" in text

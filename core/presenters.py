@@ -6,6 +6,7 @@ dict/list structures consumed by CLI output and dashboard views.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -512,3 +513,94 @@ def workflow_repo_data_to_detail_rows(
             }
         )
     return rows
+
+
+def write_workflow_summary(
+    path: str,
+    repo_rows: list[dict[str, Any]],
+    detail_rows: list[dict[str, Any]],
+) -> None:
+    """Write a human-readable summary report for github_workflow outputs."""
+    total = len(repo_rows)
+    with_wf = [r for r in repo_rows if r.get("has_workflows")]
+    without_wf = [r for r in repo_rows if not r.get("has_workflows")]
+    archived_with = [
+        r for r in repo_rows if r.get("archived") and r.get("has_workflows")
+    ]
+    archived_without = [
+        r for r in repo_rows if r.get("archived") and not r.get("has_workflows")
+    ]
+    active_with = [
+        r for r in repo_rows if not r.get("archived") and r.get("has_workflows")
+    ]
+    active_without = [
+        r for r in repo_rows if not r.get("archived") and not r.get("has_workflows")
+    ]
+    disable_candidates = [r for r in repo_rows if r.get("disable_candidate")]
+
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        "=" * 70,
+        "GITHUB ACTIONS WORKFLOW POSTURE - DISCOVERY REPORT",
+        f"Generated: {now}",
+        "=" * 70,
+        "",
+        "OVERVIEW",
+        "-" * 40,
+        f"  Total repositories scanned:       {total}",
+        f"  Repos using GitHub Actions:       {len(with_wf)} ({len(with_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Repos NOT using GitHub Actions:   {len(without_wf)} ({len(without_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Total workflow files found:       {len(detail_rows)}",
+        "",
+        "BREAKDOWN",
+        "-" * 40,
+        f"  Active repos with workflows:      {len(active_with)}",
+        f"  Active repos without workflows:   {len(active_without)}",
+        f"  Archived repos with workflows:    {len(archived_with)}",
+        f"  Archived repos without workflows: {len(archived_without)}",
+        "",
+        f"  Candidates for disabling Actions: {len(disable_candidates)}",
+        "  (archived repos with workflows + active repos with Actions enabled but no workflow files)",
+        "",
+    ]
+
+    top_repos = sorted(with_wf, key=lambda x: -x.get("workflow_count", 0))[:15]
+    if top_repos:
+        lines.append("TOP REPOSITORIES BY WORKFLOW COUNT")
+        lines.append("-" * 40)
+        for r in top_repos:
+            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
+        lines.append("")
+
+    if archived_with:
+        lines.append("ARCHIVED REPOS WITH WORKFLOWS (DISABLE CANDIDATES)")
+        lines.append("-" * 40)
+        lines.append(
+            "  (Actions should be disabled on archived repos to reduce attack surface)"
+        )
+        lines.append("")
+        for r in archived_with:
+            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
+        lines.append("")
+
+    actions_no_wf = [r for r in active_without if r.get("actions_enabled") is True]
+    if actions_no_wf:
+        lines.append("ACTIVE REPOS: ACTIONS ENABLED BUT NO WORKFLOWS")
+        lines.append("-" * 40)
+        lines.append("  (Consider disabling Actions if not needed)")
+        lines.append("")
+        for r in actions_no_wf[:20]:
+            lines.append(f"  {r['repo']}")
+        if len(actions_no_wf) > 20:
+            lines.append(f"  ... and {len(actions_no_wf) - 20} more")
+        lines.append("")
+
+    lines += ["=" * 70, "END OF REPORT", "=" * 70]
+
+    report = "\n".join(lines)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(report)
+    print(f"Wrote {path}")
+    print()
+    print(report)
