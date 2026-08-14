@@ -1531,24 +1531,58 @@ class OrgActionsEndpoint(BaseOrgEndpoint):
             permissions = self.client.get(f"/orgs/{org}/actions/permissions")
             secrets = self.client.get(f"/orgs/{org}/actions/secrets")
             wf_perms = self.client.get(f"/orgs/{org}/actions/permissions/workflow")
+
+            runner_rows = []
+            if isinstance(runners, dict):
+                runner_rows = [
+                    {
+                        "id": r.get("id"),
+                        "name": r.get("name"),
+                        "os": r.get("os"),
+                        "status": r.get("status"),
+                        "busy": r.get("busy"),
+                        "labels": ", ".join(
+                            label.get("name", "")
+                            for label in (r.get("labels") or [])
+                            if isinstance(label, dict)
+                        ),
+                    }
+                    for r in runners.get("runners", [])
+                ]
+
+            secret_rows = []
+            if isinstance(secrets, dict):
+                secret_rows = [
+                    {
+                        "name": s.get("name"),
+                        "visibility": s.get("visibility"),
+                        "updated_at": s.get("updated_at"),
+                        "created_at": s.get("created_at"),
+                    }
+                    for s in secrets.get("secrets", [])
+                ]
+
             return OrgActionsData(
+                access="ok",
                 self_hosted_runners=runners.get("total_count", 0)
                 if isinstance(runners, dict)
                 else 0,
+                runners=runner_rows,
                 allowed_actions_policy=permissions.get("allowed_actions")
                 if isinstance(permissions, dict)
                 else None,
                 org_secrets_count=secrets.get("total_count", 0)
                 if isinstance(secrets, dict)
                 else 0,
+                org_secrets=secret_rows,
                 default_workflow_permissions=wf_perms.get(
                     "default_workflow_permissions"
                 )
                 if isinstance(wf_perms, dict)
                 else None,
             )
-        except Exception:
-            return OrgActionsData()
+        except Exception as exc:
+            return OrgActionsData(access=str(exc))
 
 
 class OrgWebhooksEndpoint(BaseOrgEndpoint):
@@ -1577,13 +1611,30 @@ class OrgWebhooksEndpoint(BaseOrgEndpoint):
                 )
                 for a in installations
             ]
+            hook_rows = [
+                {
+                    "id": h.get("id"),
+                    "name": h.get("name"),
+                    "active": h.get("active"),
+                    "events": ", ".join(h.get("events", []))
+                    if isinstance(h.get("events"), list)
+                    else "",
+                    "url": h.get("url"),
+                    "config_url": (h.get("config") or {}).get("url"),
+                    "created_at": h.get("created_at"),
+                    "updated_at": h.get("updated_at"),
+                }
+                for h in hooks
+            ]
             return OrgWebhooksData(
+                access="ok",
                 webhooks_count=len(hooks),
+                hooks=hook_rows,
                 installed_apps=app_names,
                 installed_apps_detail=app_details,
             )
-        except Exception:
-            return OrgWebhooksData()
+        except Exception as exc:
+            return OrgWebhooksData(access=str(exc))
 
 
 class OrgRulesetsEndpoint(BaseOrgEndpoint):
@@ -1599,9 +1650,9 @@ class OrgRulesetsEndpoint(BaseOrgEndpoint):
     def fetch(self, org: str) -> OrgRulesetsData:
         try:
             rulesets = self.client.get_paginated(f"/orgs/{org}/rulesets")
-            return OrgRulesetsData(count=len(rulesets), rulesets=rulesets)
-        except Exception:
-            return OrgRulesetsData()
+            return OrgRulesetsData(access="ok", count=len(rulesets), rulesets=rulesets)
+        except Exception as exc:
+            return OrgRulesetsData(access=str(exc))
 
 
 # ── Endpoint registries ───────────────────────────────────────────────

@@ -1334,9 +1334,31 @@ class TestOrgActionsEndpoint:
     def test_fetch(self):
         client = MockHttpClient(
             {
-                "/orgs/o/actions/runners": {"total_count": 2},
+                "/orgs/o/actions/runners": {
+                    "total_count": 2,
+                    "runners": [
+                        {
+                            "id": 10,
+                            "name": "runner-a",
+                            "os": "linux",
+                            "status": "online",
+                            "busy": False,
+                            "labels": [{"name": "self-hosted"}],
+                        }
+                    ],
+                },
                 "/orgs/o/actions/permissions": {"allowed_actions": "selected"},
-                "/orgs/o/actions/secrets": {"total_count": 5},
+                "/orgs/o/actions/secrets": {
+                    "total_count": 5,
+                    "secrets": [
+                        {
+                            "name": "SECRET_A",
+                            "visibility": "all",
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "updated_at": "2026-01-02T00:00:00Z",
+                        }
+                    ],
+                },
                 "/orgs/o/actions/permissions/workflow": {
                     "default_workflow_permissions": "read",
                 },
@@ -1344,9 +1366,12 @@ class TestOrgActionsEndpoint:
         )
         result = OrgActionsEndpoint(client).fetch("o")
         assert isinstance(result, OrgActionsData)
+        assert result.access == "ok"
         assert result.self_hosted_runners == 2
+        assert result.runners[0]["name"] == "runner-a"
         assert result.allowed_actions_policy == "selected"
         assert result.org_secrets_count == 5
+        assert result.org_secrets[0]["name"] == "SECRET_A"
         assert result.default_workflow_permissions == "read"
 
 
@@ -1357,7 +1382,19 @@ class TestOrgWebhooksEndpoint:
     def test_fetch(self):
         client = MockHttpClient(
             {
-                "/orgs/o/hooks": [{"id": 1}, {"id": 2}],
+                "/orgs/o/hooks": [
+                    {
+                        "id": 1,
+                        "name": "web",
+                        "active": True,
+                        "events": ["push"],
+                        "url": "https://api.github.com/hooks/1",
+                        "config": {"url": "https://example.org/webhook"},
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-02T00:00:00Z",
+                    },
+                    {"id": 2},
+                ],
                 "/orgs/o/installations": {
                     "installations": [
                         {"app_slug": "dependabot"},
@@ -1368,7 +1405,11 @@ class TestOrgWebhooksEndpoint:
         )
         result = OrgWebhooksEndpoint(client).fetch("o")
         assert isinstance(result, OrgWebhooksData)
+        assert result.access == "ok"
         assert result.webhooks_count == 2
+        assert len(result.hooks) == 2
+        assert result.hooks[0]["name"] == "web"
+        assert result.hooks[0]["events"] == "push"
         assert result.installed_apps == ["dependabot", "renovate"]
 
     def test_fetch_captures_app_detail(self):
@@ -1411,11 +1452,13 @@ class TestOrgRulesetsEndpoint:
         )
         result = OrgRulesetsEndpoint(client).fetch("o")
         assert isinstance(result, OrgRulesetsData)
+        assert result.access == "ok"
         assert result.count == 2
 
     def test_error_returns_default(self):
         client = MockHttpClient()
         result = OrgRulesetsEndpoint(client).fetch("o")
+        assert result.access != "ok"
         assert result.count == 0
 
 

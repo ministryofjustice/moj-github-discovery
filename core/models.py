@@ -301,9 +301,12 @@ class OrgMembersData(BaseModel):
 class OrgActionsData(BaseModel):
     """Org-level Actions configuration — runners, permissions, secrets."""
 
+    access: str = "ok"
     self_hosted_runners: int = 0
+    runners: list[dict[str, Any]] = Field(default_factory=list)
     allowed_actions_policy: str | None = None
     org_secrets_count: int = 0
+    org_secrets: list[dict[str, Any]] = Field(default_factory=list)
     default_workflow_permissions: str | None = None
 
 
@@ -321,7 +324,9 @@ class InstalledApp(BaseModel):
 class OrgWebhooksData(BaseModel):
     """Org webhooks and installed GitHub Apps."""
 
+    access: str = "ok"
     webhooks_count: int = 0
+    hooks: list[dict[str, Any]] = Field(default_factory=list)
     installed_apps: list[str] = Field(default_factory=list)
     installed_apps_detail: list[InstalledApp] = Field(default_factory=list)
 
@@ -329,6 +334,7 @@ class OrgWebhooksData(BaseModel):
 class OrgRulesetsData(BaseModel):
     """Org-level repository rulesets."""
 
+    access: str = "ok"
     count: int = 0
     rulesets: list[dict[str, Any]] = Field(default_factory=list)
 

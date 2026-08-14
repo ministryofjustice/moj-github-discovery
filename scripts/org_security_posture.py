@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from typing import Any, Literal
@@ -24,18 +25,80 @@ from core.github_api import (
     dependency_supply_chain_summary,
 )
 from core.github_client import GitHubHttpClient
-from core.models import OrgWebhooksData
+from core.models import (
+    OrgActionsData,
+    OrgCodeScanningAlertsData,
+    OrgRulesetsData,
+    OrgSecretScanningAlertsData,
+    OrgWebhooksData,
+)
 from core.output_paths import OutputPathResolver
-from core.presenters import build_org_security_summary
+from core.presenters import (
+    build_org_actions_posture_rows,
+    build_org_ruleset_rows,
+    build_org_security_summary,
+    build_org_settings_rows,
+    build_org_webhook_rows,
+)
 from core.repo_list import load_repo_list_file
 from core.storage import SqliteOrgStorage
 from core.validation import direct_invocation_guard
+
+# Constants
 
 section_break = "\n" + ("=" * 80) + "\n"
 sub_section_break = "\n" + ("-" * 80) + "\n"
 
 WEBHOOKS_TABLE = "org_webhooks"
 GITHUB_APPS_TABLE = "org_github_apps"
+ORG_SETTINGS_TABLE = "org_settings"
+TEAMS_TABLE = "teams"
+OUTSIDE_COLLABORATORS_TABLE = "outside_collaborators"
+TWOFA_DISABLED_TABLE = "twofa_disabled"
+ORG_ACTIONS_RUNNERS_TABLE = "org_actions_runners"
+ORG_ACTIONS_SECRETS_TABLE = "org_actions_secrets"
+ORG_CODE_SCANNING_ALERTS_TABLE = "org_code_scanning_alerts"
+ORG_SECRET_SCANNING_ALERTS_TABLE = "org_secret_scanning_alerts"
+ORG_RULESETS_TABLE = "org_rulesets"
+
+# Keys considered safe to print in full without redaction - i.e. not expected to contain sensitive info and
+# useful for debugging/summary purposes. This is not an exhaustive list of all non-sensitive keys,
+# just a curated subset for quick reference in logs.
+_SAFE_SUMMARY_KEYS = (
+    "org_name",
+    "public_repos",
+    "total_private_repos",
+    "2fa_requirement_enabled",
+    "default_repo_permission",
+    "default_branch",
+    "total_members",
+    "members_without_2fa",
+    "outside_collaborators",
+    "teams_count",
+    "code_scanning_open_alerts",
+    "credential_scanning_open_alerts",
+    "repos_checked_for_supply_chain",
+    "repos_with_sbom",
+    "repos_with_branch_protection",
+    "self_hosted_runners",
+    "allowed_actions_policy",
+    "org_credential_count",
+    "default_workflow_permissions",
+    "org_webhooks_count",
+    "installed_github_apps",
+    "org_rulesets_count",
+)
+
+
+def extract_df(report: dict, *keys: str) -> pd.DataFrame:
+    """Extract a DataFrame from a nested report dict using a sequence of keys."""
+    data = report
+    for key in keys:
+        data = data.get(key, {}) if isinstance(data, dict) else {}
+    if isinstance(data, list):
+        return pd.DataFrame(data)
+    else:
+        return pd.DataFrame()
 
 
 def _load_cache(
@@ -79,19 +142,34 @@ def _persist_webhook_integrations(
         {
             "org": "TEXT NOT NULL",
             "audited_at": "TEXT NOT NULL",
-            "webhooks_count": "INTEGER NOT NULL",
+            "hook_id": "INTEGER",
+            "name": "TEXT",
+            "active": "TEXT",
+            "events": "TEXT",
+            "url": "TEXT",
+            "config_url": "TEXT",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
         },
     )
-    storage.write_rows(
-        WEBHOOKS_TABLE,
-        [
-            {
-                "org": org,
-                "audited_at": audited_at,
-                "webhooks_count": webhooks_data.webhooks_count,
-            }
-        ],
-    )
+    hook_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "hook_id": hook.get("id"),
+            "name": hook.get("name"),
+            "active": str(hook.get("active"))
+            if hook.get("active") is not None
+            else None,
+            "events": hook.get("events"),
+            "url": hook.get("url"),
+            "config_url": hook.get("config_url"),
+            "created_at": hook.get("created_at"),
+            "updated_at": hook.get("updated_at"),
+        }
+        for hook in webhooks_data.hooks
+    ]
+    storage.write_rows(WEBHOOKS_TABLE, hook_rows)
 
     storage.create_table(
         GITHUB_APPS_TABLE,
@@ -138,6 +216,313 @@ def _persist_webhook_integrations(
     storage.write_rows(GITHUB_APPS_TABLE, app_rows)
 
 
+def _persist_actions_posture(
+    org: str,
+    audited_at: str,
+    actions_data: OrgActionsData,
+    storage: SqliteOrgStorage,
+) -> None:
+    """Persist org-level Actions runner and secret details."""
+    storage.create_table(
+        ORG_ACTIONS_RUNNERS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "runner_id": "INTEGER",
+            "name": "TEXT",
+            "os": "TEXT",
+            "status": "TEXT",
+            "busy": "TEXT",
+            "labels": "TEXT",
+        },
+    )
+    runner_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "runner_id": runner.get("id"),
+            "name": runner.get("name"),
+            "os": runner.get("os"),
+            "status": runner.get("status"),
+            "busy": str(runner.get("busy")) if runner.get("busy") is not None else None,
+            "labels": runner.get("labels"),
+        }
+        for runner in actions_data.runners
+    ]
+    storage.write_rows(ORG_ACTIONS_RUNNERS_TABLE, runner_rows)
+
+    storage.create_table(
+        ORG_ACTIONS_SECRETS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "name": "TEXT",
+            "visibility": "TEXT",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+        },
+    )
+    secret_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "name": secret.get("name"),
+            "visibility": secret.get("visibility"),
+            "created_at": secret.get("created_at"),
+            "updated_at": secret.get("updated_at"),
+        }
+        for secret in actions_data.org_secrets
+    ]
+    storage.write_rows(ORG_ACTIONS_SECRETS_TABLE, secret_rows)
+
+
+def _persist_ghas_alerts(
+    org: str,
+    audited_at: str,
+    code_scanning: OrgCodeScanningAlertsData,
+    secret_scanning: OrgSecretScanningAlertsData,
+    storage: SqliteOrgStorage,
+) -> None:
+    """Persist code and secret scanning org-level alert rows."""
+    storage.create_table(
+        ORG_CODE_SCANNING_ALERTS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "rule_id": "TEXT",
+            "severity": "TEXT",
+            "repo": "TEXT",
+            "state": "TEXT",
+        },
+    )
+    code_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "rule_id": alert.get("rule_id"),
+            "severity": alert.get("severity"),
+            "repo": alert.get("repo"),
+            "state": alert.get("state"),
+        }
+        for alert in code_scanning.alerts
+    ]
+    storage.write_rows(ORG_CODE_SCANNING_ALERTS_TABLE, code_rows)
+
+    storage.create_table(
+        ORG_SECRET_SCANNING_ALERTS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "secret_type": "TEXT",
+            "repo": "TEXT",
+            "state": "TEXT",
+            "created_at": "TEXT",
+        },
+    )
+    secret_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "secret_type": alert.get("secret_type"),
+            "repo": alert.get("repo"),
+            "state": alert.get("state"),
+            "created_at": alert.get("created_at"),
+        }
+        for alert in secret_scanning.alerts
+    ]
+    storage.write_rows(ORG_SECRET_SCANNING_ALERTS_TABLE, secret_rows)
+
+
+def _persist_rulesets(
+    org: str,
+    audited_at: str,
+    rulesets_data: OrgRulesetsData,
+    storage: SqliteOrgStorage,
+) -> None:
+    """Persist org ruleset details when available."""
+    storage.create_table(
+        ORG_RULESETS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "ruleset_id": "INTEGER",
+            "name": "TEXT",
+            "target": "TEXT",
+            "enforcement": "TEXT",
+            "raw_json": "TEXT",
+        },
+    )
+    ruleset_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "ruleset_id": ruleset.get("id"),
+            "name": ruleset.get("name"),
+            "target": ruleset.get("target"),
+            "enforcement": ruleset.get("enforcement"),
+            "raw_json": json.dumps(ruleset, default=str),
+        }
+        for ruleset in rulesets_data.rulesets
+    ]
+    storage.write_rows(ORG_RULESETS_TABLE, ruleset_rows)
+
+
+def _persist_org_settings_entities(
+    org: str,
+    audited_at: str,
+    org_overview: dict[str, Any],
+    org_settings: dict[str, Any],
+    storage: SqliteOrgStorage,
+) -> None:
+    """Persist key org posture entities used by dashboard/querying."""
+    storage.create_table(
+        ORG_SETTINGS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "setting_name": "TEXT NOT NULL",
+            "setting_value": "TEXT",
+        },
+    )
+
+    setting_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "name",
+            "setting_value": str(org_overview.get("name")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "description",
+            "setting_value": str(org_overview.get("description")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "public_repo_count",
+            "setting_value": str(org_overview.get("public_repos")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "private_repo_count",
+            "setting_value": str(org_overview.get("total_private_repos")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "created_at",
+            "setting_value": str(org_overview.get("created_at")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "updated_at",
+            "setting_value": str(org_overview.get("updated_at")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "two_factor_requirement_enabled",
+            "setting_value": str(org_overview.get("two_factor_requirement_enabled")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "default_repository_permission",
+            "setting_value": str(org_overview.get("default_repository_permission")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "default_branch",
+            "setting_value": str(org_overview.get("default_repository_branch")),
+        },
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "setting_name": "web_commit_signoff_required",
+            "setting_value": str(org_overview.get("web_commit_signoff_required")),
+        },
+    ]
+    storage.write_rows(
+        ORG_SETTINGS_TABLE,
+        setting_rows,
+    )
+
+    storage.create_table(
+        TEAMS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "team_name": "TEXT",
+            "slug": "TEXT",
+            "description": "TEXT",
+            "privacy": "TEXT",
+            "notification_setting": "TEXT",
+            "permission": "TEXT",
+            "parent": "TEXT",
+        },
+    )
+    team_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "team_name": team.get("name"),
+            "slug": team.get("slug"),
+            "description": team.get("description"),
+            "privacy": team.get("privacy"),
+            "notification_setting": team.get("notification_setting"),
+            "permission": team.get("permission"),
+            "parent": team.get("parent"),
+        }
+        for team in org_settings.get("teams", [])
+    ]
+    storage.write_rows(TEAMS_TABLE, team_rows)
+
+    storage.create_table(
+        OUTSIDE_COLLABORATORS_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "login": "TEXT",
+            "id": "INTEGER",
+        },
+    )
+    collaborator_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "login": collaborator.get("login"),
+            "id": collaborator.get("id"),
+        }
+        for collaborator in org_settings.get("outside_collaborators", {}).get(
+            "collaborators", []
+        )
+    ]
+    storage.write_rows(OUTSIDE_COLLABORATORS_TABLE, collaborator_rows)
+
+    storage.create_table(
+        TWOFA_DISABLED_TABLE,
+        {
+            "org": "TEXT NOT NULL",
+            "audited_at": "TEXT NOT NULL",
+            "login": "TEXT",
+        },
+    )
+    twofa_rows = [
+        {
+            "org": org,
+            "audited_at": audited_at,
+            "login": member.get("login"),
+        }
+        for member in org_settings.get("members_without_2fa", {}).get("members", [])
+    ]
+    storage.write_rows(TWOFA_DISABLED_TABLE, twofa_rows)
+
+
 def run_full_audit(
     org: str,
     auth_method: Literal["pat", "app", "cli"] | None = None,
@@ -180,29 +565,14 @@ def run_full_audit(
     report["org_overview"] = org_data["org_overview"].data
 
     print("\n Collecting High-Level Org Settings...", file=sys.stderr)
-    report["1_org_settings"] = {
-        "total_members": {
-            "access": "ok",
-            "total_members": org_data["org_members"].total_members,
-            "public_members": None,
-        },
-        "members_without_2fa": {
-            "access": "ok",
-            "members": [
-                {"login": login}
-                for login in org_data["org_members"].members_without_2fa
-            ],
-        },
-        "outside_collaborators": {
-            "access": org_data["org_outside_collaborators"].access,
-            "collaborators": org_data["org_outside_collaborators"].collaborators,
-        },
-        "teams": org_data["org_teams"].teams,
-        "audit_log_recent": {
-            "access": org_data["org_audit_log"].access,
-            "entries": org_data["org_audit_log"].entries,
-        },
-    }
+    report["1_org_settings"] = build_org_settings_rows(org_data)
+    _persist_org_settings_entities(
+        org=org,
+        audited_at=audited_at,
+        org_overview=report["org_overview"],
+        org_settings=report["1_org_settings"],
+        storage=cache_storage,
+    )
 
     print("\n Collecting GHAS Alert Data...", file=sys.stderr)
 
@@ -210,6 +580,13 @@ def run_full_audit(
         "code_scanning": org_data["org_code_scanning_alerts"].model_dump(),
         "secret_scanning": org_data["org_secret_scanning_alerts"].model_dump(),
     }
+    _persist_ghas_alerts(
+        org=org,
+        audited_at=audited_at,
+        code_scanning=org_data["org_code_scanning_alerts"],
+        secret_scanning=org_data["org_secret_scanning_alerts"],
+        storage=cache_storage,
+    )
 
     print("\n Collecting Dependency Supply Chain Data...", file=sys.stderr)
 
@@ -234,29 +611,14 @@ def run_full_audit(
     print("\n Collecting GitHub Actions Posture Data...", file=sys.stderr)
 
     report["4_actions_posture"] = {
-        "details": {
-            "runners": {
-                "access": "ok",
-                "total_count": org_data["org_actions"].self_hosted_runners,
-                "runners": [],
-            },
-            "actions_permissions": {
-                "access": "ok",
-                "allowed_actions": org_data["org_actions"].allowed_actions_policy,
-            },
-            "credential_inventory": {
-                "access": "ok",
-                "total_count": org_data["org_actions"].org_secrets_count,
-                "names": [],
-            },
-            "default_workflow_permissions": {
-                "access": "ok",
-                "default_workflow_permissions": org_data[
-                    "org_actions"
-                ].default_workflow_permissions,
-            },
-        }
+        "details": build_org_actions_posture_rows(org_data["org_actions"])
     }
+    _persist_actions_posture(
+        org=org,
+        audited_at=audited_at,
+        actions_data=org_data["org_actions"],
+        storage=cache_storage,
+    )
 
     print("\n Collecting Webhooks and GitHub Apps Data...", file=sys.stderr)
     _persist_webhook_integrations(
@@ -267,40 +629,32 @@ def run_full_audit(
     )
 
     report["5_webhooks_integrations"] = {
-        "details": {
-            "webhooks": {
-                "access": "ok",
-                "count": org_data["org_webhooks"].webhooks_count,
-                "hooks": [],
-            },
-            "github_apps": {
-                "access": "ok",
-                "total_count": len(org_data["org_webhooks"].installed_apps_detail),
-                "apps": [
-                    {
-                        "app_slug": app.app_slug,
-                        "installation_id": app.installation_id,
-                        "repository_selection": app.repository_selection,
-                        "permissions": ", ".join(
-                            f"{scope}:{level}"
-                            for scope, level in sorted(app.permissions.items())
-                        ),
-                    }
-                    for app in org_data["org_webhooks"].installed_apps_detail
-                ],
-            },
-        }
+        "details": build_org_webhook_rows(org_data["org_webhooks"]),
     }
 
     print("\n Collecting Organization Rulesets Data...", file=sys.stderr)
 
-    report["6_rulesets"] = {
-        "details": {
-            "access": "ok",
-            "count": org_data["org_rulesets"].count,
-            "rulesets": org_data["org_rulesets"].rulesets,
-        }
-    }
+    report["6_rulesets"] = {"details": build_org_ruleset_rows(org_data["org_rulesets"])}
+    _persist_rulesets(
+        org=org,
+        audited_at=audited_at,
+        rulesets_data=org_data["org_rulesets"],
+        storage=cache_storage,
+    )
+
+    rulesets_access = org_data["org_rulesets"].access
+    if rulesets_access != "ok":
+        print(
+            "WARNING: org rulesets could not be listed. "
+            f"Access detail: {rulesets_access}",
+            file=sys.stderr,
+        )
+        if auth_method == "app":
+            print(
+                "  GitHub App auth may lack required org rulesets read permission. "
+                "Try PAT auth with appropriate org admin scope if rulesets are expected.",
+                file=sys.stderr,
+            )
 
     return report
 
@@ -308,59 +662,42 @@ def run_full_audit(
 def write_excel(report: dict[str, Any], path: str) -> None:
     """Write the org security posture report to an Excel file."""
     summary = build_org_security_summary(report)
-    summary_df = pd.DataFrame(list(summary.items()), columns=["metric", "value"])
-
-    overview = report.get("org_overview", {})
-    overview_df = pd.DataFrame(list(overview.items()), columns=["setting", "value"])
-
-    org_settings = report.get("1_org_settings", {})
-    mfa_df = pd.DataFrame(
-        org_settings.get("members_without_2fa", {}).get("members", [])
-    )
-    collabs_df = pd.DataFrame(
-        org_settings.get("outside_collaborators", {}).get("collaborators", [])
-    )
-    teams_df = pd.DataFrame(org_settings.get("teams", []))
-
-    ghas = report.get("2_ghas_alerts", {})
-    code_df = pd.DataFrame(ghas.get("code_scanning", {}).get("alerts", []))
-    secret_df = pd.DataFrame(ghas.get("secret_scanning", {}).get("alerts", []))
-
-    deps_df = pd.DataFrame(
-        report.get("3_dependency_supply_chain", {})
-        .get("summary", {})
-        .get("details", [])
-    )
-
-    actions = report.get("4_actions_posture", {}).get("details", {})
-    runners_df = pd.DataFrame(actions.get("runners", {}).get("runners", []))
-    credentials_df = pd.DataFrame(
-        {"credential_name": actions.get("credential_inventory", {}).get("names", [])}
-    )
-
-    webhooks = report.get("5_webhooks_integrations", {}).get("details", {})
-    hooks_df = pd.DataFrame(webhooks.get("webhooks", {}).get("hooks", []))
-    apps_df = pd.DataFrame(webhooks.get("github_apps", {}).get("apps", []))
-
-    rulesets_df = pd.DataFrame(
-        report.get("6_rulesets", {}).get("details", {}).get("rulesets", [])
-    )
 
     # Map sheet names to DataFrames for writing
     sheet_to_df_mapping = {
-        "Summary": summary_df,
-        "Org Settings": overview_df,
-        "2FA Disabled": mfa_df,
-        "Outside Collaborators": collabs_df,
-        "Teams": teams_df,
-        "Code Scanning Alerts": code_df,
-        "Secret Scanning Alerts": secret_df,
-        "Supply Chain": deps_df,
-        "Runners": runners_df,
-        "Org Credentials": credentials_df,
-        "Webhooks": hooks_df,
-        "GitHub Apps": apps_df,
-        "Rulesets": rulesets_df,
+        "Summary": pd.DataFrame(list(summary.items()), columns=["metric", "value"]),
+        "Org Settings": pd.DataFrame(
+            list(report.get("org_overview", {}).items()), columns=["setting", "value"]
+        ),
+        "2FA Disabled": extract_df(
+            report, "1_org_settings", "members_without_2fa", "members"
+        ),
+        "Outside Collaborators": extract_df(
+            report, "1_org_settings", "outside_collaborators", "collaborators"
+        ),
+        "Teams": extract_df(report, "1_org_settings", "teams"),
+        "Code Scanning Alerts": extract_df(
+            report, "2_ghas_alerts", "code_scanning", "alerts"
+        ),
+        "Secret Scanning Alerts": extract_df(
+            report, "2_ghas_alerts", "secret_scanning", "alerts"
+        ),
+        "Dependency Supply Chain": extract_df(
+            report, "3_dependency_supply_chain", "summary", "details"
+        ),
+        "Self-Hosted Runners": extract_df(
+            report, "4_actions_posture", "details", "runners", "runners"
+        ),
+        "Org Secrets": extract_df(
+            report, "4_actions_posture", "details", "credential_inventory", "names"
+        ),
+        "Webhooks": extract_df(
+            report, "5_webhooks_integrations", "details", "webhooks", "hooks"
+        ),
+        "GitHub Apps": extract_df(
+            report, "5_webhooks_integrations", "details", "github_apps", "apps"
+        ),
+        "Rulesets": extract_df(report, "6_rulesets", "details", "rulesets"),
     }
 
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
@@ -439,34 +776,6 @@ def run(
 
     print("\n Audit complete. Building summary...", file=sys.stderr)
     summary = build_org_security_summary(report)
-
-    # Keys considered safe to print in full without redaction - i.e. not expected to contain sensitive info and
-    # useful for debugging/summary purposes. This is not an exhaustive list of all non-sensitive keys,
-    # just a curated subset for quick reference in logs.
-    _SAFE_SUMMARY_KEYS = (
-        "org_name",
-        "public_repos",
-        "total_private_repos",
-        "2fa_requirement_enabled",
-        "default_repo_permission",
-        "default_branch",
-        "total_members",
-        "members_without_2fa",
-        "outside_collaborators",
-        "teams_count",
-        "code_scanning_open_alerts",
-        "credential_scanning_open_alerts",
-        "repos_checked_for_supply_chain",
-        "repos_with_sbom",
-        "repos_with_branch_protection",
-        "self_hosted_runners",
-        "allowed_actions_policy",
-        "org_credential_count",
-        "default_workflow_permissions",
-        "org_webhooks_count",
-        "installed_github_apps",
-        "org_rulesets_count",
-    )
 
     print("\n=== SECURITY POSTURE SUMMARY ===", file=sys.stderr)
     for key in _SAFE_SUMMARY_KEYS:
