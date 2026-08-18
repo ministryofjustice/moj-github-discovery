@@ -434,13 +434,33 @@ uv run audit-cli --scripts github_workflow --config-file config/audit_config.yam
 
 ```
 
-**Scope + Stage Notes:**
+**Example - Full Estate Run:**
 
-- `repo_search_scope: file` uses `default_repo_list` (or `--repo-file` when provided)
-- `repo_search_scope: org` resolves repositories from the org API
-- `repo_limit` applies after scope resolution (`null` for no cap)
-- `--repos` is a direct override for targeted runs
-- Stage toggles live under `workflow_audit` and can be combined for collection-only, analysis-only, or report-only runs
+0. Ensure the desired authentication method is configured correctly e.g. GitHub App - see [docs/setup.md](docs/setup.md) for details
+1. Update the top-level config parameters in the desired config file (e.g. `config/audit_config.yaml`) accordingly
+
+    ```yaml
+    repo_search_scope: "org" # file or org
+    repo_limit: null # null for no limit, or set to an integer to limit
+    repo_batch_size: 100 # max repos collected per batch (1-100)
+    ```
+
+2. Set any / all desired analysis stages under `workflow_audit` in the config file:
+
+    ```yaml
+    workflow_audit:
+    # Stages
+    collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory
+    collect_additional_data: true  # stage 3 - Actions permissions + latest run
+    gen_posture_reports: true      # stage 4/5 - posture CSVs + summary.txt
+    actions_analysis: true         # stage 6 - action usage + SHA pinning
+    permissions_analysis: true     # stage 7 - workflow permissions
+    credentials_analysis: true     # stage 8 - OIDC vs long-lived
+    trigger_risk_analysis: true    # stage 9 - trigger config risk
+    ```
+
+3. Trigger `list_repos`: `uv run audit-cli --scripts github_workflow --auth app`
+4. Once script is complete, view the findings in the dashboard: `uv run audit-cli --dashboard`
 
 ### 7. `alert_metrics.py` - Assess GitHub Security Alerts
 
