@@ -103,6 +103,14 @@ class MockStorage(BaseStorage):
     def delete(self, full_name: str) -> None:
         self._data.pop(full_name, None)
 
+    def create_table(self, table_name: str, schema: dict[str, str]) -> None:
+        # In-memory test storage does not persist arbitrary tables.
+        return
+
+    def write_rows(self, table_name: str, rows: list[dict]) -> None:
+        # In-memory test storage does not persist arbitrary tables.
+        return
+
 
 # ── Convenience fixtures ──────────────────────────────────────────────
 

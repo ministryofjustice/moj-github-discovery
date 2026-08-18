@@ -10,7 +10,6 @@ Not yet in core (local implementations retained):
     - Workflow YAML uses: parsing
 """
 
-import argparse
 import os
 import sqlite3
 import sys
@@ -237,7 +236,9 @@ def write_summary(
 
 
 def resolve_repo_list(
-    args: argparse.Namespace,
+    repos: list[str] | None,
+    limit: int | None,
+    org: str,
     client: GitHubHttpClient,
     config: AuditConfig,
 ) -> list[str]:
@@ -249,27 +250,33 @@ def resolve_repo_list(
       3. ``repo_list.yaml`` in the current working directory, if present
       4. Fall back to listing the org via the GitHub API
     """
-    if args.repos:
-        repo_list = args.repos[: args.limit]
+    if repos:
+        repo_list = repos[:limit] if limit is not None else repos
     elif config.repo_list_file and Path(config.repo_list_file).exists():
         print(
             f"Using repo list from config: {config.repo_list_file}",
             file=sys.stderr,
         )
-        repo_list = load_repo_list_file(config.repo_list_file)[: args.limit]
+        repo_list = load_repo_list_file(config.repo_list_file)
+        if limit is not None:
+            repo_list = repo_list[:limit]
     elif Path("repo_list.yaml").exists():
         print(
             "Using repo_list.yaml from current directory",
             file=sys.stderr,
         )
-        repo_list = load_repo_list_file("repo_list.yaml")[: args.limit]
+        repo_list = load_repo_list_file("repo_list.yaml")
+        if limit is not None:
+            repo_list = repo_list[:limit]
     else:
         print("Listing org repositories...", file=sys.stderr)
         try:
-            repo_list = list_org_repos(args.org, client)[: args.limit]
+            repo_list = list_org_repos(org, client)
+            if limit is not None:
+                repo_list = repo_list[:limit]
         except Exception as exc:
             raise SystemExit(
-                f"Unable to list repos for org '{args.org}': {exc}. "
+                f"Unable to list repos for org '{org}': {exc}. "
                 "Use --repos or --repo-file with repos you can access."
             )
 
@@ -280,10 +287,10 @@ def resolve_repo_list(
 
 
 def collect_baseline(
-    args: argparse.Namespace,
     client: GitHubHttpClient,
     repo_list: list[str],
     storage: SqliteRepoStorage,
+    resume: bool,
 ) -> None:
     """Stage 2: Collect baseline repo metadata and workflow inventory."""
     collector = RepoCollector(
@@ -295,14 +302,14 @@ def collect_baseline(
         ],
     )
     primary_org = repo_list[0].split("/", 1)[0]
-    collector.collect(primary_org, repos=repo_list, resume=args.resume)
+    collector.collect(primary_org, repos=repo_list, resume=resume)
 
 
 def collect_additional(
-    args: argparse.Namespace,
     client: GitHubHttpClient,
     repo_list: list[str],
     storage: SqliteRepoStorage,
+    resume: bool,
 ) -> None:
     """Stage 3: Collect remaining workflow posture data."""
     primary_org = repo_list[0].split("/", 1)[0]
@@ -313,7 +320,7 @@ def collect_additional(
         client=client,
         endpoints=[RepoActionsPermissionsEndpoint],
     )
-    collector.collect(primary_org, repos=repo_list, resume=args.resume)
+    collector.collect(primary_org, repos=repo_list, resume=resume)
 
     # 3.2 Collect latest workflow run only for repos that have workflows
     repos_with_workflows: list[str] = []
@@ -330,7 +337,7 @@ def collect_additional(
         collector.collect(
             primary_org,
             repos=repos_with_workflows,
-            resume=args.resume,
+            resume=resume,
         )
 
 
@@ -366,13 +373,13 @@ def build_rows(
 
 
 def write_posture_reports(
-    args: argparse.Namespace,
+    output_prefix: str,
     repo_rows: list[dict[str, Any]],
     detail_rows: list[dict[str, Any]],
     output_dir: Path,
 ) -> None:
     """Stage 5: Write repo-level posture reports."""
-    prefix = args.out_prefix
+    prefix = output_prefix
     repo_summary_path = output_dir / f"{prefix}_repo_summary.csv"
     workflow_details_path = output_dir / f"{prefix}_workflow_details.csv"
     summary_text_report_path = output_dir / f"{prefix}_summary.txt"
@@ -393,7 +400,10 @@ def write_posture_reports(
 
 
 def actions_analysis(
-    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
+    client: GitHubHttpClient,
+    detail_rows: list[dict[str, Any]],
+    output_dir: Path,
+    storage: SqliteRepoStorage,
 ) -> None:
     """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
     # 6. Analyse most common GitHub Actions used
@@ -430,6 +440,23 @@ def actions_analysis(
             time.sleep(0.1)
 
     print(f"Total action references found: {len(all_actions)}")
+
+    # Usage Detail to SQLite
+    usage_detail_schema = {
+        "repo": "TEXT",
+        "workflow_path": "TEXT",
+        "action_name": "TEXT",
+        "version": "TEXT",
+        "owner": "TEXT",
+        "is_pinned": "INTEGER",
+        "pin_type": "TEXT",
+    }
+    storage.create_table("github_actions_usage_detail", usage_detail_schema)
+    if all_actions:
+        storage.write_rows(
+            "github_actions_usage_detail",
+            all_actions,
+        )
 
     usage_detail_count = CsvCompiler.write_rows(
         str(action_usage_detail_path),
@@ -490,6 +517,14 @@ def actions_analysis(
         .sort_values(by="times_used", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
+
+    usage_summary_df_schema = {col: "TEXT" for col in usage_summary_df.columns}
+    storage.create_table("github_actions_usage_summary", usage_summary_df_schema)
+    storage.write_rows(
+        "github_actions_usage_summary",
+        usage_summary_df.to_dict("records"),
+    )
+
     usage_summary_df.to_csv(
         str(action_usage_summary_path),
         index=False,
@@ -505,6 +540,15 @@ def actions_analysis(
         .sort_values(by="actions_referenced", ascending=False, kind="stable")
         .reset_index(drop=True)
     )
+
+    # Owner Summary to SQLite
+    owner_summary_df_schema = {col: "TEXT" for col in owner_summary_df.columns}
+    storage.create_table("github_actions_owner_summary", owner_summary_df_schema)
+    storage.write_rows(
+        "github_actions_owner_summary",
+        owner_summary_df.to_dict("records"),
+    )
+
     owner_summary_df.to_csv(
         str(action_owner_summary_path),
         index=False,
@@ -565,6 +609,13 @@ def actions_analysis(
             by="unpinned", ascending=False, kind="stable"
         ).reset_index(drop=True)
 
+    # Per-repo pinning compliance to SQLite
+    pinning_df_schema = {col: "TEXT" for col in pinning_df.columns}
+    storage.create_table("github_actions_pinning_per_repo", pinning_df_schema)
+    storage.write_rows(
+        "github_actions_pinning_per_repo",
+        pinning_df.to_dict("records"),
+    )
     pinning_df.to_csv(
         str(action_pinning_path),
         index=False,
@@ -828,32 +879,27 @@ def run(
     output_dir = resolver.script_output_dir(workflow_config.output_subdir)
     db_path = resolver.database_path(workflow_config.database_path)
 
-    # TODO: refactor to avoid argparse.Namespace and just pass workflow_config and repo_list directly to stages
-    # that need them, rather than packing into Namespace with some args from CLI and some from config.
-
-    args = argparse.Namespace(
-        org=config.github_organization,
-        limit=workflow_config.repo_limit,
-        out_prefix=workflow_config.output_prefix,
-        resume=workflow_config.use_cache,
-        repos=kwargs.get("repos", None),
-    )
+    org = config.github_organization
+    limit = workflow_config.repo_limit
+    out_prefix = workflow_config.output_prefix
+    resume = workflow_config.use_cache
+    repos = kwargs.get("repos", None)
 
     client = GitHubHttpClient(auth_method=auth)
     storage = SqliteRepoStorage(str(db_path))
 
-    # Stage 1 - resolve_repo_lis. (mandatory)
-    repo_list = resolve_repo_list(args, client, config)
+    # Stage 1 - resolve_repo_list. (mandatory)
+    repo_list = resolve_repo_list(repos, limit, org, client, config)
 
     # Stage 2 - collect_baseline
     if workflow_config.collect_baseline_data:
-        collect_baseline(args, client, repo_list, storage)
+        collect_baseline(client, repo_list, storage, resume)
     else:
         _skip("Stage 2", "collect_baseline_data")
 
     # Stage 3 - collect_additional
     if workflow_config.collect_additional_data:
-        collect_additional(args, client, repo_list, storage)
+        collect_additional(client, repo_list, storage, resume)
     else:
         _skip("Stage 3", "collect_additional_data")
 
@@ -863,13 +909,13 @@ def run(
 
     # Stage 5 - write_posture_reports
     if workflow_config.gen_posture_reports:
-        write_posture_reports(args, repo_rows, detail_rows, output_dir)
+        write_posture_reports(out_prefix, repo_rows, detail_rows, output_dir)
     else:
         _skip("Stage 5", "gen_posture_reports")
 
     # Stage 6 - actions_analysis
     if workflow_config.actions_analysis:
-        actions_analysis(client, detail_rows, output_dir)
+        actions_analysis(client, detail_rows, output_dir, storage)
     else:
         _skip("Stage 6", "actions_analysis")
 
