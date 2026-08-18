@@ -111,6 +111,10 @@ class MockStorage(BaseStorage):
         # In-memory test storage does not persist arbitrary tables.
         return
 
+    def clear_table(self, table_name: str) -> None:
+        # In-memory test storage does not persist arbitrary tables.
+        return
+
 
 # ── Convenience fixtures ──────────────────────────────────────────────
 

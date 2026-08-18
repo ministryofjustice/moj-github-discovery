@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from core.compiler import (
@@ -388,6 +389,28 @@ class TestCsvCompiler:
         assert content[0] == "a,b,c"
         assert content[1] == "1,2,"
         assert content[2] == ",3,4"
+
+    def test_write_dataframe_empty_writes_headers(self, tmp_path):
+        output = tmp_path / "df_empty.csv"
+        df = pd.DataFrame(columns=["a", "b"])
+
+        written = CsvCompiler.write_dataframe(output, df)
+        content = output.read_text(encoding="utf-8")
+
+        assert written == 0
+        assert content == "a,b\n"
+
+    def test_write_dataframe_non_empty_writes_rows(self, tmp_path):
+        output = tmp_path / "df_non_empty.csv"
+        df = pd.DataFrame([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
+
+        written = CsvCompiler.write_dataframe(output, df)
+        content = output.read_text(encoding="utf-8").splitlines()
+
+        assert written == 2
+        assert content[0] == "a,b"
+        assert content[1] == "1,2"
+        assert content[2] == "3,4"
 
 
 # ── ExcelCompiler ────────────────────────────────────────────────────

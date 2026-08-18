@@ -6,11 +6,12 @@ dict/list structures consumed by CLI output and dashboard views.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 
-from core.models import RepoData
+from core.models import RepoActionsPermissionsData, RepoData
 from core.storage import BaseStorage
 
 
@@ -436,3 +437,170 @@ def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     )
     summary["org_rulesets_count"] = val_or_no_access(rulesets, "count")
     return summary
+
+
+def workflow_repo_data_to_summary_row(full_name: str, data: RepoData) -> dict[str, Any]:
+    """Map RepoData into github_workflow posture summary row schema."""
+    repo = data.repo_details
+    workflows = data.workflows
+    actions_permissions = data.repo_actions_permissions or RepoActionsPermissionsData()
+    owner, _, repo_name = full_name.partition("/")
+
+    archived = repo.archived if repo else False
+    default_branch = (repo.default_branch if repo else "") or "main"
+    visibility = (repo.visibility if repo else "") or "unknown"
+
+    workflow_count = workflows.count if workflows else 0
+    has_workflows = workflow_count > 0
+    workflow_names = ",".join(
+        sorted(wf.get("name", "") for wf in (workflows.workflows if workflows else []))
+    )
+
+    actions_enabled = actions_permissions.enabled
+    allowed_actions = actions_permissions.allowed_actions or ""
+
+    if archived and has_workflows:
+        posture = "archived_with_workflows"
+    elif archived:
+        posture = "archived_no_workflows"
+    elif has_workflows:
+        posture = "active_with_workflows"
+    else:
+        posture = "active_no_workflows"
+
+    disable_candidate = (archived and has_workflows) or (
+        not has_workflows and actions_enabled is True
+    )
+
+    return {
+        "repo": full_name,
+        "owner": owner,
+        "repo_name": repo_name,
+        "visibility": visibility,
+        "archived": archived,
+        "default_branch": default_branch,
+        "actions_enabled": actions_enabled,
+        "allowed_actions": allowed_actions,
+        "has_workflows": has_workflows,
+        "workflow_count": workflow_count,
+        "workflow_names": workflow_names,
+        "latest_workflow_run": (
+            data.latest_workflow_run.created_at if data.latest_workflow_run else ""
+        )
+        or "",
+        "posture": posture,
+        "disable_candidate": disable_candidate,
+    }
+
+
+def workflow_repo_data_to_detail_rows(
+    full_name: str,
+    data: RepoData,
+) -> list[dict[str, Any]]:
+    """Map RepoData into github_workflow per-workflow detail row schema."""
+    owner, _, repo_name = full_name.partition("/")
+    workflows = data.workflows
+    rows: list[dict[str, Any]] = []
+    for wf in workflows.workflows if workflows else []:
+        rows.append(
+            {
+                "repo": full_name,
+                "owner": owner,
+                "repo_name": repo_name,
+                "workflow_name": wf.get("name", ""),
+                "path": wf.get("path", ""),
+                "state": wf.get("state", ""),
+            }
+        )
+    return rows
+
+
+def write_workflow_summary(
+    path: str,
+    repo_rows: list[dict[str, Any]],
+    detail_rows: list[dict[str, Any]],
+) -> None:
+    """Write a human-readable summary report for github_workflow outputs."""
+    total = len(repo_rows)
+    with_wf = [r for r in repo_rows if r.get("has_workflows")]
+    without_wf = [r for r in repo_rows if not r.get("has_workflows")]
+    archived_with = [
+        r for r in repo_rows if r.get("archived") and r.get("has_workflows")
+    ]
+    archived_without = [
+        r for r in repo_rows if r.get("archived") and not r.get("has_workflows")
+    ]
+    active_with = [
+        r for r in repo_rows if not r.get("archived") and r.get("has_workflows")
+    ]
+    active_without = [
+        r for r in repo_rows if not r.get("archived") and not r.get("has_workflows")
+    ]
+    disable_candidates = [r for r in repo_rows if r.get("disable_candidate")]
+
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        "=" * 70,
+        "GITHUB ACTIONS WORKFLOW POSTURE - DISCOVERY REPORT",
+        f"Generated: {now}",
+        "=" * 70,
+        "",
+        "OVERVIEW",
+        "-" * 40,
+        f"  Total repositories scanned:       {total}",
+        f"  Repos using GitHub Actions:       {len(with_wf)} ({len(with_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Repos NOT using GitHub Actions:   {len(without_wf)} ({len(without_wf) / max(total, 1) * 100:.1f}%)",
+        f"  Total workflow files found:       {len(detail_rows)}",
+        "",
+        "BREAKDOWN",
+        "-" * 40,
+        f"  Active repos with workflows:      {len(active_with)}",
+        f"  Active repos without workflows:   {len(active_without)}",
+        f"  Archived repos with workflows:    {len(archived_with)}",
+        f"  Archived repos without workflows: {len(archived_without)}",
+        "",
+        f"  Candidates for disabling Actions: {len(disable_candidates)}",
+        "  (archived repos with workflows + active repos with Actions enabled but no workflow files)",
+        "",
+    ]
+
+    top_repos = sorted(with_wf, key=lambda x: -x.get("workflow_count", 0))[:15]
+    if top_repos:
+        lines.append("TOP REPOSITORIES BY WORKFLOW COUNT")
+        lines.append("-" * 40)
+        for r in top_repos:
+            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
+        lines.append("")
+
+    if archived_with:
+        lines.append("ARCHIVED REPOS WITH WORKFLOWS (DISABLE CANDIDATES)")
+        lines.append("-" * 40)
+        lines.append(
+            "  (Actions should be disabled on archived repos to reduce attack surface)"
+        )
+        lines.append("")
+        for r in archived_with:
+            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
+        lines.append("")
+
+    actions_no_wf = [r for r in active_without if r.get("actions_enabled") is True]
+    if actions_no_wf:
+        lines.append("ACTIVE REPOS: ACTIONS ENABLED BUT NO WORKFLOWS")
+        lines.append("-" * 40)
+        lines.append("  (Consider disabling Actions if not needed)")
+        lines.append("")
+        for r in actions_no_wf[:20]:
+            lines.append(f"  {r['repo']}")
+        if len(actions_no_wf) > 20:
+            lines.append(f"  ... and {len(actions_no_wf) - 20} more")
+        lines.append("")
+
+    lines += ["=" * 70, "END OF REPORT", "=" * 70]
+
+    report = "\n".join(lines)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(report)
+    print(f"Wrote {path}")
+    print()
+    print(report)

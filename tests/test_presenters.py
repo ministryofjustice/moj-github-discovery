@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import pandas as pd
 
-from core.models import DefaultBranchCommitData, ForkTemplateData, RepoData, RepoDetails
+from core.models import (
+    DefaultBranchCommitData,
+    ForkTemplateData,
+    LatestWorkflowRunData,
+    RepoActionsPermissionsData,
+    RepoData,
+    RepoDetails,
+    WorkflowData,
+)
 from core.presenters import (
     build_dashboard_dataframe,
     build_repo_summary_table,
     repo_data_to_dashboard_row,
     repo_data_to_list_row,
+    workflow_repo_data_to_detail_rows,
+    workflow_repo_data_to_summary_row,
+    write_workflow_summary,
 )
 from tests.conftest import MockStorage
 
@@ -232,3 +243,98 @@ class TestPresenterFallbacks:
         assert row["last_push_activity"] == "N/A"
         assert row["last_pushed_at"] == "N/A"
         assert "empty_repo_no_push_activity" in row["flags"]
+
+
+class TestWorkflowPresenterRows:
+    def test_workflow_repo_data_to_summary_row(self):
+        data = RepoData(
+            repo_details=RepoDetails(
+                full_name="org/repo",
+                name="repo",
+                archived=False,
+                default_branch="main",
+                visibility="private",
+            ),
+            workflows=WorkflowData(
+                count=2,
+                workflows=[
+                    {"name": "CI", "path": ".github/workflows/ci.yml"},
+                    {"name": "Release", "path": ".github/workflows/release.yml"},
+                ],
+            ),
+            repo_actions_permissions=RepoActionsPermissionsData(
+                enabled=True,
+                allowed_actions="selected",
+            ),
+            latest_workflow_run=LatestWorkflowRunData(
+                created_at="2026-08-13T00:00:00Z",
+            ),
+        )
+
+        row = workflow_repo_data_to_summary_row("org/repo", data)
+
+        assert row["repo"] == "org/repo"
+        assert row["owner"] == "org"
+        assert row["repo_name"] == "repo"
+        assert row["workflow_count"] == 2
+        assert row["has_workflows"] is True
+        assert row["posture"] == "active_with_workflows"
+        assert row["latest_workflow_run"] == "2026-08-13T00:00:00Z"
+
+    def test_workflow_repo_data_to_detail_rows(self):
+        data = RepoData(
+            workflows=WorkflowData(
+                count=1,
+                workflows=[
+                    {
+                        "name": "CI",
+                        "path": ".github/workflows/ci.yml",
+                        "state": "active",
+                    }
+                ],
+            )
+        )
+
+        rows = workflow_repo_data_to_detail_rows("org/repo", data)
+
+        assert rows == [
+            {
+                "repo": "org/repo",
+                "owner": "org",
+                "repo_name": "repo",
+                "workflow_name": "CI",
+                "path": ".github/workflows/ci.yml",
+                "state": "active",
+            }
+        ]
+
+
+def test_write_workflow_summary_writes_expected_report(tmp_path):
+    report_path = tmp_path / "summary.txt"
+    repo_rows = [
+        {
+            "repo": "org/repo",
+            "archived": False,
+            "has_workflows": True,
+            "workflow_count": 2,
+            "actions_enabled": True,
+            "disable_candidate": False,
+        }
+    ]
+    detail_rows = [
+        {
+            "repo": "org/repo",
+            "path": ".github/workflows/ci.yml",
+        },
+        {
+            "repo": "org/repo",
+            "path": ".github/workflows/release.yml",
+        },
+    ]
+
+    write_workflow_summary(str(report_path), repo_rows, detail_rows)
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "GITHUB ACTIONS WORKFLOW POSTURE - DISCOVERY REPORT" in text
+    assert "Total repositories scanned:" in text
+    assert "Total workflow files found:" in text

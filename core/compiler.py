@@ -276,6 +276,24 @@ class CsvCompiler(BaseCompiler):
         print(f"Wrote {output_path}", file=sys.stderr)
 
     @staticmethod
+    def write_dataframe(
+        output_path: str | Path,
+        dataframe: pd.DataFrame,
+        *,
+        lineterminator: str = "\r\n",
+    ) -> int:
+        """Write a DataFrame to CSV and return the number of data rows written.
+
+        Empty DataFrames still write headers when columns are present.
+        """
+        dataframe.to_csv(
+            str(output_path),
+            index=False,
+            lineterminator=lineterminator,
+        )
+        return len(dataframe)
+
+    @staticmethod
     def write_rows(
         output_path: str | Path,
         rows: list[dict[str, Any]],

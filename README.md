@@ -360,6 +360,8 @@ It collects data on:
 
 to identify repositories using Actions, archived repos with workflows, and candidates for disabling Actions.
 
+For persistence details (SQLite tables, stage toggles, and dashboard integration ideas), see [docs/github_workflow_persistence.md](./docs/github_workflow_persistence.md).
+
 **Usage:**
 
 ```bash
@@ -368,7 +370,7 @@ uv run audit-cli --scripts github_workflow [options]
 
 **Config Parameters:**
 
-- `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow_posture.db`).
+- `database_path: <path>` - SQLite path for core storage (default: `internal/github_workflow.db`).
 - `output_prefix: <filename>` - Output filename prefix, only applies to `gen_posture_reports`.
 - `repo_limit: null/<int>` - Limit the number of repositories loaded from the organisation. `null` for full estate.
 - `use_cache: true/false` - Resume mode: skip endpoint calls for data already present in the SQLite cache (still fetches missing data).
@@ -383,10 +385,10 @@ uv run audit-cli --scripts github_workflow [options]
 
 **Output:**
 
-- All outputs by default are sent to `outputs/github_workflow_posture`
+- All outputs by default are sent to `outputs/github_workflow`
 
 - **Posture Reports:**
-  - Text summary report (`_audit_summary.txt` suffix) summarising base analysis and posture of workflows
+  - Text summary report (`_summary.txt` suffix) summarising base analysis and posture of workflows
   - CSV summary of workflow data for repos analysed  (`_repo_summary.csv` suffix)
   - CSV providing details of workflows per repository analysed (`_workflow_details.csv`)
 - **Actions Analysis:**
@@ -407,12 +409,58 @@ uv run audit-cli --scripts github_workflow [options]
 **Examples:**
 
 ```bash
-# Scan Using Config File and Repo List
+# Scan using config + default repo file scope
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
 
+# Scan using an explicit repo list file (file scope)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --repo-file repo_list.yaml --auth app
 
-# Scan Only Particular Set of Repos
+# Scan only particular repositories (CLI override)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml \
+  --repos ministryofjustice/example-repo ministryofjustice/example-repo-2 --auth app
+
+# Scan full org scope (set repo_search_scope: org in config, optionally keep repo_limit for safety)
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
+
+# Stage-specific run: actions analysis only (set toggles in config first)
+# collect_baseline_data: true
+# collect_additional_data: true
+# gen_posture_reports: false
+# actions_analysis: true
+# permissions_analysis: false
+# credentials_analysis: false
+# trigger_risk_analysis: false
+uv run audit-cli --scripts github_workflow --config-file config/audit_config.yaml --auth app
 
 ```
+
+**Example - Full Estate Run:**
+
+0. Ensure the desired authentication method is configured correctly e.g. GitHub App - see [docs/setup.md](docs/setup.md) for details
+1. Update the top-level config parameters in the desired config file (e.g. `config/audit_config.yaml`) accordingly
+
+    ```yaml
+    repo_search_scope: "org" # file or org
+    repo_limit: null # null for no limit, or set to an integer to limit
+    repo_batch_size: 100 # max repos collected per batch (1-100)
+    ```
+
+2. Set any / all desired analysis stages under `workflow_audit` in the config file:
+
+    ```yaml
+    workflow_audit:
+    # Stages
+    collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory
+    collect_additional_data: true  # stage 3 - Actions permissions + latest run
+    gen_posture_reports: true      # stage 4/5 - posture CSVs + summary.txt
+    actions_analysis: true         # stage 6 - action usage + SHA pinning
+    permissions_analysis: true     # stage 7 - workflow permissions
+    credentials_analysis: true     # stage 8 - OIDC vs long-lived
+    trigger_risk_analysis: true    # stage 9 - trigger config risk
+    ```
+
+3. Trigger `list_repos`: `uv run audit-cli --scripts github_workflow --auth app`
+4. Once script is complete, view the findings in the dashboard: `uv run audit-cli --dashboard`
 
 ### 7. `alert_metrics.py` - Assess GitHub Security Alerts
 

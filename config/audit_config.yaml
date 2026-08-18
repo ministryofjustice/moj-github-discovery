@@ -5,7 +5,7 @@
 github_organization: "ministryofjustice"
 default_repo_list: "repo_list.yaml"
 repo_search_scope: "file" # file or org
-repo_limit: null # null for no limit, or set to an integer to limit
+repo_limit: 400 # null for no limit, or set to an integer to limit
 repo_batch_size: 100 # max repos collected per batch (1-100)
 
 
@@ -61,7 +61,6 @@ workflow_audit:
   output_subdir: "github_workflow_posture"
   database_path: "internal/github_workflow_posture.db"
   output_prefix: "github_workflow_audit"
-  repo_limit: 400 # set to null for no limit
   use_cache: true
   # Stages
   collect_baseline_data: true    # stage 2 - repo metadata + workflow inventory

@@ -146,6 +146,25 @@ class TestSqliteRepoStorageDelete:
         storage.delete("org/nonexistent")  # should not raise
 
 
+class TestSqliteRepoStorageTableOps:
+    def test_clear_table_removes_all_rows(self, storage):
+        schema = {"repo": "TEXT", "finding": "TEXT"}
+        storage.create_table("permissions", schema)
+        storage.write_rows(
+            "permissions",
+            [
+                {"repo": "org/repo-1", "finding": "compliant"},
+                {"repo": "org/repo-2", "finding": "write-all"},
+            ],
+        )
+
+        storage.clear_table("permissions")
+
+        with sqlite3.connect(storage.db_path) as conn:
+            remaining = conn.execute("SELECT COUNT(*) FROM permissions").fetchone()[0]
+        assert remaining == 0
+
+
 class TestSqliteRepoStorageJsonRoundtrip:
     def test_complex_data_roundtrip(self, storage):
         """All nested Pydantic models should survive serialization."""

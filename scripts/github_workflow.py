@@ -14,7 +14,6 @@ import os
 import sqlite3
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,268 +21,174 @@ import pandas as pd
 
 from core.collector import RepoCollector
 from core.compiler import CsvCompiler
-from core.config import AuditConfig
+from core.config import AuditConfig, WorkflowAuditConfig
 from core.github_api import (
     LatestWorkflowRunEndpoint,
     RepoActionsPermissionsEndpoint,
     RepoDetailsEndpoint,
     WorkflowsEndpoint,
-    check_credential_posture,
-    check_trigger_risk,
-    check_workflow_permissions,
     fetch_repo_file_text,
-    list_org_repos,
 )
 from core.github_client import GitHubHttpClient
-from core.models import RepoActionsPermissionsData, RepoData
+from core.models import RepoData
 from core.output_paths import OutputPathResolver
-from core.repo_list import load_repo_list_file
+from core.presenters import (
+    workflow_repo_data_to_detail_rows,
+    workflow_repo_data_to_summary_row,
+    write_workflow_summary,
+)
+from core.repo_list import resolve_repo_selection
 from core.storage import SqliteRepoStorage
-from core.transforms import parse_actions_from_content
+from core.transforms import (
+    CredentialPostureTransform,
+    TriggerRiskTransform,
+    parse_actions_from_content,
+    parse_workflow_permissions,
+)
 from core.validation import direct_invocation_guard
 
+section_break = "\n" + ("=" * 80) + "\n"
+sub_section_break = "\n" + ("-" * 80) + "\n"
+
+
 # --- Workflow file parsing ------------------------------------------------
-
-
-def parse_actions_from_workflow(
+def fetch_workflow_file_contents(
     client: GitHubHttpClient,
-    owner: str,
-    repo_name: str,
-    workflow_path: str,
-) -> list[dict[str, Any]]:
-    """Fetch a workflow file and extract all ``uses:`` references."""
-    content = fetch_repo_file_text(client, owner, repo_name, workflow_path)
-    if content is None:
-        print(
-            f"  Skipped {repo_name}/{workflow_path}: could not load file",
-            file=sys.stderr,
+    detail_rows: list[dict[str, Any]],
+) -> dict[str, str | None]:
+    """
+    fetch the text content of all workflow files in the detail_rows list for downstream analysis.
+    Returns a dict mapping workflow file paths to their text content (or None if the file could not be fetched).
+    """
+    contents: dict[str, str | None] = {}
+    for i, row in enumerate(detail_rows):
+        key = f"{row['repo']}/{row['path']}"
+        contents[key] = fetch_repo_file_text(
+            client,
+            row["owner"],
+            row["repo_name"],
+            row["path"],
         )
-        return []
-    return parse_actions_from_content(content, repo_name, workflow_path)
+        if (i + 1) % 100 == 0:
+            print(f"  Fetched {i + 1} / {len(detail_rows)} workflow files")
+            time.sleep(0.1)
+    return contents
 
 
-# --- Row builders ---------------------------------------------------------
-
-
-def build_repo_row(full_name: str, data: RepoData) -> dict[str, Any]:
-    """Build a posture summary row from collected RepoData."""
-    repo = data.repo_details
-    workflows = data.workflows
-    actions_permissions = data.repo_actions_permissions or RepoActionsPermissionsData()
-    owner, _, repo_name = full_name.partition("/")
-
-    archived = repo.archived if repo else False
-    default_branch = (repo.default_branch if repo else "") or "main"
-    visibility = (repo.visibility if repo else "") or "unknown"
-
-    workflow_count = workflows.count if workflows else 0
-    has_workflows = workflow_count > 0
-    workflow_names = ",".join(
-        sorted(wf.get("name", "") for wf in (workflows.workflows if workflows else []))
-    )
-
-    actions_enabled = actions_permissions.enabled
-    allowed_actions = actions_permissions.allowed_actions or ""
-
-    if archived and has_workflows:
-        posture = "archived_with_workflows"
-    elif archived:
-        posture = "archived_no_workflows"
-    elif has_workflows:
-        posture = "active_with_workflows"
-    else:
-        posture = "active_no_workflows"
-
-    disable_candidate = (archived and has_workflows) or (
-        not has_workflows and actions_enabled is True
-    )
-
-    return {
-        "repo": full_name,
-        "owner": owner,
-        "repo_name": repo_name,
-        "visibility": visibility,
-        "archived": archived,
-        "default_branch": default_branch,
-        "actions_enabled": actions_enabled,
-        "allowed_actions": allowed_actions,
-        "has_workflows": has_workflows,
-        "workflow_count": workflow_count,
-        "workflow_names": workflow_names,
-        "latest_workflow_run": (
-            data.latest_workflow_run.created_at if data.latest_workflow_run else ""
-        )
-        or "",
-        "posture": posture,
-        "disable_candidate": disable_candidate,
+def analyse_workflow_file_contents(
+    detail_rows: list[dict[str, Any]],
+    workflow_contents: dict[str, str | None],
+    config: WorkflowAuditConfig,
+) -> dict[str, list[dict[str, Any]]]:
+    """Single-pass through each workflow's file contents, extracting data based on enabled analysis stages"""
+    workflow_analysis_results: dict[str, list[dict[str, Any]]] = {
+        "actions": [],
+        "permissions": [],
+        "credentials": [],
+        "triggers": [],
     }
 
+    total = len(detail_rows)
+    for i, row in enumerate(detail_rows):
+        key = f"{row['repo']}/{row['path']}"
+        content = workflow_contents.get(key)
 
-def build_workflow_detail_rows(full_name: str, data: RepoData) -> list[dict[str, Any]]:
-    """Build one detail row per workflow from WorkflowData."""
-    owner, _, repo_name = full_name.partition("/")
-    workflows = data.workflows
-    rows: list[dict[str, Any]] = []
-    for wf in workflows.workflows if workflows else []:
-        rows.append(
-            {
-                "repo": full_name,
-                "owner": owner,
-                "repo_name": repo_name,
-                "workflow_name": wf.get("name", ""),
-                "path": wf.get("path", ""),
-                "state": wf.get("state", ""),
-            }
-        )
-    return rows
+        if (i + 1) % 100 == 0:
+            print(f"  Analysed {i + 1} / {total} workflow files", file=sys.stderr)
+        if content is None:
+            print(f"No content for {key}, skipping analysis", file=sys.stderr)
+            # Emit explicit could_not_load rows for enabled analyses.
+            if config.permissions_analysis:
+                workflow_analysis_results["permissions"].append(
+                    {
+                        "repo": row["repo"],
+                        "workflow_path": row["path"],
+                        "has_explicit_permissions": False,
+                        "permissions_value": "",
+                        "has_write_permissions": False,
+                        "finding": "could_not_load",
+                    }
+                )
+            if config.credentials_analysis:
+                workflow_analysis_results["credentials"].append(
+                    {
+                        "repo": row["repo"],
+                        "workflow_path": row["path"],
+                        "has_id_token_write": False,
+                        "oidc_actions": "",
+                        "credential_secrets_found": "",
+                        "posture": "could_not_load",
+                    }
+                )
+            if config.trigger_risk_analysis:
+                workflow_analysis_results["triggers"].append(
+                    {
+                        "repo": row["repo"],
+                        "workflow_path": row["path"],
+                        "triggers_found": "",
+                        "risky_triggers": "",
+                        "risk_level": "",
+                        "has_pull_request_target": False,
+                        "has_issue_comment": False,
+                        "has_repository_dispatch": False,
+                        "has_workflow_dispatch": False,
+                        "posture": "could_not_load",
+                    }
+                )
+            continue
+
+        # Actions Analysis
+        if config.actions_analysis:
+            workflow_analysis_results["actions"].extend(
+                parse_actions_from_content(content, row["repo"], row["path"])
+            )
+        if config.permissions_analysis:
+            parsed_permissions = parse_workflow_permissions(content)
+            workflow_analysis_results["permissions"].append(
+                {
+                    "repo": row["repo"],
+                    "workflow_path": row["path"],
+                    **parsed_permissions,
+                }
+            )
+        if config.credentials_analysis:
+            parsed_cred = CredentialPostureTransform.assess_credential_posture(content)
+            workflow_analysis_results["credentials"].append(
+                {
+                    "repo": row["repo"],
+                    "workflow_path": row["path"],
+                    **parsed_cred,
+                }
+            )
+        if config.trigger_risk_analysis:
+            parsed_trigger = TriggerRiskTransform.assess_trigger_risk(content)
+            workflow_analysis_results["triggers"].append(
+                {
+                    "repo": row["repo"],
+                    "workflow_path": row["path"],
+                    **parsed_trigger,
+                }
+            )
+    return workflow_analysis_results
 
 
 # --- Summary report -------------------------------------------------------
 
 
-def write_summary(
-    path: str,
-    repo_rows: list[dict[str, Any]],
-    detail_rows: list[dict[str, Any]],
+def _persist_rows(
+    storage: SqliteRepoStorage,
+    table_name: str,
+    schema: dict[str, str],
+    rows: list[dict[str, Any]],
 ) -> None:
-    """Write a human-readable summary report."""
-    total = len(repo_rows)
-    with_wf = [r for r in repo_rows if r.get("has_workflows")]
-    without_wf = [r for r in repo_rows if not r.get("has_workflows")]
-    archived_with = [
-        r for r in repo_rows if r.get("archived") and r.get("has_workflows")
-    ]
-    archived_without = [
-        r for r in repo_rows if r.get("archived") and not r.get("has_workflows")
-    ]
-    active_with = [
-        r for r in repo_rows if not r.get("archived") and r.get("has_workflows")
-    ]
-    active_without = [
-        r for r in repo_rows if not r.get("archived") and not r.get("has_workflows")
-    ]
-    disable_candidates = [r for r in repo_rows if r.get("disable_candidate")]
-
-    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-
-    lines = [
-        "=" * 70,
-        "GITHUB ACTIONS WORKFLOW POSTURE - DISCOVERY REPORT",
-        f"Generated: {now}",
-        "=" * 70,
-        "",
-        "OVERVIEW",
-        "-" * 40,
-        f"  Total repositories scanned:       {total}",
-        f"  Repos using GitHub Actions:       {len(with_wf)} ({len(with_wf) / max(total, 1) * 100:.1f}%)",
-        f"  Repos NOT using GitHub Actions:   {len(without_wf)} ({len(without_wf) / max(total, 1) * 100:.1f}%)",
-        f"  Total workflow files found:       {len(detail_rows)}",
-        "",
-        "BREAKDOWN",
-        "-" * 40,
-        f"  Active repos with workflows:      {len(active_with)}",
-        f"  Active repos without workflows:   {len(active_without)}",
-        f"  Archived repos with workflows:    {len(archived_with)}",
-        f"  Archived repos without workflows: {len(archived_without)}",
-        "",
-        f"  Candidates for disabling Actions: {len(disable_candidates)}",
-        "  (archived repos with workflows + active repos with Actions enabled but no workflow files)",
-        "",
-    ]
-
-    top_repos = sorted(with_wf, key=lambda x: -x.get("workflow_count", 0))[:15]
-    if top_repos:
-        lines.append("TOP REPOSITORIES BY WORKFLOW COUNT")
-        lines.append("-" * 40)
-        for r in top_repos:
-            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
-        lines.append("")
-
-    if archived_with:
-        lines.append("ARCHIVED REPOS WITH WORKFLOWS (DISABLE CANDIDATES)")
-        lines.append("-" * 40)
-        lines.append(
-            "  (Actions should be disabled on archived repos to reduce attack surface)"
-        )
-        lines.append("")
-        for r in archived_with:
-            lines.append(f"  {r['repo']:<55} workflows={r.get('workflow_count', 0):>3}")
-        lines.append("")
-
-    actions_no_wf = [r for r in active_without if r.get("actions_enabled") is True]
-    if actions_no_wf:
-        lines.append("ACTIVE REPOS: ACTIONS ENABLED BUT NO WORKFLOWS")
-        lines.append("-" * 40)
-        lines.append("  (Consider disabling Actions if not needed)")
-        lines.append("")
-        for r in actions_no_wf[:20]:
-            lines.append(f"  {r['repo']}")
-        if len(actions_no_wf) > 20:
-            lines.append(f"  ... and {len(actions_no_wf) - 20} more")
-        lines.append("")
-
-    lines += ["=" * 70, "END OF REPORT", "=" * 70]
-
-    report = "\n".join(lines)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(report)
-    print(f"Wrote {path}")
-    print()
-    print(report)
+    """Replace table contents with current stage rows for snapshot-style outputs."""
+    storage.create_table(table_name, schema)
+    storage.clear_table(table_name)
+    if rows:
+        storage.write_rows(table_name, rows)
 
 
 # --- Stage functions ------------------------------------------------------
-
-
-def resolve_repo_list(
-    repos: list[str] | None,
-    limit: int | None,
-    org: str,
-    client: GitHubHttpClient,
-    config: AuditConfig,
-) -> list[str]:
-    """Stage 1: Resolve the repository list to scan (mandatory).
-
-    Resolution order:
-      1. ``--repos`` CLI arg (explicit list)
-      2. ``repo_list_file`` from the loaded audit config, if that path exists
-      3. ``repo_list.yaml`` in the current working directory, if present
-      4. Fall back to listing the org via the GitHub API
-    """
-    if repos:
-        repo_list = repos[:limit] if limit is not None else repos
-    elif config.repo_list_file and Path(config.repo_list_file).exists():
-        print(
-            f"Using repo list from config: {config.repo_list_file}",
-            file=sys.stderr,
-        )
-        repo_list = load_repo_list_file(config.repo_list_file)
-        if limit is not None:
-            repo_list = repo_list[:limit]
-    elif Path("repo_list.yaml").exists():
-        print(
-            "Using repo_list.yaml from current directory",
-            file=sys.stderr,
-        )
-        repo_list = load_repo_list_file("repo_list.yaml")
-        if limit is not None:
-            repo_list = repo_list[:limit]
-    else:
-        print("Listing org repositories...", file=sys.stderr)
-        try:
-            repo_list = list_org_repos(org, client)
-            if limit is not None:
-                repo_list = repo_list[:limit]
-        except Exception as exc:
-            raise SystemExit(
-                f"Unable to list repos for org '{org}': {exc}. "
-                "Use --repos or --repo-file with repos you can access."
-            )
-
-    if not repo_list:
-        raise SystemExit("No repositories found to scan.")
-    print(f"Found {len(repo_list)} repositories to scan.", file=sys.stderr)
-    return repo_list
 
 
 def collect_baseline(
@@ -367,8 +272,8 @@ def build_rows(
                 file=sys.stderr,
             )
             data = RepoData()
-        repo_rows.append(build_repo_row(full_name, data))
-        detail_rows.extend(build_workflow_detail_rows(full_name, data))
+        repo_rows.append(workflow_repo_data_to_summary_row(full_name, data))
+        detail_rows.extend(workflow_repo_data_to_detail_rows(full_name, data))
     return repo_rows, detail_rows
 
 
@@ -388,7 +293,7 @@ def write_posture_reports(
     details_count = CsvCompiler.write_rows(str(workflow_details_path), detail_rows)
     print(f"Wrote {repo_summary_path} ({repo_count} rows)")
     print(f"Wrote {workflow_details_path} ({details_count} rows)")
-    write_summary(str(summary_text_report_path), repo_rows, detail_rows)
+    write_workflow_summary(str(summary_text_report_path), repo_rows, detail_rows)
 
     total = len(repo_rows)
     print(
@@ -400,12 +305,11 @@ def write_posture_reports(
 
 
 def actions_analysis(
-    client: GitHubHttpClient,
-    detail_rows: list[dict[str, Any]],
+    all_actions: list[dict[str, Any]],
     output_dir: Path,
     storage: SqliteRepoStorage,
 ) -> None:
-    """Stage 6: Parse workflow files to inventory action usage + SHA pinning."""
+    """Stage 6: Write action usage + SHA pinning outputs from analysed rows."""
     # 6. Analyse most common GitHub Actions used
     print("\n--- Analysing actions used across workflows ---")
 
@@ -429,16 +333,6 @@ def actions_analysis(
         actions_analysis_path_base / "github_actions_unpinned_detail.csv"
     )
 
-    all_actions: list[dict[str, Any]] = []
-    for i, row in enumerate(detail_rows):
-        actions = parse_actions_from_workflow(
-            client, row["owner"], row["repo_name"], row["path"]
-        )
-        all_actions.extend(actions)
-        if (i + 1) % 100 == 0:
-            print(f"  Parsed {i + 1} / {len(detail_rows)} workflow files")
-            time.sleep(0.1)
-
     print(f"Total action references found: {len(all_actions)}")
 
     # Usage Detail to SQLite
@@ -451,12 +345,12 @@ def actions_analysis(
         "is_pinned": "INTEGER",
         "pin_type": "TEXT",
     }
-    storage.create_table("github_actions_usage_detail", usage_detail_schema)
-    if all_actions:
-        storage.write_rows(
-            "github_actions_usage_detail",
-            all_actions,
-        )
+    _persist_rows(
+        storage,
+        "github_actions_usage_detail",
+        usage_detail_schema,
+        all_actions,
+    )
 
     usage_detail_count = CsvCompiler.write_rows(
         str(action_usage_detail_path),
@@ -477,21 +371,9 @@ def actions_analysis(
                 "compliance_pct",
             ]
         )
-        empty_usage.to_csv(
-            str(action_usage_summary_path),
-            index=False,
-            lineterminator="\r\n",
-        )
-        empty_owner.to_csv(
-            str(action_owner_summary_path),
-            index=False,
-            lineterminator="\r\n",
-        )
-        empty_pinning.to_csv(
-            str(action_pinning_path),
-            index=False,
-            lineterminator="\r\n",
-        )
+        CsvCompiler.write_dataframe(action_usage_summary_path, empty_usage)
+        CsvCompiler.write_dataframe(action_owner_summary_path, empty_owner)
+        CsvCompiler.write_dataframe(action_pinning_path, empty_pinning)
         print(f"Wrote {action_usage_summary_path} (0 rows)")
         print(f"Wrote {action_owner_summary_path} (0 rows)")
         print(f"Wrote {action_pinning_path} (0 rows)")
@@ -519,17 +401,14 @@ def actions_analysis(
     )
 
     usage_summary_df_schema = {col: "TEXT" for col in usage_summary_df.columns}
-    storage.create_table("github_actions_usage_summary", usage_summary_df_schema)
-    storage.write_rows(
+    _persist_rows(
+        storage,
         "github_actions_usage_summary",
+        usage_summary_df_schema,
         usage_summary_df.to_dict("records"),
     )
 
-    usage_summary_df.to_csv(
-        str(action_usage_summary_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_usage_summary_path, usage_summary_df)
     print(f"Wrote {action_usage_summary_path} ({len(usage_summary_df)} rows)")
 
     # Owner summary: count references per owner, sort descending.
@@ -543,17 +422,14 @@ def actions_analysis(
 
     # Owner Summary to SQLite
     owner_summary_df_schema = {col: "TEXT" for col in owner_summary_df.columns}
-    storage.create_table("github_actions_owner_summary", owner_summary_df_schema)
-    storage.write_rows(
+    _persist_rows(
+        storage,
         "github_actions_owner_summary",
+        owner_summary_df_schema,
         owner_summary_df.to_dict("records"),
     )
 
-    owner_summary_df.to_csv(
-        str(action_owner_summary_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_owner_summary_path, owner_summary_df)
     print(f"Wrote {action_owner_summary_path} ({len(owner_summary_df)} rows)")
 
     print(f"Unique actions: {len(usage_summary_df)}")
@@ -611,16 +487,13 @@ def actions_analysis(
 
     # Per-repo pinning compliance to SQLite
     pinning_df_schema = {col: "TEXT" for col in pinning_df.columns}
-    storage.create_table("github_actions_pinning_per_repo", pinning_df_schema)
-    storage.write_rows(
+    _persist_rows(
+        storage,
         "github_actions_pinning_per_repo",
+        pinning_df_schema,
         pinning_df.to_dict("records"),
     )
-    pinning_df.to_csv(
-        str(action_pinning_path),
-        index=False,
-        lineterminator="\r\n",
-    )
+    CsvCompiler.write_dataframe(action_pinning_path, pinning_df)
     print(f"Wrote {action_pinning_path} ({len(pinning_df)} rows)")
     print(
         f"Repos with unpinned actions: "
@@ -633,21 +506,24 @@ def actions_analysis(
 
 
 def permissions_analysis(
-    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
+    all_permissions: list[dict[str, Any]],
+    output_dir: Path,
+    storage: SqliteRepoStorage,
 ) -> None:
-    """Stage 7: Parse workflow files for permissions posture."""
+    """Stage 7: Write workflow permissions posture outputs."""
     print("\n--- Analysing workflow permissions ---")
     permissions_analysis_path_base = output_dir / "permissions_analysis"
     permissions_analysis_path_base.mkdir(parents=True, exist_ok=True)
-    all_permissions: list[dict[str, Any]] = []
-    for i, row in enumerate(detail_rows):
-        perm = check_workflow_permissions(
-            client, row["owner"], row["repo_name"], row["path"]
-        )
-        all_permissions.append(perm.model_dump())
-        if (i + 1) % 100 == 0:
-            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
-            time.sleep(0.1)
+
+    permissions_schema = {
+        "repo": "TEXT",
+        "workflow_path": "TEXT",
+        "has_explicit_permissions": "INTEGER",
+        "permissions_value": "TEXT",
+        "has_write_permissions": "INTEGER",
+        "finding": "TEXT",
+    }
+    _persist_rows(storage, "permissions", permissions_schema, all_permissions)
 
     permissions_analysis_path = (
         permissions_analysis_path_base / "github_workflow_permissions.csv"
@@ -678,20 +554,27 @@ def permissions_analysis(
 
 
 def credentials_analysis(
-    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
+    all_credential_findings: list[dict[str, Any]],
+    output_dir: Path,
+    storage: SqliteRepoStorage,
 ) -> None:
-    """Stage 8: Assess OIDC vs long-lived credentials."""
+    """Stage 8: Write OIDC vs long-lived credentials outputs."""
     print("\n--- Assessing OIDC vs long-lived credentials ---")
 
-    all_credential_findings: list[dict[str, Any]] = []
-    for i, row in enumerate(detail_rows):
-        finding = check_credential_posture(
-            client, row["owner"], row["repo_name"], row["path"]
-        )
-        all_credential_findings.append(finding.model_dump())
-        if (i + 1) % 100 == 0:
-            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
-            time.sleep(0.1)
+    credentials_schema = {
+        "repo": "TEXT",
+        "workflow_path": "TEXT",
+        "has_id_token_write": "INTEGER",
+        "oidc_actions": "TEXT",
+        "credential_secrets_found": "TEXT",
+        "posture": "TEXT",
+    }
+    _persist_rows(
+        storage,
+        "credentials",
+        credentials_schema,
+        all_credential_findings,
+    )
 
     credentials_analysis_path_base = output_dir / "credentials_analysis"
     credentials_analysis_path_base.mkdir(parents=True, exist_ok=True)
@@ -747,6 +630,22 @@ def credentials_analysis(
     )
     print(f"Wrote {cred_repo_analysis_path} ({cred_repo_count} rows)")
 
+    cred_per_repo_schema = {
+        "repo": "TEXT",
+        "total_workflows": "INTEGER",
+        "oidc": "INTEGER",
+        "long_lived_credentials": "INTEGER",
+        "mixed": "INTEGER",
+        "no_cloud_auth_detected": "INTEGER",
+        "could_not_load": "INTEGER",
+    }
+    _persist_rows(
+        storage,
+        "credentials_per_repo",
+        cred_per_repo_schema,
+        cred_repo_rows,
+    )
+
     oidc_only = sum(1 for f in all_credential_findings if f["posture"] == "oidc")
     long_lived = sum(
         1 for f in all_credential_findings if f["posture"] == "long_lived_credentials"
@@ -767,20 +666,26 @@ def credentials_analysis(
 
 
 def trigger_risk_analysis(
-    client: GitHubHttpClient, detail_rows: list[dict[str, Any]], output_dir: Path
+    all_trigger_findings: list[dict[str, Any]],
+    output_dir: Path,
+    storage: SqliteRepoStorage,
 ) -> None:
-    """Stage 9: Analyse workflow trigger config risk."""
+    """Stage 9: Write workflow trigger risk outputs."""
     print("\n--- Analysing workflow trigger risk ---")
 
-    all_trigger_findings: list[dict[str, Any]] = []
-    for i, row in enumerate(detail_rows):
-        finding = check_trigger_risk(
-            client, row["owner"], row["repo_name"], row["path"]
-        )
-        all_trigger_findings.append(finding.model_dump())
-        if (i + 1) % 100 == 0:
-            print(f"  Checked {i + 1} / {len(detail_rows)} workflow files")
-            time.sleep(0.1)
+    trigger_schema = {
+        "repo": "TEXT",
+        "workflow_path": "TEXT",
+        "triggers_found": "TEXT",
+        "risky_triggers": "TEXT",
+        "risk_level": "TEXT",
+        "has_pull_request_target": "INTEGER",
+        "has_issue_comment": "INTEGER",
+        "has_repository_dispatch": "INTEGER",
+        "has_workflow_dispatch": "INTEGER",
+        "posture": "TEXT",
+    }
+    _persist_rows(storage, "triggers", trigger_schema, all_trigger_findings)
 
     trigger_analysis_path = output_dir / "trigger_analysis"
     trigger_analysis_path.mkdir(parents=True, exist_ok=True)
@@ -842,6 +747,22 @@ def trigger_risk_analysis(
     )
     print(f"Wrote {trigger_repo_analysis_path} ({trigger_summary_count} rows)")
 
+    trigger_per_repo_schema = {
+        "repo": "TEXT",
+        "total_workflows": "INTEGER",
+        "high_risk": "INTEGER",
+        "medium_risk": "INTEGER",
+        "low_risk": "INTEGER",
+        "no_risk": "INTEGER",
+        "could_not_load": "INTEGER",
+    }
+    _persist_rows(
+        storage,
+        "triggers_per_repo",
+        trigger_per_repo_schema,
+        trigger_repo_rows,
+    )
+
     high_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "high")
     medium_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "medium")
     low_count = sum(1 for f in all_trigger_findings if f["risk_level"] == "low")
@@ -880,16 +801,54 @@ def run(
     db_path = resolver.database_path(workflow_config.database_path)
 
     org = config.github_organization
-    limit = workflow_config.repo_limit
+    repo_limit = config.repo_limit
+    repo_file = (
+        config.default_repo_list
+        if kwargs.get("repo_file") is None
+        else kwargs.get("repo_file")
+    )
+    repo_search_scope = config.repo_search_scope
     out_prefix = workflow_config.output_prefix
     resume = workflow_config.use_cache
     repos = kwargs.get("repos", None)
 
+    # GitHub Workflow Config Debug
+    print(section_break, file=sys.stderr)
+    print("github_workflow to be executed with the following config:", file=sys.stderr)
+
+    print(section_break, file=sys.stderr)
+
+    print(f"Database Path: {db_path}", file=sys.stderr)
+    print(f"Repo Search Scope: {repo_search_scope}", file=sys.stderr)
+    print(f"Repo Limit: {config.repo_limit}", file=sys.stderr)
+    if repo_search_scope == "file":
+        print(f"Repo File: {repo_file}", file=sys.stderr)
+    print(f"Use_Cache: {resume}", file=sys.stderr)
+    print(f"Output Dir: {output_dir}", file=sys.stderr)
+    print(f"Output Prefix: {out_prefix}", file=sys.stderr)
+    print(section_break, file=sys.stderr)
+
     client = GitHubHttpClient(auth_method=auth)
-    storage = SqliteRepoStorage(str(db_path))
 
     # Stage 1 - resolve_repo_list. (mandatory)
-    repo_list = resolve_repo_list(repos, limit, org, client, config)
+    try:
+        repo_list = resolve_repo_selection(
+            config,
+            auth,
+            repos=kwargs.get("repos", None),
+            repo_file=kwargs.get("repo_file", None),
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error resolving repo selection: {e}", file=sys.stderr)
+        sys.exit(2)
+    if not repo_list:
+        print(
+            "No repositories found in repo file (after applying any limit).",
+            file=sys.stderr,
+        )
+        return
+
+    storage = SqliteRepoStorage(str(db_path))
 
     # Stage 2 - collect_baseline
     if workflow_config.collect_baseline_data:
@@ -907,35 +866,66 @@ def run(
     # that later stages depend on. Cheap enough that a toggle adds no value.
     repo_rows, detail_rows = build_rows(repo_list, storage)
 
+    # Stage 4b - Fetch workflow file contents for downstream analysis
+    workflow_contents: dict[str, str | None] = {}
+    # If any of actions_analysis, permissions_analysis, credentials_analysis, or trigger_risk_analysis is enabled, fetch the workflow file contents for downstream analysis.
+    workflow_analysis_results: dict[str, list[dict[str, Any]]] = {
+        "actions": [],
+        "permissions": [],
+        "credentials": [],
+        "triggers": [],
+    }
+
+    if any(
+        [
+            workflow_config.actions_analysis,
+            workflow_config.permissions_analysis,
+            workflow_config.credentials_analysis,
+            workflow_config.trigger_risk_analysis,
+        ]
+    ):
+        print(
+            "\n--- Fetching workflow file contents for downstream analysis ---",
+            file=sys.stderr,
+        )
+        workflow_contents = fetch_workflow_file_contents(client, detail_rows)
+        workflow_analysis_results = analyse_workflow_file_contents(
+            detail_rows,
+            workflow_contents,
+            workflow_config,
+        )
+    else:
+        print(
+            "\n--- Skipping workflow file content fetch (no downstream analysis enabled) ---",
+            file=sys.stderr,
+        )
+
     # Stage 5 - write_posture_reports
     if workflow_config.gen_posture_reports:
         write_posture_reports(out_prefix, repo_rows, detail_rows, output_dir)
     else:
         _skip("Stage 5", "gen_posture_reports")
 
-    # Stage 6 - actions_analysis
     if workflow_config.actions_analysis:
-        actions_analysis(client, detail_rows, output_dir, storage)
-    else:
-        _skip("Stage 6", "actions_analysis")
+        actions_analysis(workflow_analysis_results["actions"], output_dir, storage)
 
     # Stage 7 - permissions_analysis
     if workflow_config.permissions_analysis:
-        permissions_analysis(client, detail_rows, output_dir)
-    else:
-        _skip("Stage 7", "permissions_analysis")
+        permissions_analysis(
+            workflow_analysis_results["permissions"], output_dir, storage
+        )
 
     # Stage 8 - credentials_analysis
     if workflow_config.credentials_analysis:
-        credentials_analysis(client, detail_rows, output_dir)
-    else:
-        _skip("Stage 8", "credentials_analysis")
+        credentials_analysis(
+            workflow_analysis_results["credentials"], output_dir, storage
+        )
 
     # Stage 9 - trigger_risk_analysis
     if workflow_config.trigger_risk_analysis:
-        trigger_risk_analysis(client, detail_rows, output_dir)
-    else:
-        _skip("Stage 9", "trigger_risk_analysis")
+        trigger_risk_analysis(
+            workflow_analysis_results["triggers"], output_dir, storage
+        )
 
     print("--- Complete ---")
 

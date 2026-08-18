@@ -34,7 +34,7 @@ def test_script_output_subdir_python_fallback_defaults():
     assert config.alert_metrics.output_subdir == "alert_metrics"
     assert config.org_security_posture.output_subdir == "org_security_posture"
     assert config.lfs_script.output_subdir == "lfs_analysis"
-    assert config.workflow_audit.output_subdir == "github_workflow_posture"
+    assert config.workflow_audit.output_subdir == "github_workflow"
 
 
 def test_output_subdir_can_be_overridden_from_config_file(tmp_path):
