@@ -360,6 +360,108 @@ def build_repo_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+#
+# Org Security Posture Builders
+#
+
+
+def build_org_settings_rows(org_settings_data: Any) -> dict[str, Any]:
+    return {
+        "total_members": {
+            "access": "ok",
+            "total_members": org_settings_data["org_members"].total_members,
+            "public_members": None,
+        },
+        "members_without_2fa": {
+            "access": "ok",
+            "members": [
+                {"login": login}
+                for login in org_settings_data["org_members"].members_without_2fa
+            ],
+        },
+        "outside_collaborators": {
+            "access": org_settings_data["org_outside_collaborators"].access,
+            "collaborators": org_settings_data[
+                "org_outside_collaborators"
+            ].collaborators,
+        },
+        "teams": org_settings_data["org_teams"].teams,
+        "audit_log_recent": {
+            "access": org_settings_data["org_audit_log"].access,
+            "entries": org_settings_data["org_audit_log"].entries,
+        },
+    }
+
+
+def build_org_actions_posture_rows(org_actions_data: Any) -> dict[str, Any]:
+    """Build the org actions posture rows from the org security posture report."""
+    return {
+        "runners": {
+            "access": org_actions_data.access,
+            "total_count": org_actions_data.self_hosted_runners,
+            "runners": org_actions_data.runners,
+        },
+        "actions_permissions": {
+            "access": org_actions_data.access,
+            "allowed_actions": org_actions_data.allowed_actions_policy,
+        },
+        "credential_inventory": {
+            "access": org_actions_data.access,
+            "total_count": org_actions_data.org_secrets_count,
+            "names": org_actions_data.org_secrets,
+        },
+        "default_workflow_permissions": {
+            "access": org_actions_data.access,
+            "default_workflow_permissions": org_actions_data.default_workflow_permissions,
+        },
+    }
+
+
+def build_org_webhook_rows(org_webhook_data: Any) -> dict[str, Any]:
+    apps = [
+        {
+            "app_slug": app.app_slug,
+            "installation_id": app.installation_id,
+            "repository_selection": app.repository_selection,
+            "permissions": ", ".join(
+                f"{scope}:{level}" for scope, level in sorted(app.permissions.items())
+            ),
+        }
+        for app in org_webhook_data.installed_apps_detail
+    ]
+    if not apps and org_webhook_data.installed_apps:
+        apps = [
+            {
+                "app_slug": app_slug,
+                "installation_id": None,
+                "repository_selection": None,
+                "permissions": "",
+            }
+            for app_slug in org_webhook_data.installed_apps
+        ]
+
+    return {
+        "webhooks": {
+            "access": org_webhook_data.access,
+            "count": org_webhook_data.webhooks_count,
+            "hooks": org_webhook_data.hooks,
+        },
+        "github_apps": {
+            "access": org_webhook_data.access,
+            "total_count": len(apps),
+            "apps": apps,
+        },
+    }
+
+
+def build_org_ruleset_rows(org_ruleset_data: Any) -> dict[str, Any]:
+    return {
+        "access": org_ruleset_data.access,
+        "count": org_ruleset_data.count,
+        "rulesets": org_ruleset_data.rulesets,
+    }
+
+
 def build_org_security_summary(report: dict[str, Any]) -> dict[str, Any]:
     """Build a high-level summary dict from an org security posture report."""
     overview = report.get("org_overview", {})

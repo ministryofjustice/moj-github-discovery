@@ -80,7 +80,8 @@
       "deserialises",
       "rubocop",
       "myrepo",
-      "tmpl"
+      "tmpl",
+      "TWOFA"
     ]
   },
   "engines": {

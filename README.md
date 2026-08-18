@@ -262,6 +262,9 @@ Performs an organisation-level audit that complements the per-repo scripts. It c
 - rulesets
 - supply-chain signals
 
+For persistence details (SQLite tables, cache behavior, workbook alignment, and rulesets access notes),
+see [docs/org_security_posture_persistence.md](./docs/org_security_posture_persistence.md).
+
 **Usage:**
 
 ```bash
